@@ -10,7 +10,10 @@
  * Photos, recordings and tiles live in IndexedDB, not here, so they are available
  * offline without any network request.
  */
-const CACHE = 'mimzi-shell-v1';
+const CACHE = 'mimzi-shell-v2';
+// Hosts often send `Vary: Origin` / `Vary: Accept-Encoding`; the page's module script
+// request carries an Origin header the precache request didn't, so match by URL only.
+const MATCH = { ignoreVary: true, ignoreSearch: false };
 const SCOPE = new URL('./', self.registration.scope);
 const INDEX_URL = new URL('index.html', SCOPE).href;
 const STATIC_FILES = [
@@ -80,7 +83,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         const cache = await caches.open(CACHE);
-        const cached = await cache.match(INDEX_URL);
+        const cached = await cache.match(INDEX_URL, MATCH);
         const refresh = cacheShell().catch(() => undefined);
         if (cached) {
           event.waitUntil(refresh);
@@ -102,7 +105,7 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);
-      const cached = await cache.match(req);
+      const cached = await cache.match(req, MATCH);
       if (cached) return cached;
       const res = await fetch(req);
       if (res.ok && (url.pathname.includes('/assets/') || url.pathname.includes('/icons/'))) {
