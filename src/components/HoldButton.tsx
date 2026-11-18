@@ -47,7 +47,7 @@ export function HoldButton({ onHold, holdMs = 1500, className, label, children }
     raf.current = requestAnimationFrame(tick);
   };
 
-  useEffect(() => () => stop(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => stop(), []);
 
   return (
     <button
