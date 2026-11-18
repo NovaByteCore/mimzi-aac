@@ -6,10 +6,12 @@ interface Props {
   tile: Tile;
   photoUrl?: string;
   onTap: (tile: Tile) => void;
+  /** When given and the tile has a sign video, a separate "See sign" button is shown. */
+  onSign?: (tile: Tile) => void;
   compact?: boolean;
 }
 
-export function TileButton({ tile, photoUrl, onTap, compact }: Props) {
+export function TileButton({ tile, photoUrl, onTap, onSign, compact }: Props) {
   const [active, setActive] = useState(false);
   useEffect(() => {
     if (!active) return;
@@ -17,7 +19,7 @@ export function TileButton({ tile, photoUrl, onTap, compact }: Props) {
     return () => clearTimeout(t);
   }, [active]);
 
-  return (
+  const button = (
     <button
       type="button"
       className={`tile tile-${tile.color}${active ? ' tile-active' : ''}${compact ? ' tile-compact' : ''}${photoUrl ? ' tile-has-photo' : ''}`}
@@ -33,5 +35,15 @@ export function TileButton({ tile, photoUrl, onTap, compact }: Props) {
       </span>
       <span className="tile-label">{tile.label}</span>
     </button>
+  );
+
+  if (!onSign || !tile.signId) return button;
+  return (
+    <div className="tile-wrap">
+      {button}
+      <button type="button" className="sign-btn" onClick={() => onSign(tile)} aria-label={`See sign for ${tile.label}`}>
+        <span aria-hidden="true">🤟</span>
+      </button>
+    </div>
   );
 }

@@ -26,6 +26,8 @@ export interface Tile {
   /** Soft-deleted timestamp; restorable from Parent Mode. */
   deletedAt?: number;
   builtIn: boolean;
+  /** Caregiver-only note (e.g. about a food). Never shown on child screens. */
+  privateNote?: string;
 }
 
 export interface Category {
@@ -70,5 +72,85 @@ export interface Settings {
   haptics: boolean;
   /** Tile ids shown in the always-visible quick bar. */
   quickTileIds: string[];
+  /** Show the small "See sign" button on tiles that have a sign video. */
+  showSignButtons: boolean;
+  signLoop: boolean;
+  /** Sign video playback speed (0.5 – 1). */
+  signSpeed: number;
+  celebrationVisual: boolean;
+  celebrationSound: boolean;
   pin?: { hash: string; salt: string; algo: 'pbkdf2' | 'fallback' };
+}
+
+/* ---------- My Day ---------- */
+
+/** One picture + words used in a visual schedule. */
+export interface ScheduleItem {
+  label: string;
+  /** What Mimzi says; defaults to the label. */
+  speak?: string;
+  /** Use the picture of an existing word tile. */
+  tileId?: string;
+  /** Or a photo added just for this schedule. */
+  photoId?: string;
+  done: boolean;
+}
+
+export interface FirstThenTemplate {
+  id: string;
+  name: string;
+  first: ScheduleItem;
+  then: ScheduleItem;
+}
+
+export interface RewardTemplate {
+  id: string;
+  name: string;
+  item: ScheduleItem;
+  tokens: number;
+}
+
+export interface RoutineTemplate {
+  id: string;
+  name: string;
+  steps: ScheduleItem[];
+}
+
+export type MyDayTool = 'firstThen' | 'reward' | 'routine';
+
+export interface MyDay {
+  firstThen: { first: ScheduleItem; then: ScheduleItem };
+  firstThenTemplates: FirstThenTemplate[];
+  reward: { item: ScheduleItem; tokens: number; earned: number };
+  rewardTemplates: RewardTemplate[];
+  routine: { steps: ScheduleItem[] };
+  routineTemplates: RoutineTemplate[];
+  /** How the routine is shown: numbered steps, or Now / Next / Later. */
+  routineLayout: 'steps' | 'nowNextLater';
+}
+
+/* ---------- My Words (caregiver observations) ---------- */
+
+export const OBSERVATION_METHODS = [
+  'Speech',
+  'Word approximation',
+  'Gesture',
+  'Sign',
+  'AAC selection',
+  'Combined methods',
+] as const;
+
+export type ObservationMethod = (typeof OBSERVATION_METHODS)[number];
+
+export interface Observation {
+  id: string;
+  target: string;
+  /** How the child currently says it, e.g. "mo" for "more". */
+  pronunciation: string;
+  method: ObservationMethod;
+  /** yyyy-mm-dd */
+  date: string;
+  notes: string;
+  audioId?: string;
+  createdAt: number;
 }

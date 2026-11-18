@@ -5,12 +5,17 @@ import { CategoriesPanel } from './CategoriesPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { BackupPanel } from './BackupPanel';
 import { DeletedPanel } from './DeletedPanel';
+import { MyDayPanel } from './MyDayPanel';
+import { MyWordsPanel } from './MyWordsPanel';
+import { currentSyncState, syncStatusText } from '../lib/sync';
 
-type Tab = 'words' | 'groups' | 'settings' | 'backup' | 'deleted';
+type Tab = 'words' | 'groups' | 'myday' | 'mywords' | 'settings' | 'backup' | 'deleted';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'words', label: 'Words & pictures' },
   { id: 'groups', label: 'Groups' },
+  { id: 'myday', label: 'My Day' },
+  { id: 'mywords', label: 'My Words' },
   { id: 'settings', label: 'Board & speech' },
   { id: 'backup', label: 'Backup' },
   { id: 'deleted', label: 'Recently deleted' },
@@ -27,6 +32,9 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
         <h1>
           <span aria-hidden="true">🔓</span> Parent Mode
         </h1>
+        <span className="sync-status" data-testid="sync-status" title="Cross-device sync">
+          <span aria-hidden="true">📱</span> {syncStatusText(currentSyncState())}
+        </span>
         <button type="button" className="btn btn-primary" onClick={onExit}>
           Done — back to Talk
         </button>
@@ -49,6 +57,8 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
       <main className="parent-main" role="tabpanel">
         {tab === 'words' && <WordsPanel />}
         {tab === 'groups' && <CategoriesPanel />}
+        {tab === 'myday' && <MyDayPanel />}
+        {tab === 'mywords' && <MyWordsPanel />}
         {tab === 'settings' && <SettingsPanel />}
         {tab === 'backup' && <BackupPanel />}
         {tab === 'deleted' && <DeletedPanel />}

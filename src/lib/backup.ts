@@ -3,11 +3,12 @@
  * (base64). It is created on the device and never uploaded anywhere by Mimzi.
  * The Parent PIN is NOT included, so restoring on another device keeps that device's PIN.
  */
-import type { Category, MediaKind, MediaRecord, Settings, Tile } from '../types';
-import { mergeSettings } from './defaults';
+import type { Category, MediaKind, MediaRecord, MyDay, Observation, Settings, Tile } from '../types';
+import { OBSERVATION_METHODS } from '../types';
+import { mergeMyDay, mergeSettings } from './defaults';
 
 export const BACKUP_FORMAT = 'mimzi-backup';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 export interface BackupMedia {
   id: string;
@@ -25,6 +26,19 @@ export interface BackupFile {
   categories: Category[];
   settings: Omit<Settings, 'pin'>;
   media: BackupMedia[];
+  /** v2+ */
+  myDay?: MyDay;
+  /** v2+ */
+  observations?: Observation[];
+}
+
+export interface RestoredData {
+  tiles: Tile[];
+  categories: Category[];
+  settings: Settings;
+  media: MediaRecord[];
+  myDay: MyDay;
+  observations: Observation[];
 }
 
 export function arrayBufferToBase64(buf: ArrayBuffer): string {
@@ -49,6 +63,8 @@ export async function createBackup(input: {
   categories: Category[];
   settings: Settings;
   media: MediaRecord[];
+  myDay: MyDay;
+  observations: Observation[];
 }): Promise<BackupFile> {
   const { pin: _pin, ...settings } = input.settings;
   const media: BackupMedia[] = [];
@@ -69,6 +85,8 @@ export async function createBackup(input: {
     categories: input.categories,
     settings,
     media,
+    myDay: input.myDay,
+    observations: input.observations,
   };
 }
 
@@ -79,10 +97,7 @@ function isObj(v: unknown): v is Record<string, unknown> {
 }
 
 /** Validate an untrusted backup file and turn it into records ready for IndexedDB. */
-export function parseBackup(
-  raw: unknown,
-  currentPin?: Settings['pin'],
-): { tiles: Tile[]; categories: Category[]; settings: Settings; media: MediaRecord[] } {
+export function parseBackup(raw: unknown, currentPin?: Settings['pin']): RestoredData {
   if (!isObj(raw) || raw.format !== BACKUP_FORMAT) throw new BackupError('This file is not a Mimzi backup.');
   if (typeof raw.version !== 'number' || raw.version > BACKUP_VERSION) {
     throw new BackupError('This backup was made by a newer version of Mimzi. Update Mimzi first.');
@@ -110,6 +125,7 @@ export function parseBackup(
       hidden: Boolean(t.hidden),
       deletedAt: typeof t.deletedAt === 'number' ? t.deletedAt : undefined,
       builtIn: Boolean(t.builtIn),
+      privateNote: typeof t.privateNote === 'string' ? t.privateNote : undefined,
     };
   });
   const cleanCategories: Category[] = categories.map((c, i) => {
@@ -146,7 +162,25 @@ export function parseBackup(
   const merged = mergeSettings(isObj(settings) ? (settings as Partial<Settings>) : undefined);
   delete merged.pin;
   if (currentPin) merged.pin = currentPin;
-  return { tiles: cleanTiles, categories: cleanCategories, settings: merged, media: cleanMedia };
+  const rawObs = Array.isArray(raw.observations) ? raw.observations : [];
+  const observations: Observation[] = rawObs.map((o, i) => {
+    if (!isObj(o) || typeof o.id !== 'string' || typeof o.target !== 'string') {
+      throw new BackupError(`My Words entry ${i + 1} in the backup is damaged.`);
+    }
+    const method = OBSERVATION_METHODS.includes(o.method as Observation['method']) ? (o.method as Observation['method']) : 'Speech';
+    return {
+      id: o.id,
+      target: o.target,
+      pronunciation: typeof o.pronunciation === 'string' ? o.pronunciation : '',
+      method,
+      date: typeof o.date === 'string' ? o.date : new Date().toISOString().slice(0, 10),
+      notes: typeof o.notes === 'string' ? o.notes : '',
+      audioId: typeof o.audioId === 'string' ? o.audioId : undefined,
+      createdAt: typeof o.createdAt === 'number' ? o.createdAt : Date.now(),
+    };
+  });
+  const myDay = mergeMyDay(isObj(raw.myDay) ? (raw.myDay as Partial<MyDay>) : undefined);
+  return { tiles: cleanTiles, categories: cleanCategories, settings: merged, media: cleanMedia, myDay, observations };
 }
 
 export function backupFileName(date = new Date()): string {

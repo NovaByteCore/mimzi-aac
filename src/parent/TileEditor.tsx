@@ -8,7 +8,9 @@ import { PhotoCropper } from './PhotoCropper';
 import { ConfirmDialog } from './ConfirmDialog';
 import { newId } from '../lib/id';
 import { nextOrder } from '../lib/grid';
-import { speakText } from '../lib/speech';
+import { speakTile } from '../lib/speech';
+import { AudioRecorder } from './AudioRecorder';
+import { isSignFile, MAX_SIGN_BYTES, SIGN_ACCEPT } from '../lib/media';
 
 interface Props {
   tile?: Tile;
@@ -18,7 +20,7 @@ interface Props {
 }
 
 export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Props) {
-  const { tiles, mediaUrls, saveTile, softDeleteTile, settings } = useMimzi();
+  const { tiles, mediaUrls, mediaMime, saveTile, softDeleteTile, settings } = useMimzi();
   const isNew = !tile;
   const [label, setLabel] = useState(tile?.label ?? '');
   const [speak, setSpeak] = useState(tile?.speak ?? '');
@@ -29,6 +31,12 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
   const [photoId, setPhotoId] = useState(tile?.photoId);
   const [pendingPhoto, setPendingPhoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [cropFile, setCropFile] = useState<Blob | null>(null);
+  const [audioId, setAudioId] = useState(tile?.audioId);
+  const [pendingAudio, setPendingAudio] = useState<{ blob: Blob; url: string } | null>(null);
+  const [signId, setSignId] = useState(tile?.signId);
+  const [pendingSign, setPendingSign] = useState<{ blob: Blob; url: string; mime: string } | null>(null);
+  const [privateNote, setPrivateNote] = useState(tile?.privateNote ?? '');
+  const signInput = useRef<HTMLInputElement>(null);
   const [favorite, setFavorite] = useState(tile?.favorite ?? false);
   const [hidden, setHidden] = useState(tile?.hidden ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -41,7 +49,33 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
     if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.url);
   }, [pendingPhoto]);
 
+  useEffect(() => () => {
+    if (pendingAudio) URL.revokeObjectURL(pendingAudio.url);
+  }, [pendingAudio]);
+  useEffect(() => () => {
+    if (pendingSign) URL.revokeObjectURL(pendingSign.url);
+  }, [pendingSign]);
+
   const photoUrl = pendingPhoto?.url ?? (photoId ? mediaUrls[photoId] : undefined);
+  const audioUrl = pendingAudio?.url ?? (audioId ? mediaUrls[audioId] : undefined);
+  const signUrl = pendingSign?.url ?? (signId ? mediaUrls[signId] : undefined);
+  const signMime = pendingSign?.mime ?? (signId ? mediaMime[signId] : undefined);
+
+  const onSignFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    if (!isSignFile(f.type)) {
+      setError('Sign demonstrations must be a GIF, MP4, MOV or WebM file.');
+      return;
+    }
+    if (f.size > MAX_SIGN_BYTES) {
+      setError('That video is over 30 MB. Trim it to a few seconds and try again.');
+      return;
+    }
+    setError('');
+    setPendingSign({ blob: f, url: URL.createObjectURL(f), mime: f.type });
+  };
   const spoken = speakEdited ? speak : label;
 
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -70,6 +104,16 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         nextPhotoId = newId('photo');
         media.push({ id: nextPhotoId, kind: 'photo', mime: pendingPhoto.blob.type || 'image/jpeg', blob: pendingPhoto.blob, createdAt: Date.now() });
       }
+      let nextAudioId = audioId;
+      if (pendingAudio) {
+        nextAudioId = newId('audio');
+        media.push({ id: nextAudioId, kind: 'audio', mime: pendingAudio.blob.type || 'audio/webm', blob: pendingAudio.blob, createdAt: Date.now() });
+      }
+      let nextSignId = signId;
+      if (pendingSign) {
+        nextSignId = newId('sign');
+        media.push({ id: nextSignId, kind: 'sign', mime: pendingSign.mime, blob: pendingSign.blob, createdAt: Date.now() });
+      }
       const movedCategory = tile && tile.categoryId !== categoryId;
       const next: Tile = {
         id: tile?.id ?? newId('tile'),
@@ -79,8 +123,9 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         order: tile && !movedCategory ? tile.order : nextOrder(tiles, categoryId),
         symbol: symbol.trim() || undefined,
         photoId: nextPhotoId,
-        audioId: tile?.audioId,
-        signId: tile?.signId,
+        audioId: nextAudioId,
+        signId: nextSignId,
+        privateNote: privateNote.trim() || undefined,
         color,
         favorite,
         hidden,
@@ -122,7 +167,9 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
               <button
                 type="button"
                 className="btn btn-quiet"
-                onClick={() => void speakText(spoken || label, { rate: settings.speechRate, lang: settings.speechLang, voiceURI: settings.voiceURI })}
+                onClick={() =>
+                  void speakTile(spoken || label, audioUrl, { rate: settings.speechRate, lang: settings.speechLang, voiceURI: settings.voiceURI })
+                }
                 disabled={!label.trim()}
               >
                 🔊 Hear it
@@ -184,6 +231,51 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
               </fieldset>
 
               <fieldset className="field">
+                <legend>Voice</legend>
+                <p className="muted small">A recording plays instead of the device voice, and works offline.</p>
+                <AudioRecorder
+                  url={audioUrl}
+                  onRecorded={(blob) => setPendingAudio({ blob, url: URL.createObjectURL(blob) })}
+                  onRemove={() => {
+                    setPendingAudio(null);
+                    setAudioId(undefined);
+                  }}
+                />
+              </fieldset>
+
+              <fieldset className="field">
+                <legend>Sign (ASL) demonstration</legend>
+                <p className="muted small">
+                  Add a short GIF or video of the sign — one you recorded, or from a resource you have permission to use. Mimzi doesn’t include
+                  sign videos and never guesses signs. It plays only when “See sign” is tapped.
+                </p>
+                <div className="row">
+                  <button type="button" className="btn" onClick={() => signInput.current?.click()}>
+                    🤟 {signUrl ? 'Replace sign' : 'Add sign video'}
+                  </button>
+                  {signUrl && (
+                    <button
+                      type="button"
+                      className="btn btn-quiet"
+                      onClick={() => {
+                        setPendingSign(null);
+                        setSignId(undefined);
+                      }}
+                    >
+                      Remove sign
+                    </button>
+                  )}
+                </div>
+                {signUrl &&
+                  (signMime === 'image/gif' ? (
+                    <img className="sign-preview" src={signUrl} alt="Sign preview" />
+                  ) : (
+                    <video className="sign-preview" src={signUrl} muted playsInline controls preload="metadata" data-testid="sign-preview" />
+                  ))}
+                <input ref={signInput} type="file" accept={SIGN_ACCEPT} hidden onChange={onSignFile} data-testid="sign-input" />
+              </fieldset>
+
+              <fieldset className="field">
                 <legend>Symbol (used when there’s no photo)</legend>
                 <div className="symbol-picker">
                   {SYMBOL_KEYS.map((k) => (
@@ -226,11 +318,25 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 </div>
               </fieldset>
 
+              <label className="field">
+                <span>Private note (only shown in Parent Mode)</span>
+                <textarea
+                  value={privateNote}
+                  onChange={(e) => setPrivateNote(e.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  placeholder={categoryId === 'food' ? 'e.g. only at grandma’s house' : ''}
+                />
+              </label>
+              {categoryId === 'food' && (
+                <p className="muted small">You choose every food that appears. Mimzi never suggests foods and can’t tell whether a food is safe for your child.</p>
+              )}
+
               <label className="check">
                 <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} /> Show in Favorites
               </label>
               <label className="check">
-                <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} /> Hide for now (keeps its spot)
+                <input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} /> Hide for now (e.g. not available today — keeps its spot)
               </label>
             </div>
           </div>

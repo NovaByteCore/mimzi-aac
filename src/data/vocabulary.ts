@@ -8,6 +8,8 @@ import type { Category, Tile, TileColor } from '../types';
 export const CATEGORY_SEED: Omit<Category, 'order' | 'hidden' | 'builtIn'>[] = [
   { id: 'core', name: 'Core', symbol: 'svg:more', color: 'sun' },
   { id: 'needs', name: 'Needs', symbol: '🥛', color: 'blue' },
+  // Empty on purpose: the caregiver chooses which foods appear (Mimzi never suggests foods).
+  { id: 'food', name: 'Food & Drink', symbol: '🍽️', color: 'peach' },
   { id: 'feelings', name: 'Feelings', symbol: '😊', color: 'peach' },
   { id: 'family', name: 'My People', symbol: '👨‍👩‍👦', color: 'lavender' },
   { id: 'play', name: 'Play', symbol: '⚽', color: 'sage' },

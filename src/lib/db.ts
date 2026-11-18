@@ -2,17 +2,18 @@
  * Minimal promise wrapper around IndexedDB. Everything Mimzi knows lives here, on the
  * device: tiles, categories, settings, photos, recordings and sign videos.
  */
-import type { Category, MediaRecord, Settings, Tile } from '../types';
+import type { Category, MediaRecord, MyDay, Observation, Settings, Tile } from '../types';
 
 export const DB_NAME = 'mimzi';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
-export type StoreName = 'tiles' | 'categories' | 'media' | 'kv';
+export type StoreName = 'tiles' | 'categories' | 'media' | 'kv' | 'observations';
 
 interface StoreTypes {
   tiles: Tile;
   categories: Category;
   media: MediaRecord;
+  observations: Observation;
   kv: { key: string; value: unknown };
 }
 
@@ -47,6 +48,8 @@ export function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('categories')) db.createObjectStore('categories', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('media')) db.createObjectStore('media', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'key' });
+      // v2: caregiver observations (My Words)
+      if (!db.objectStoreNames.contains('observations')) db.createObjectStore('observations', { keyPath: 'id' });
     };
     open.onsuccess = () => {
       const db = open.result;
@@ -106,14 +109,18 @@ export async function replaceAll(data: {
   categories: Category[];
   media: MediaRecord[];
   settings: Settings;
+  myDay: MyDay;
+  observations: Observation[];
 }): Promise<void> {
   const db = await openDb();
-  const tx = db.transaction(['tiles', 'categories', 'media', 'kv'], 'readwrite');
-  for (const name of ['tiles', 'categories', 'media'] as const) tx.objectStore(name).clear();
+  const tx = db.transaction(['tiles', 'categories', 'media', 'observations', 'kv'], 'readwrite');
+  for (const name of ['tiles', 'categories', 'media', 'observations'] as const) tx.objectStore(name).clear();
   data.tiles.forEach((t) => tx.objectStore('tiles').put(t));
   data.categories.forEach((c) => tx.objectStore('categories').put(c));
   data.media.forEach((m) => tx.objectStore('media').put(m));
+  data.observations.forEach((o) => tx.objectStore('observations').put(o));
   tx.objectStore('kv').put({ key: 'settings', value: data.settings });
+  tx.objectStore('kv').put({ key: 'myday', value: data.myDay });
   tx.objectStore('kv').put({ key: 'seeded', value: true });
   await done(tx);
 }

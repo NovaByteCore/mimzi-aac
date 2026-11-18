@@ -8,12 +8,13 @@ interface Props {
   page: number;
   onPage: (page: number) => void;
   onTap: (tile: Tile) => void;
+  onSign?: (tile: Tile) => void;
   mediaUrls: Record<string, string>;
   label: string;
   emptyMessage?: string;
 }
 
-export function Board({ tiles, grid, page, onPage, onTap, mediaUrls, label, emptyMessage }: Props) {
+export function Board({ tiles, grid, page, onPage, onTap, onSign, mediaUrls, label, emptyMessage }: Props) {
   const pages = pageCount(tiles.length, grid);
   const current = Math.min(page, pages - 1);
   const cells = pageCells(tiles, grid, current);
@@ -32,7 +33,7 @@ export function Board({ tiles, grid, page, onPage, onTap, mediaUrls, label, empt
         >
           {cells.map((tile, i) =>
             tile ? (
-              <TileButton key={tile.id} tile={tile} photoUrl={tile.photoId ? mediaUrls[tile.photoId] : undefined} onTap={onTap} />
+              <TileButton key={tile.id} tile={tile} photoUrl={tile.photoId ? mediaUrls[tile.photoId] : undefined} onTap={onTap} onSign={onSign} />
             ) : (
               <div key={`empty-${i}`} className="tile-empty" aria-hidden="true" />
             ),

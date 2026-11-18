@@ -1,5 +1,5 @@
 import { QUICK_TILE_IDS } from '../data/vocabulary';
-import type { GridSize, Settings } from '../types';
+import type { GridSize, MyDay, ScheduleItem, Settings } from '../types';
 import { config } from '../config';
 
 export const GRID_PRESETS: { label: string; grid: GridSize }[] = [
@@ -24,6 +24,11 @@ export function defaultSettings(): Settings {
     reducedMotion: false,
     haptics: false,
     quickTileIds: [...QUICK_TILE_IDS],
+    showSignButtons: true,
+    signLoop: true,
+    signSpeed: 1,
+    celebrationVisual: true,
+    celebrationSound: false,
   };
 }
 
@@ -32,4 +37,27 @@ export function mergeSettings(saved: Partial<Settings> | undefined): Settings {
   const base = defaultSettings();
   if (!saved) return base;
   return { ...base, ...saved, grid: { ...base.grid, ...(saved.grid ?? {}) } };
+}
+
+const item = (label: string, tileId?: string): ScheduleItem => ({ label, tileId, done: false });
+
+export function defaultMyDay(): MyDay {
+  return {
+    firstThen: { first: item('Brush teeth', 'actions-brush'), then: item('Play cars', 'play-cars') },
+    firstThenTemplates: [],
+    reward: { item: item('Bubbles', 'play-bubbles'), tokens: 3, earned: 0 },
+    rewardTemplates: [],
+    routine: { steps: [item('Get shoes', 'core-get'), item('Put on shoes', 'core-on'), item('Go outside', 'play-outside')] },
+    routineTemplates: [],
+    routineLayout: 'steps',
+  };
+}
+
+export function mergeMyDay(saved: Partial<MyDay> | undefined): MyDay {
+  const base = defaultMyDay();
+  if (!saved) return base;
+  const merged = { ...base, ...saved };
+  const tokens = Math.min(10, Math.max(1, Math.round(merged.reward.tokens)));
+  merged.reward = { ...merged.reward, tokens, earned: Math.min(tokens, Math.max(0, merged.reward.earned)) };
+  return merged;
 }

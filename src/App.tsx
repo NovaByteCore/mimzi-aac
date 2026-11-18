@@ -11,12 +11,14 @@ import { speakText, speakTile, type SpeakResult } from './lib/speech';
 import type { Tile } from './types';
 import { ParentGate } from './parent/ParentGate';
 import { ParentMode } from './parent/ParentMode';
+import { MyDayView } from './components/MyDayView';
+import { SignPlayer } from './components/SignPlayer';
 
-type View = 'talk' | 'favorites' | 'people' | 'parent';
+type View = 'talk' | 'myday' | 'favorites' | 'people' | 'parent';
 
 export function App() {
   const store = useMimzi();
-  const { tiles, categories, settings, mediaUrls } = store;
+  const { tiles, categories, settings, mediaUrls, mediaMime } = store;
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
   const [categoryId, setCategoryId] = useState('core');
@@ -24,6 +26,7 @@ export function App() {
   const [sentence, dispatch] = useReducer(sentenceReducer, []);
   const [lastSpoken, setLastSpoken] = useState('');
   const [toast, setToast] = useState('');
+  const [signTile, setSignTile] = useState<Tile | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const visibleCategories = useMemo(
@@ -69,6 +72,11 @@ export function App() {
     void speakText(text, speechOpts).then(report);
   };
 
+  const say = (text: string) => {
+    setLastSpoken(text);
+    void speakText(text, speechOpts).then(report);
+  };
+
   const replay = () => {
     if (lastSpoken) void speakText(lastSpoken, speechOpts).then(report);
   };
@@ -108,6 +116,10 @@ export function App() {
   if (view === 'talk') {
     boardTiles = orderedTiles(tiles, categoryId);
     boardLabel = visibleCategories.find((c) => c.id === categoryId)?.name ?? 'Words';
+    emptyMessage =
+      categoryId === 'food'
+        ? 'A grown-up can add your foods and drinks with real photos in Parent Mode.'
+        : 'No pictures here yet. A grown-up can add them in Parent Mode.';
   } else if (view === 'favorites') {
     const catOrder = new Map(categories.map((c) => [c.id, c.order]));
     boardTiles = tiles
@@ -161,16 +173,21 @@ export function App() {
       )}
 
       <main className="board-area">
+        {view === 'myday' ? (
+          <MyDayView say={say} />
+        ) : (
         <Board
           tiles={boardTiles}
           grid={settings.grid}
           page={pages[pageKey] ?? 0}
           onPage={(p) => setPages((s) => ({ ...s, [pageKey]: p }))}
           onTap={onTap}
+          onSign={settings.showSignButtons ? setSignTile : undefined}
           mediaUrls={mediaUrls}
           label={boardLabel}
           emptyMessage={emptyMessage}
         />
+        )}
       </main>
 
       <aside className="quick-bar" aria-label="Quick words">
@@ -182,6 +199,9 @@ export function App() {
       <nav className="main-nav" aria-label="Main">
         <button type="button" className={`nav-btn${view === 'talk' ? ' nav-on' : ''}`} onClick={() => setView('talk')} aria-current={view === 'talk' ? 'page' : undefined}>
           <span aria-hidden="true">💬</span> Talk
+        </button>
+        <button type="button" className={`nav-btn${view === 'myday' ? ' nav-on' : ''}`} onClick={() => setView('myday')} aria-current={view === 'myday' ? 'page' : undefined}>
+          <span aria-hidden="true">🗓️</span> My Day
         </button>
         <button type="button" className={`nav-btn${view === 'favorites' ? ' nav-on' : ''}`} onClick={() => setView('favorites')} aria-current={view === 'favorites' ? 'page' : undefined}>
           <span aria-hidden="true">⭐</span> Favorites
@@ -198,6 +218,17 @@ export function App() {
         <div className="toast" role="status">
           {toast}
         </div>
+      )}
+
+      {signTile?.signId && mediaUrls[signTile.signId] && (
+        <SignPlayer
+          label={signTile.label}
+          url={mediaUrls[signTile.signId]}
+          mime={mediaMime[signTile.signId] ?? 'video/mp4'}
+          loop={settings.signLoop}
+          speed={settings.signSpeed}
+          onClose={() => setSignTile(null)}
+        />
       )}
 
       {gateOpen && (
