@@ -4,31 +4,50 @@
 
 Mimzi is a personal Augmentative and Alternative Communication (AAC) app for a toddler (ages ~2–3, growing with the child). It runs as an installable Progressive Web App on iPad (Safari) and Samsung Galaxy phones (Chrome), works offline, and keeps every photo and recording **on the device**.
 
-> Status: **Phase 1 — Foundation** (feature branch `feature/phase-1-foundation`). See [Roadmap](#roadmap).
+> Status: **Phases 1–4 built; Phase 5 automated testing done.** Physical-device testing on the iPad and Galaxy is still to do (see `docs/TESTING.md`). Nothing is deployed.
 
 ---
 
-## What works now (Phase 1)
+## Features
 
-| Area | What it does |
-| --- | --- |
-| **Talk board** | Opens straight to the board — no login, no splash screen. 141 starter tiles (about 130 different words and phrases) in 11 editable groups (Core, Needs, Feelings, My People, Play, Social, Actions, Body, Safety, Describe, Phrases). |
-| **One-tap speech** | Each tap speaks immediately using the device's text-to-speech. A caregiver recording, when a tile has one, plays instead (playback path is in; recording UI is Phase 2). If sound fails, a message appears and the words stay visible at the top. |
-| **Quick words** | Help · Stop · No · More · All done are always on screen on every child page. |
-| **Sentence bar** | Tap several tiles to build a message (“I want more bubbles”). Speak, backspace, clear. Words are never changed or reordered. Kept when switching groups. Can be hidden. |
-| **Stable positions** | Words only move when a caregiver moves them. Hidden words leave a blank space so nothing shifts. No frequency-based reordering. |
-| **Grid sizes** | 2×2, 2×3, 3×3, 3×4, 4×4, 4×5, 5×6, with big page arrows when a group has more words. |
-| **Photo tiles** | Take a photo with the camera or choose one from the library, then position/zoom it (or “Show whole photo” to avoid cropping). Stored as a 640 px JPEG in IndexedDB. |
-| **Symbol tiles** | 29 original Mimzi symbols for core/abstract words (more, help, stop, yes, no, want, go, open, all done, wait, again, break, safe, not safe, me/you, this/that, in/out, on/off …). Everyday nouns use the device's emoji. Any tile can switch to a photo. |
-| **Favorites / My People** | Favorites shows tiles marked ⭐. My People shows the family group (add real photos in Parent Mode). |
-| **Parent Mode** | Opened by **press-and-hold** (1.5 s) + **PIN** (4–8 digits, PBKDF2-hashed). Add / edit / hide / reorder / delete-with-restore tiles; add, rename, hide, reorder groups; grid size; sentence bar; speech speed & voice; text size; spacing; high contrast; reduced motion; vibration; change PIN. |
-| **Backup & restore** | One JSON file including photos. Restore validates the file and asks before replacing anything. The PIN is never exported. Shows storage use and asks the browser for persistent storage. |
-| **Offline** | Service worker caches the app; all words and photos are in IndexedDB. Tested: reload with the network switched off still shows the board and speaks. |
-| **PWA** | Manifest, original speech-bubble icon (192/512/maskable/apple-touch), standalone display, safe-area padding for iPad/notched phones. |
+### Talk (AAC board)
+- Opens straight to the board: no login and no splash screen.
+- 141 starter tiles (about 130 different words and phrases) in 12 editable groups: Core, Needs, Food & Drink, Feelings, My People, Play, Social, Actions, Body, Safety, Describe, Phrases. This is a starting point, not a limit, and nothing is locked behind levels.
+- **One tap speaks immediately.** A caregiver's recording plays if the tile has one. Otherwise the device voice speaks. If sound fails, a message appears and the words stay on screen.
+- **Quick words** (Help · Stop · No · More · All done by default, up to 6, caregiver-editable) are on every child screen.
+- **Sentence bar.** Build "I want more bubbles" from several tiles, then speak, backspace or clear. Words are never changed or reordered, and selections stay when you switch groups. The bar can be hidden.
+- **Stable positions.** Words move only when a caregiver moves them. Hidden words leave a blank space, and there is no frequency-based shuffling.
+- **Grids** from 2×2 to 5×6, with big page arrows.
+- **Three kinds of tile picture:** real photos (camera or library, with crop/zoom and a "show whole photo" option), 29 original Mimzi symbols for abstract words, or the device's emoji.
+- **ASL "See sign".** Attach a parent-provided GIF/MP4/MOV/WebM to any tile. A small 🤟 button opens it in a player with play/pause/again. It never autoplays on the board. Loop and speed are adjustable. Mimzi ships no sign videos and never invents signs.
 
-**Not in Phase 1 (on purpose — no fake buttons):** My Day schedules, audio recording, ASL “See sign” media, My Words, food boards, cross-device sync. See [Roadmap](#roadmap).
+### My Day (visual supports)
+- **First / Then:** two big panels. Tap to hear them, or tap "Say it" for "First brush teeth, then play cars".
+- **I'm Working For:** a reward photo with 1–10 tokens (3 by default) and an optional gentle "You did it!" (visual and/or spoken). Tokens are **never removed**; only a deliberate "New board" clears them.
+- **My Three Steps** and **Now / Next / Later:** the same routine shown two ways, with a highlighted current step and checkmarks. A parent chooses the layout.
+- Marking done, adding tokens and resetting are **press-and-hold grown-up actions**, so toddler taps only speak.
+- Every board can be **saved as a template** ("Bedtime", "Bath time") and reused.
 
----
+### Favorites · My People · Food & Drink
+- Favorites shows ⭐ tiles. My People shows the family group, ready for real photos.
+- Food & Drink **starts empty**: the caregiver chooses every food. Use "Hide for now" for foods that aren't available today (they keep their spot). **Private notes** appear only in Parent Mode. Mimzi never suggests foods and never labels anything allergy-safe.
+
+### Parent Mode (press-and-hold 1.5 s + PIN)
+- **Words & pictures:** add, edit, reorder, hide, delete and restore tiles. Each tile can have a photo (camera/library), a recorded voice, a sign video and a private note.
+- **Groups:** add, rename, hide, reorder and delete empty groups.
+- **My Day:** set up all four tools, with templates.
+- **My Words:** a private notebook with the target word, how the child said or showed it, the method (speech, approximation, gesture, sign, AAC, combined), the date, notes and an optional audio clip. Export as a **CSV spreadsheet** or a **plain-text summary for the speech-language pathologist**. No scores, levels or diagnostic wording.
+- **Board & speech:**
+  - Board: grid size, sentence bar on/off, quick words, text size, spacing, high contrast, reduced motion and vibration (Android).
+  - Speech: speed and voice.
+  - Signs and celebrations: their own controls.
+  - Security: change the PIN.
+- **Backup:** one file with everything, including photos, recordings, My Day and My Words. Restore asks before replacing anything. The PIN is never exported. This screen also shows storage use and asks the browser to protect Mimzi's data.
+- **Sync status:** shows "This device only" (see `docs/SYNC.md`).
+
+### Offline & install
+- Hand-written service worker plus IndexedDB: after the first visit, everything works without internet.
+- Installable PWA: manifest, original speech-bubble icon, standalone display and safe-area padding.
 
 ## Getting started
 
@@ -115,21 +134,25 @@ Host settings: serve `sw.js` and `index.html` with no long-term caching (`Cache-
 src/
   App.tsx               child screens: Talk, Favorites, My People
   components/           tiles, board, sentence bar, hold button
+  components/MyDayView  First/Then, I'm Working For, steps, Now/Next/Later
   data/vocabulary.ts    starter words & groups
   data/symbols.tsx      original SVG symbols
-  lib/                  db (IndexedDB), speech, sentence, grid, backup, pin, image crop
+  lib/                  db (IndexedDB), speech, sentence, grid, backup, pin, image crop,
+                        myday, observations (My Words export), media, sync (design)
   parent/               Parent Mode screens
   state/MimziStore.tsx  in-memory store backed by IndexedDB
 public/                 manifest, service worker, icons
 tests/unit/             logic tests (no browser)
 tests/e2e/              Chromium tests against a production build
-docs/                   testing checklist, deployment notes
+docs/                   testing checklist, deployment, sync design & research
 ```
 
 ## Roadmap
 
-1. **Foundation** ← this branch
-2. **Communication** — audio recording (MediaRecorder), ASL “See sign” with parent-provided GIF/MP4/WebM (no invented signs), richer photo editing, quick-word picker.
-3. **My Day** — First/Then, I'm Working For (1–10 tokens, never removed as punishment), My Three Steps, Now/Next/Later.
-4. **Caregiver tools** — My Words observation log + SLP export (no scoring), food & drink boards, sync architecture (local-first; provider chosen only after free-tier research and your approval).
-5. **Testing & deployment** — accessibility audit, physical-device testing on iPad and Galaxy, hosting setup with your permission.
+| Phase | Status |
+| --- | --- |
+| 1 Foundation | ✅ Built and tested in Chromium |
+| 2 Communication (recording, ASL media, quick-word picker) | ✅ Built and tested in Chromium |
+| 3 My Day | ✅ Built and tested in Chromium |
+| 4 Caregiver tools (My Words, food boards, sync design) | ✅ Built and tested in Chromium. Sync is designed but **not enabled**; it needs the owner's choice of provider. |
+| 5 Testing & deployment | ✅ Automated tests, accessibility checks, offline test, deployment docs. ⏳ Physical iPad/Galaxy testing and hosting setup are still to do, and hosting needs the owner's permission. |
