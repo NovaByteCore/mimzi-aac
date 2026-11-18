@@ -40,7 +40,7 @@ test('quick bar words exist: help, stop, no, more, all done', () => {
 
 test('all requested categories are present', () => {
   const names = categories.map((c) => c.id);
-  for (const id of ['core', 'needs', 'feelings', 'family', 'play', 'social', 'actions', 'body', 'safety', 'describe', 'phrases']) {
+  for (const id of ['core', 'needs', 'food', 'feelings', 'family', 'play', 'social', 'actions', 'body', 'safety', 'describe', 'phrases']) {
     assert.ok(names.includes(id), `missing category ${id}`);
   }
 });
@@ -64,4 +64,9 @@ test('orders inside each category are 0..n-1 with no gaps', () => {
   for (const [cat, orders] of byCat) {
     assert.deepEqual([...orders].sort((a, b) => a - b), orders.map((_, i) => i), `bad order in ${cat}`);
   }
+});
+
+test('Food & Drink starts empty — the caregiver chooses every food', () => {
+  assert.ok(categories.some((c) => c.id === 'food'));
+  assert.equal(tiles.filter((t) => t.categoryId === 'food').length, 0);
 });
