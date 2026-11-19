@@ -1,0 +1,10 @@
+name: diag
+on: { push: { branches: [diag/tts-source] } }
+jobs:
+  src:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir x && cd x && npm init -y >/dev/null && npm install --silent @capacitor-community/text-to-speech@6 >/dev/null
+          d=node_modules/@capacitor-community/text-to-speech/android/src/main/java/com/getcapacitor/community/tts
+          for f in $d/*.java; do echo "===== $f"; cat "$f"; done
