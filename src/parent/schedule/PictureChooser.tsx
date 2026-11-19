@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { useDialogFocus } from '../../lib/useDialogFocus';
 import { useMimzi } from '../../state/MimziStore';
 import type { MediaRecord, SymbolInfo } from '../../types';
 import { SymbolSearch } from '../SymbolSearch';
@@ -39,6 +40,8 @@ export function PictureChooser({
   const [cropFile, setCropFile] = useState<Blob | null>(null);
   const [q, setQ] = useState('');
   const upload = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, onCancel);
   const camera = useRef<HTMLInputElement>(null);
 
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -64,7 +67,7 @@ export function PictureChooser({
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <div className="modal editor-modal picture-chooser" role="dialog" aria-modal="true" aria-labelledby="pc-title" data-testid="picture-chooser">
+      <div ref={dialogRef} className="modal editor-modal picture-chooser" role="dialog" aria-modal="true" aria-labelledby="pc-title" data-testid="picture-chooser">
         <h2 id="pc-title">Choose a picture</h2>
         <div className="seg" role="tablist" aria-label="Picture source">
           {tabs.map((t) => (
@@ -140,9 +143,8 @@ export function PictureChooser({
       </div>
 
       {cropFile && (
-        <div className="modal-backdrop" role="presentation">
-          <div className="modal" role="dialog" aria-modal="true" aria-label="Position photo">
-            <PhotoCropper
+        <CropDialog onCancel={() => setCropFile(null)}>
+          <PhotoCropper
               file={cropFile}
               onCancel={() => setCropFile(null)}
               onDone={(blob) => {
@@ -151,9 +153,20 @@ export function PictureChooser({
                 onPick({ kind: 'photo', photoId: id, media: { id, kind: 'photo', mime: blob.type || 'image/jpeg', blob, createdAt: Date.now() } });
               }}
             />
-          </div>
-        </div>
+        </CropDialog>
       )}
+    </div>
+  );
+}
+
+function CropDialog({ onCancel, children }: { onCancel: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, onCancel);
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <div ref={ref} className="modal" role="dialog" aria-modal="true" aria-label="Position photo">
+        {children}
+      </div>
     </div>
   );
 }

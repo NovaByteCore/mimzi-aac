@@ -3,6 +3,7 @@ import { useMimzi } from '../../state/MimziStore';
 import type { MediaRecord, MyDay, MyDayTool, RewardTemplate, RoutineLayout, ScheduleItem, TileColor } from '../../types';
 import {
   addStep,
+  addToken,
   blankItem,
   currentStepIndex,
   deleteTemplate,
@@ -29,6 +30,7 @@ import { Icon, TokenShape } from '../../components/Icon';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { referencedMediaIds } from '../../lib/media';
 import { CardEditor } from './CardEditor';
+import { useDialogFocus } from '../../lib/useDialogFocus';
 
 const fresh = (i: ScheduleItem): ScheduleItem => ({ ...i, done: false });
 const TOKEN_COLORS = ['#d9a400', '#2f8f4e', '#2f6fb3', '#c0397a', '#7b52c4', '#d2552f'];
@@ -80,6 +82,8 @@ export function ScheduleEditor({ initial, onClose }: Props) {
     if (!dirty) return onClose();
     setConfirm({ title: 'Discard your changes?', message: 'Your edits to the schedule haven’t been saved.', label: 'Discard', run: onClose });
   };
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, cancel); // Escape = Cancel (asks first if there are unsaved changes)
 
   const ft = draft.firstThen;
   const reward = draft.reward;
@@ -96,7 +100,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
     else if (tool === 'reward') {
       const { earned: _e, name: _n, ...board } = reward;
       edit({ ...draft, reward: { ...reward, name }, rewardTemplates: [...draft.rewardTemplates, { ...board, item: fresh(reward.item), id, name } as RewardTemplate] });
-    } else edit({ ...draft, routine: { ...draft.routine, name }, routineTemplates: [...draft.routineTemplates, { id, name, steps: steps.map(fresh), layout: draft.routineLayout }] });
+    } else edit({ ...draft, routine: { ...draft.routine, name }, routineTemplates: [...draft.routineTemplates, { id, name, steps: steps.map(fresh), layout: draft.routineLayout, showUpcoming: draft.showUpcoming !== false }] });
     setNewName('');
     setStatus(`Saved “${name}” as a template.`);
   };
@@ -112,12 +116,13 @@ export function ScheduleEditor({ initial, onClose }: Props) {
       }
     } else {
       const t = draft.routineTemplates.find((x) => x.id === id);
-      if (t) edit({ ...draft, routine: { steps: t.steps.map(fresh), name: t.name }, routineLayout: t.layout ?? draft.routineLayout });
+      if (t) edit({ ...draft, routine: { steps: t.steps.map(fresh), name: t.name }, routineLayout: t.layout ?? draft.routineLayout, showUpcoming: t.showUpcoming ?? draft.showUpcoming });
     }
     const name = templates.find((x) => x.id === id)?.name;
     setStatus(`Using “${name}”. Save to show it on My Day.`);
   };
   const setTemplates = (list: Named[]) => edit({ ...draft, [kind]: list } as MyDay);
+  const activeName = tool === 'firstThen' ? ft.name : tool === 'reward' ? reward.name : draft.routine.name;
 
   /* ---------- live preview ---------- */
   const preview = (
@@ -138,7 +143,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
 
   return (
     <div className="modal-backdrop schedule-editor-backdrop" role="presentation">
-      <div className="schedule-editor" role="dialog" aria-modal="true" aria-labelledby="se-title" data-testid="schedule-editor">
+      <div ref={dialogRef} className="schedule-editor" role="dialog" aria-modal="true" aria-labelledby="se-title" data-testid="schedule-editor">
         <header className="se-header">
           <h2 id="se-title">Edit schedule</h2>
           <div className="seg" role="tablist" aria-label="Schedule">
@@ -182,7 +187,8 @@ export function ScheduleEditor({ initial, onClose }: Props) {
               <>
                 <CardEditor mediaUrls={previewUrls} title="FIRST" testId="ft-first" item={ft.first} onChange={(first, m) => edit({ ...draft, firstThen: { ...ft, first } }, m)} />
                 <CardEditor mediaUrls={previewUrls} title="THEN" testId="ft-then" item={ft.then} onChange={(then, m) => edit({ ...draft, firstThen: { ...ft, then } }, m)} />
-                <div className="row">
+                <div className="row progress-row" role="group" aria-label="Progress" data-testid="progress-firstThen">
+                  <span className="progress-title">Progress</span>
                   <button type="button" className="btn" onClick={() => edit({ ...draft, firstThen: { ...ft, first: { ...ft.first, done: true } } })} disabled={ft.first.done}>
                     <Icon name="check" /> Mark FIRST done
                   </button>
@@ -198,6 +204,17 @@ export function ScheduleEditor({ initial, onClose }: Props) {
 
             {tool === 'reward' && (
               <>
+                <div className="row progress-row" role="group" aria-label="Progress" data-testid="progress-reward">
+                  <span className="progress-title">
+                    Progress: {reward.earned} of {reward.tokens} tokens
+                  </span>
+                  <button type="button" className="btn" onClick={() => edit({ ...draft, reward: addToken(reward) })} disabled={reward.earned >= reward.tokens}>
+                    <Icon name="plus" /> Add token
+                  </button>
+                  <button type="button" className="btn btn-quiet" onClick={() => edit({ ...draft, reward: { ...reward, earned: 0 } })} disabled={reward.earned === 0}>
+                    <Icon name="reset" /> Reset tokens
+                  </button>
+                </div>
                 <CardEditor mediaUrls={previewUrls} title="Reward" testId="reward-item" item={reward.item} onChange={(item, m) => edit({ ...draft, reward: { ...reward, item } }, m)} />
                 <label className="field">
                   <span>What your child is working on (optional)</span>
@@ -253,17 +270,31 @@ export function ScheduleEditor({ initial, onClose }: Props) {
                 <label className="check">
                   <input type="checkbox" checked={reward.sound ?? settings.celebrationSound} onChange={(e) => edit({ ...draft, reward: { ...reward, sound: e.target.checked } })} /> Say the message out loud
                 </label>
-                <div className="row">
-                  <button type="button" className="btn btn-quiet" onClick={() => edit({ ...draft, reward: { ...reward, earned: 0 } })} disabled={reward.earned === 0}>
-                    <Icon name="reset" /> Reset progress ({reward.earned} earned)
-                  </button>
-                </div>
                 <p className="muted small">Rewards are for extra fun only — never for communication, breaks, food, comfort or care. Tokens are never taken away as a punishment.</p>
               </>
             )}
 
             {tool === 'routine' && (
               <>
+                <div className="row progress-row" role="group" aria-label="Progress" data-testid="progress-routine">
+                  <span className="progress-title">
+                    Progress: {steps.filter((x) => x.done).length} of {steps.length} steps done
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      const i = currentStepIndex(steps);
+                      if (i >= 0) edit({ ...draft, routine: { ...draft.routine, steps: steps.map((x, j) => (j === i ? { ...x, done: true } : x)) } });
+                    }}
+                    disabled={currentStepIndex(steps) < 0}
+                  >
+                    <Icon name="check" /> Mark current step done
+                  </button>
+                  <button type="button" className="btn btn-quiet" onClick={() => edit({ ...draft, routine: { ...draft.routine, steps: resetItems(steps) } })} disabled={!steps.some((x) => x.done)}>
+                    <Icon name="reset" /> Reset steps
+                  </button>
+                </div>
                 <label className="field">
                   <span>Routine name</span>
                   <input value={draft.routine.name ?? ''} maxLength={40} placeholder="e.g. Morning Routine" onChange={(e) => edit({ ...draft, routine: { ...draft.routine, name: e.target.value || undefined } })} aria-label="Routine name" />
@@ -310,9 +341,6 @@ export function ScheduleEditor({ initial, onClose }: Props) {
                   <button type="button" className="btn" onClick={() => edit({ ...draft, routine: { ...draft.routine, steps: addStep(steps, blankItem(`Step ${steps.length + 1}`)) } })} disabled={steps.length >= MAX_STEPS} data-testid="add-step">
                     <Icon name="plus" /> Add step ({steps.length} of {MAX_STEPS})
                   </button>
-                  <button type="button" className="btn btn-quiet" onClick={() => edit({ ...draft, routine: { ...draft.routine, steps: resetItems(steps) } })}>
-                    <Icon name="reset" /> Reset the routine
-                  </button>
                 </div>
               </>
             )}
@@ -323,8 +351,9 @@ export function ScheduleEditor({ initial, onClose }: Props) {
               <p className="muted small">“Use” puts a saved one on screen and starts it fresh (done marks and tokens reset). Saved ones keep their pictures, words, voice and colours.</p>
               <ul className="template-list">
                 {templates.map((t) => (
-                  <li key={t.id} data-template={t.name}>
+                  <li key={t.id} data-template={t.name} data-active={t.name === activeName || undefined}>
                     <input className="template-name" value={t.name} maxLength={40} aria-label={`Name of ${t.name}`} onChange={(e) => setTemplates(templates.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))} onBlur={(e) => setTemplates(renameTemplate(templates, t.id, e.target.value))} />
+                    {t.name === activeName && <span className="active-badge">On screen</span>}
                     <button type="button" className="btn small btn-primary" onClick={() => applyTemplate(t.id)}>
                       Use
                     </button>

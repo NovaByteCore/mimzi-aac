@@ -59,10 +59,10 @@ export function SettingsPanel() {
 
       <h2>Navigation</h2>
       <label className="field">
-        <span>Page list beside the board</span>
+        <span>Word groups list</span>
         <select value={settings.pageList ?? 'auto'} onChange={(e) => void updateSettings({ pageList: e.target.value as 'auto' | 'hide' })} data-testid="page-list-setting">
-          <option value="auto">Automatic — shown on larger tablets, hidden on phones and small tablets</option>
-          <option value="hide">Hidden — use folder buttons and Home / Back</option>
+          <option value="auto">Show — beside the board on larger tablets; a “Groups” button on phones and small tablets</option>
+          <option value="hide">Hide — use folder buttons and Home / Back only</option>
         </select>
       </label>
       <p className="muted small">Quick words are set in their own section: Parent Mode → Quick words.</p>

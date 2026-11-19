@@ -1,19 +1,20 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useMimzi } from './state/MimziStore';
 import { Board } from './components/Board';
 import { SentenceBar, SpokenBar } from './components/SentenceBar';
 import { Icon } from './components/Icon';
+import { GroupsSheet } from './components/GroupsSheet';
 import { TileButton } from './components/TileButton';
 import { TileFace } from './components/TileFace';
 import { HoldButton } from './components/HoldButton';
 import { orderedTiles } from './lib/grid';
 import { sentenceReducer, sentenceText } from './lib/sentence';
-import { speakText, speakTile, spokenFor, type SpeakOptions, type SpeakResult } from './lib/speech';
+import { speakText, speakTile, spokenFor, type SpeakOptions } from './lib/speech';
 import { HOME_PAGE } from './data/vocabulary';
 import { mulberryUrl } from './lib/colors';
 import { remoteSymbolUrls } from './lib/symbols';
 import { scheduleSymbolUrls } from './lib/myday';
-import type { MyDayTool, Tile } from './types';
+import type { MyDayTool, SpeechState, Tile, Utterance } from './types';
 import { ParentGate } from './parent/ParentGate';
 import { ParentMode } from './parent/ParentMode';
 import { MyDayView } from './components/MyDayView';
@@ -27,6 +28,7 @@ export function App() {
   const { tiles, categories, settings, mediaUrls, mediaMime } = store;
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   // "Edit schedule" on My Day: PIN first, then the schedule editor (grown-ups only).
   const [scheduleGate, setScheduleGate] = useState<MyDayTool | null>(null);
   const [scheduleEdit, setScheduleEdit] = useState<MyDayTool | null>(null);
@@ -37,10 +39,12 @@ export function App() {
   const lastTap = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const [pages, setPages] = useState<Record<string, number>>({});
   const [sentence, dispatch] = useReducer(sentenceReducer, []);
-  const [lastSpoken, setLastSpoken] = useState('');
-  const [toast, setToast] = useState('');
+  // What was last said, exactly as it was said, so "Say it again" and "Try again" replay the
+  // same recording, pronunciation and language.
+  const [lastSpoken, setLastSpokenRaw] = useState<Utterance | null>(null);
+  const [speech, setSpeech] = useState<SpeechState | null>(null);
+  const speechSeq = useRef(0);
   const [signTile, setSignTile] = useState<Tile | null>(null);
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const visibleCategories = useMemo(
     () => categories.filter((c) => !c.hidden).sort((a, b) => a.order - b.order),
@@ -77,19 +81,27 @@ export function App() {
     interrupt: settings.interruptMode,
   };
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(''), 3500);
-  }, []);
+  /** Is the phrase visible in the bar at the top of the screen right now? */
+  const shownAtTop = (text: string) => {
+    if (settings.showSentenceBar) {
+      const words = sentenceText(sentence);
+      return words === text || sentence.some((i) => i.label === text);
+    }
+    return lastSpoken?.text === text;
+  };
 
-  const report = useCallback(
-    (r: SpeakResult) => {
-      if (r === 'unsupported') showToast('This device can’t speak right now — the words are shown at the top.');
-      else if (r === 'error') showToast('The sound didn’t play — the words are shown at the top.');
-    },
-    [showToast],
-  );
+  /** Speak an utterance and report honestly what happened (never "success" if nothing played). */
+  const play = (u: Utterance, atTop: boolean) => {
+    const seq = ++speechSeq.current;
+    setSpeech({ utterance: u, status: 'speaking', atTop });
+    const opts = { ...speechOpts, lang: u.lang || speechOpts.lang };
+    void (u.audioUrl ? speakTile(u.speak, u.audioUrl, opts) : speakText(u.speak, opts)).then((r) => {
+      if (seq !== speechSeq.current) return; // a newer request owns the status now
+      if (r === 'spoken' || r === 'recorded') setSpeech({ utterance: u, status: 'done', atTop });
+      else if (r === 'interrupted') setSpeech(null); // cut off on purpose — not an error
+      else setSpeech({ utterance: u, status: r === 'unsupported' ? 'unsupported' : 'failed', atTop });
+    });
+  };
 
   const onTap = (tile: Tile) => {
     // Optional guard against accidental double taps (Parent Mode → Mimzi Voice).
@@ -99,33 +111,34 @@ export function App() {
     if (settings.haptics && 'vibrate' in navigator) navigator.vibrate?.(15);
     if (tile.linkTo) {
       setStack((st) => [...st.filter((p) => p !== tile.linkTo), tile.linkTo!]);
-      if (settings.speakFolders) void speakText(spokenFor(tile), { ...speechOpts, lang: tile.lang || speechOpts.lang }).then(report);
+      if (settings.speakFolders) play({ text: tile.label, speak: spokenFor(tile), lang: tile.lang }, false);
       return;
     }
-    const spoken = spokenFor(tile);
-    setLastSpoken(tile.speak || tile.label);
+    const u: Utterance = { text: tile.speak || tile.label, speak: spokenFor(tile), lang: tile.lang, audioUrl: tile.audioId ? mediaUrls[tile.audioId] : undefined };
+    setLastSpokenRaw(u);
     if (settings.showSentenceBar) {
-      dispatch({ type: 'add', item: { tileId: tile.id, label: tile.label, speak: spoken } });
+      dispatch({ type: 'add', item: { tileId: tile.id, label: tile.label, speak: spokenFor(tile) } });
     }
-    if (settings.speakOnTap) {
-      void speakTile(spoken, tile.audioId ? mediaUrls[tile.audioId] : undefined, { ...speechOpts, lang: tile.lang || speechOpts.lang }).then(report);
-    }
+    if (settings.speakOnTap) play(u, true);
   };
 
   const speakSentence = () => {
     const text = sentenceText(sentence);
     if (!text) return;
-    setLastSpoken(text);
-    void speakText(text, speechOpts).then(report);
+    const u: Utterance = { text, speak: text };
+    setLastSpokenRaw(u);
+    play(u, true);
   };
 
+  /** My Day and other screens: say a phrase (shown on My Day while it is said). */
   const say = (text: string) => {
-    setLastSpoken(text);
-    void speakText(text, speechOpts).then(report);
+    const u: Utterance = { text, speak: text };
+    if (!settings.showSentenceBar) setLastSpokenRaw(u);
+    play(u, !settings.showSentenceBar);
   };
 
   const replay = () => {
-    if (lastSpoken) void speakText(lastSpoken, speechOpts).then(report);
+    if (lastSpoken) play(lastSpoken, true);
   };
 
   if (store.status === 'loading') {
@@ -200,7 +213,7 @@ export function App() {
             onClear={() => dispatch({ type: 'clear' })}
           />
         ) : (
-          <SpokenBar text={lastSpoken} onReplay={replay} />
+          <SpokenBar text={lastSpoken?.text ?? ''} onReplay={replay} />
         )}
       </header>
 
@@ -225,7 +238,7 @@ export function App() {
 
       <main className="board-area">
         {view === 'myday' ? (
-          <MyDayView say={say} onEdit={(tool) => setScheduleGate(tool)} />
+          <MyDayView say={say} speech={speech} onRetry={() => speech && play(speech.utterance, speech.atTop)} onEdit={(tool) => setScheduleGate(tool)} />
         ) : (
         <div className="board-wrap">
         {view === 'talk' && (
@@ -243,6 +256,11 @@ export function App() {
             >
               <Icon name="home" /> Home
             </button>
+            {settings.pageList !== 'hide' && (
+              <button type="button" className="page-btn groups-btn" onClick={() => setGroupsOpen(true)} aria-haspopup="dialog" data-testid="groups-btn">
+                <Icon name="steps" /> Groups
+              </button>
+            )}
             <h2 className="page-title" data-testid="page-title">{boardLabel}</h2>
           </div>
         )}
@@ -281,14 +299,30 @@ export function App() {
         <button type="button" className={`nav-btn${view === 'people' ? ' nav-on' : ''}`} onClick={() => setView('people')} aria-current={view === 'people' ? 'page' : undefined}>
           <Icon name="people" size={26} /> My People
         </button>
-        <HoldButton className="nav-btn nav-parent" label="Parent Mode — press and hold" onHold={() => setGateOpen(true)}>
-          <Icon name="lock" size={26} /> Hold for grown-ups
+        <HoldButton
+          className="nav-btn nav-parent"
+          label="Grown-ups: Parent Mode (asks for the PIN)"
+          onHold={() => setGateOpen(true)}
+          onTap={() => setGateOpen(true)}
+        >
+          <Icon name="lock" size={26} /> Grown-ups
         </HoldButton>
       </nav>
 
-      {toast && (
-        <div className="toast" role="status">
-          {toast}
+      {speech && (speech.status === 'failed' || speech.status === 'unsupported') && view !== 'myday' && (
+        <div className="speech-fail" role="alert" data-testid="speech-fail">
+          <span>
+            {speech.status === 'unsupported' ? 'This device can’t speak right now' : 'Mimzi couldn’t say'} “{speech.utterance.text}”.
+            {speech.atTop && shownAtTop(speech.utterance.text) ? ' The words are shown at the top of the screen.' : ''}
+          </span>
+          {speech.status === 'failed' && (
+            <button type="button" className="btn small" onClick={() => play(speech.utterance, speech.atTop)}>
+              Try again
+            </button>
+          )}
+          <button type="button" className="btn btn-quiet small" onClick={() => setSpeech(null)} aria-label="Dismiss">
+            <Icon name="close" />
+          </button>
         </div>
       )}
 
@@ -304,6 +338,17 @@ export function App() {
         />
       )}
 
+      {groupsOpen && (
+        <GroupsSheet
+          categories={visibleCategories}
+          current={categoryId}
+          onClose={() => setGroupsOpen(false)}
+          onPick={(id) => {
+            setCategoryId(id);
+            setGroupsOpen(false);
+          }}
+        />
+      )}
       {scheduleGate && (
         <ParentGate
           onCancel={() => setScheduleGate(null)}

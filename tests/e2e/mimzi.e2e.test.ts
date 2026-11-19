@@ -37,15 +37,28 @@ const DEFAULT_VOICES = [
   { name: 'Test Voice B', voiceURI: 'voice-b', lang: 'en-US', localService: false, default: false },
 ];
 const speechStubTemplate = `
+  window.__name = (f) => f; // helpers compiled for page.evaluate may reference __name
   window.__spoken = [];
   window.__voices = [];
   window.__rates = [];
   window.__pitches = [];
+  window.__langs = [];
+  window.__played = [];
+  // Recordings: play() succeeds, or fails when __audioMode is 'fail'.
+  const RealAudio = window.Audio;
+  window.Audio = function (src) { const a = new RealAudio(); a.play = () => { if (window.__audioMode === 'fail') return Promise.reject(new DOMException('no', 'NotSupportedError')); window.__played.push(src); setTimeout(() => a.onended && a.onended(new Event('ended')), 5); return Promise.resolve(); }; return a; };
   const fakeVoices = __FAKE_VOICES__;
   const synth = {
     speaking: false, paused: false, pending: false,
     getVoices: () => fakeVoices,
-    speak(u) { window.__spoken.push(u.text); window.__voices.push(u.voice ? u.voice.voiceURI : null); window.__rates.push(u.rate); window.__pitches.push(u.pitch); setTimeout(() => u.onend && u.onend(new Event('end')), 5); },
+    speak(u) {
+      window.__spoken.push(u.text); window.__voices.push(u.voice ? u.voice.voiceURI : null); window.__rates.push(u.rate); window.__pitches.push(u.pitch); window.__langs.push(u.lang);
+      const mode = window.__speechMode || 'ok';
+      if (mode === 'silent') return; // engine accepts the request but never starts
+      if (mode === 'error') return setTimeout(() => u.onerror && u.onerror({ error: 'synthesis-failed' }), 5);
+      if (mode === 'interrupt') return setTimeout(() => u.onerror && u.onerror({ error: 'interrupted' }), 5);
+      setTimeout(() => { u.onstart && u.onstart(new Event('start')); u.onend && u.onend(new Event('end')); }, 5);
+    },
     cancel() {}, resume() {}, addEventListener() {}, removeEventListener() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
@@ -113,7 +126,10 @@ async function openApp(viewport = IPAD, voices: object[] = DEFAULT_VOICES): Prom
 async function openFolder(page: Page, page_id: string) {
   const home = page.locator('.page-toolbar').getByRole('button', { name: 'Home' });
   if (await home.isEnabled()) await home.click();
-  await page.locator(`.board-grid [data-tile-id="core-folder-${page_id}"]`).click();
+  const folder = page.locator(`.board-grid [data-tile-id="core-folder-${page_id}"]`);
+  // Small grids (phones) put some folders on Home page 2 or 3.
+  for (let i = 0; i < 3 && (await folder.count()) === 0; i++) await page.getByRole('button', { name: 'Next page' }).click();
+  await folder.click();
 }
 
 /** Page forward until a tile appears (new words take the first free slot, which may be on a later page). */
@@ -126,6 +142,9 @@ async function findTile(page: Page, selector: string) {
 const spoken = (page: Page) => page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken);
 const voicesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __voices: (string | null)[] }).__voices);
 const pitchesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __pitches: number[] }).__pitches);
+const langsUsed = (page: Page) => page.evaluate(() => (window as unknown as { __langs: string[] }).__langs);
+const playedAudio = (page: Page) => page.evaluate(() => (window as unknown as { __played: string[] }).__played);
+const speechMode = (page: Page, mode: string) => page.evaluate((m) => ((window as unknown as { __speechMode: string }).__speechMode = m), mode);
 const ratesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __rates: number[] }).__rates);
 
 async function hold(page: Page, selector: string | ReturnType<Page['locator']>, ms: number) {
@@ -207,12 +226,20 @@ test('sentence builder keeps words across groups and speaks the whole message un
   await ctx.close();
 });
 
-test('Parent Mode needs a long press and the PIN', async () => {
+test('Parent Mode always needs the PIN — a tap, keyboard, or hold opens the PIN screen, never Parent Mode itself', async () => {
   const { ctx, page } = await openApp();
-  await page.locator('.nav-parent').click(); // quick tap
-  await page.waitForTimeout(300);
-  assert.equal(await page.getByRole('dialog').count(), 0, 'a quick tap must not open Parent Mode');
-  await enterParentMode(page, true);
+  await page.locator('.nav-parent').click(); // quick tap → PIN screen only
+  await page.getByRole('dialog').getByText('Create a Parent PIN').waitFor();
+  assert.equal(await page.getByRole('heading', { name: /Parent Mode/ }).count(), 0, 'not Parent Mode without the PIN');
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog').waitFor({ state: 'detached' });
+  assert.ok(await page.locator('.nav-parent').evaluate((el) => el === document.activeElement), 'focus returns to the Grown-ups button');
+  await page.keyboard.press('Enter'); // keyboard activation
+  await page.getByRole('dialog').waitFor();
+  assert.equal(await page.getByRole('dialog').count(), 1, 'exactly one PIN screen');
+  await page.keyboard.press('Escape');
+  await enterParentMode(page, true); // the press-and-hold shortcut still works (no double activation)
+  assert.equal(await page.getByRole('dialog').count(), 0);
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await holdParentButton(page);
   await typePin(page, '0000');
@@ -489,7 +516,7 @@ test('I’m Working For: 3 tokens by default, hold to add, gentle celebration, n
   await openMyDay(page);
   await page.getByRole('tab', { name: /working for/ }).click();
   assert.equal(await page.locator('.token-on').count(), 3, 'earned tokens are saved');
-  await holdGrownup(page, 'Hold to start a new board');
+  await holdGrownup(page, 'Hold to reset tokens');
   await page.waitForFunction(() => document.querySelectorAll('.token-on').length === 0);
   await ctx.close();
 });
@@ -580,6 +607,8 @@ test('First / Then templates: save, rename, switch, delete — and quick switch 
   await saveSchedule(page);
   // Quick switch without opening the editor.
   await page.getByLabel('Choose saved First / Then').selectOption({ label: 'Evening' });
+  assert.match((await page.getByTestId('vs-firstThen').getByTestId('active-board').textContent()) ?? '', /Bath time|Evening|not saved/, 'selecting alone does not switch');
+  await page.getByTestId('vs-firstThen').getByRole('button', { name: 'Use board' }).click();
   await page.getByText('My Day now shows “Evening”.').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await openMyDay(page);
@@ -634,7 +663,7 @@ test('I’m Working For: reward name, photo and symbol, goal, 1–10 tokens, tok
 test('routine builder: 1 to 5 steps, reorder, three views, saved routines restore', async () => {
   const { ctx, page } = await openApp();
   await openMyDay(page);
-  await page.getByRole('tab', { name: /three steps/ }).click();
+  await page.getByRole('tab', { name: 'My Steps' }).click();
   await holdGrownup(page, 'Hold to mark this step done');
   await page.locator('.steps .sched-done').waitFor();
   await enterParentMode(page);
@@ -664,7 +693,7 @@ test('routine builder: 1 to 5 steps, reorder, three views, saved routines restor
   await page.getByRole('button', { name: /back to Talk/ }).click();
 
   await openMyDay(page);
-  await page.getByRole('tab', { name: /Now \/ Next \/ Later/ }).click();
+  await page.getByRole('tab', { name: 'My Steps' }).click();
   assert.equal(await page.locator('.nnl .sched-card').count(), 3);
   // Step 1 was already done before editing, so NOW is step 2; editing kept that progress.
   assert.match((await page.locator('.nnl-now').textContent()) ?? '', /Jacket/);
@@ -677,7 +706,7 @@ test('routine builder: 1 to 5 steps, reorder, three views, saved routines restor
   await page.getByRole('button', { name: 'Unlock' }).click();
   await editor(page).getByTestId('layout-oneAtATime').check();
   await saveSchedule(page);
-  await page.getByRole('tab', { name: /One step at a time/ }).click();
+  await page.getByRole('tab', { name: 'My Steps' }).click();
   await page.getByTestId('one-step').getByText('STEP 3 OF 5').waitFor();
   assert.equal(await page.locator('.one-step-next .sched-card').count(), 2);
 
@@ -693,7 +722,7 @@ test('routine builder: 1 to 5 steps, reorder, three views, saved routines restor
   await saveSchedule(page);
   await page.reload();
   await openMyDay(page);
-  await page.getByRole('tab', { name: /Now \/ Next \/ Later/ }).click();
+  await page.getByRole('tab', { name: 'My Steps' }).click();
   await page.locator('.nnl-now').getByText('Get shoes').waitFor();
   assert.match((await page.locator('.nnl-next').textContent()) ?? '', /Jacket/);
   await ctx.close();
@@ -753,7 +782,7 @@ for (const [name, viewport] of [
   test(`My Day and the schedule editor fit on ${name}`, async () => {
     const { ctx, page } = await openApp(viewport);
     await openMyDay(page);
-    for (const tab of [/First \/ Then/, /working for/, /three steps/]) {
+    for (const tab of [/First \/ Then/, /working for/, 'My Steps']) {
       await page.getByRole('tab', { name: tab }).click();
       const ok = await page.evaluate(() => {
         const cards = [...document.querySelectorAll('.myday .sched-card, .myday .reward-goal')] as HTMLElement[];
@@ -1473,7 +1502,7 @@ for (const [name, size, keyboard] of [
   test(`schedule editor on the ${name} tablet stays usable with the keyboard open`, async () => {
     const { ctx, page } = await openApp(size);
     await openMyDay(page);
-    await page.getByRole('tab', { name: /three steps/ }).click();
+    await page.getByRole('tab', { name: 'My Steps' }).click();
     await page.getByTestId('edit-schedule').click();
     await typePin(page, PIN);
     await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -1515,7 +1544,7 @@ for (const [name, size, keyboard] of [
 const KINDS = [
   { kind: 'First / Then', open: 'Edit First / Then', card: 'ft-first', words: 'FIRST words', speak: 'FIRST spoken words', child: /First \/ Then/, childCard: '.first-then .sched-card', spokenPrefix: 'First ' },
   { kind: 'reward', open: 'Edit reward', card: 'reward-item', words: 'Reward words', speak: 'Reward spoken words', child: /working for/, childCard: '.reward-goal', spokenPrefix: "I'm working for " },
-  { kind: 'routine', open: 'Open routine builder', card: 'step-1', words: 'Step 1 words', speak: 'Step 1 spoken words', child: /three steps/, childCard: '.steps .sched-card', spokenPrefix: '' },
+  { kind: 'routine', open: 'Open routine builder', card: 'step-1', words: 'Step 1 words', speak: 'Step 1 spoken words', child: 'My Steps', childCard: '.steps .sched-card', spokenPrefix: '' },
 ] as const;
 
 for (const k of KINDS) {
@@ -1611,14 +1640,14 @@ test('switching saved boards resets progress as intended; earned tokens never di
 test('layouts with completed steps: numbered, Now / Next / Later and one step at a time', async () => {
   const { ctx, page } = await openApp();
   await openMyDay(page);
-  await page.getByRole('tab', { name: /three steps/ }).click();
+  await page.getByRole('tab', { name: 'My Steps' }).click();
   await holdGrownup(page, 'Hold to mark this step done');
   await holdGrownup(page, 'Hold to mark this step done');
   await page.waitForFunction(() => document.querySelectorAll('.steps .sched-done').length === 2);
   assert.match((await page.locator('.steps .sched-current').textContent()) ?? '', /Go outside/, 'current step highlighted');
   assert.equal(await page.locator('.steps .sched-done .sched-check').count(), 2, 'done steps show a check');
   // Now / Next / Later on the last step: NEXT and LATER are empty placeholders.
-  for (const [layout, tab] of [['layout-nowNextLater', /Now \/ Next \/ Later/], ['layout-oneAtATime', /One step at a time/]] as const) {
+  for (const [layout, tab] of [['layout-nowNextLater', 'My Steps'], ['layout-oneAtATime', 'My Steps']] as const) {
     await page.getByTestId('edit-schedule').click();
     await typePin(page, PIN);
     if (layout === 'layout-nowNextLater') {
@@ -1732,6 +1761,380 @@ for (const [name, viewport] of [
       await page.getByRole('button', { name: 'Back' }).click();
       await page.getByTestId('page-title').getByText('Home').waitFor();
     }
+    await ctx.close();
+  });
+}
+
+
+/* ---------------- Accessibility & reliability fixes (PR #2 review) ---------------- */
+
+test('caregiver progress without a sustained hold: tap explains, editor Progress buttons work', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page); // sets the PIN
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  await page.getByRole('button', { name: 'Hold to mark FIRST done' }).click(); // a quick tap
+  await page.getByTestId('grownup-hint').getByText(/press and hold that button, or tap “Edit schedule”/).waitFor();
+  assert.equal(await page.locator('.first-then .sched-done').count(), 0, 'a tap alone changes nothing');
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).getByTestId('progress-firstThen').getByRole('button', { name: /Mark FIRST done/ }).click();
+  await editor(page).getByRole('tab', { name: 'I’m Working For' }).click();
+  await editor(page).getByTestId('progress-reward').getByRole('button', { name: /Add token/ }).click();
+  await editor(page).getByTestId('progress-reward').getByRole('button', { name: /Add token/ }).click();
+  await editor(page).getByRole('tab', { name: 'Routine' }).click();
+  await editor(page).getByTestId('progress-routine').getByRole('button', { name: /Mark current step done/ }).click();
+  await saveSchedule(page);
+  await page.locator('.first-then .sched-done').waitFor();
+  await page.getByRole('tab', { name: /working for/ }).click();
+  assert.equal(await page.locator('.token-on').count(), 2);
+  await page.getByRole('tab', { name: 'My Steps' }).click();
+  assert.equal(await page.locator('.steps .sched-done').count(), 1);
+  // Reset without holding.
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).getByRole('tab', { name: 'I’m Working For' }).click();
+  await editor(page).getByTestId('progress-reward').getByRole('button', { name: /Reset tokens/ }).click();
+  await saveSchedule(page);
+  await page.getByRole('tab', { name: /working for/ }).click();
+  assert.equal(await page.locator('.token-on').count(), 0);
+  await page.getByRole('button', { name: /reset tokens/i }).waitFor(); // child-screen control renamed
+  await ctx.close();
+});
+
+test('speech: a silent engine is reported (with retry), an interruption is not', async () => {
+  const { ctx, page } = await openApp();
+  await speechMode(page, 'silent');
+  await page.locator('.board-grid [data-tile-id="core-more"]').click();
+  const fail = page.getByTestId('speech-fail');
+  await fail.waitFor({ timeout: 9000 });
+  assert.match((await fail.textContent()) ?? '', /couldn’t say “more”.*shown at the top/, 'honest failure; the word is in the message bar');
+  await page.waitForTimeout(4000);
+  assert.equal(await fail.count(), 1, 'the message stays until handled');
+  await speechMode(page, 'ok');
+  const before = (await spoken(page)).length;
+  await fail.getByRole('button', { name: 'Try again' }).click();
+  await fail.waitFor({ state: 'detached' });
+  assert.equal((await spoken(page)).length, before + 1);
+  assert.equal((await spoken(page)).at(-1), 'more');
+  await speechMode(page, 'interrupt');
+  await page.locator('.board-grid [data-tile-id="core-go"]').click();
+  await page.waitForTimeout(5000);
+  assert.equal(await page.getByTestId('speech-fail').count(), 0, 'interrupted on purpose is not a failure');
+  await speechMode(page, 'error');
+  await page.locator('.board-grid [data-tile-id="core-look"]').click();
+  await page.getByTestId('speech-fail').getByText(/couldn’t say “look”/).waitFor();
+  await ctx.close();
+});
+
+test('"Say it again" replays the same recording, pronunciation and language; a broken recording falls back to the voice', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  await page.getByText('Show the sentence bar').click(); // single-word mode shows "Say it again"
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.getByTestId('pron-word').selectOption('family-mama');
+  await page.getByTestId('pron-text').fill('Mah-mah');
+  await page.getByTestId('pron-save').click();
+  await page.getByRole('tab', { name: 'Edit AAC board' }).click();
+  await page.locator('.edit-tile[aria-label="Edit go"]').click();
+  await page.getByLabel('Voice language (optional)').fill('es-US');
+  await page.getByRole('button', { name: /Record your voice/ }).click();
+  await page.getByRole('button', { name: /Stop/ }).waitFor();
+  await page.waitForTimeout(1000);
+  await page.getByRole('button', { name: /Stop/ }).click();
+  await page.locator('.recorder audio').waitFor();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  // Recording, replayed exactly.
+  await page.locator('.board-grid [data-tile-id="core-go"]').click();
+  assert.equal((await playedAudio(page)).length, 1);
+  await page.getByRole('button', { name: 'Say it again' }).click();
+  assert.equal((await playedAudio(page)).length, 2, 'replay uses the recording');
+  // Recording can't play → the built-in voice says it, in the word's language.
+  await page.evaluate(() => ((window as unknown as { __audioMode: string }).__audioMode = 'fail'));
+  await page.getByRole('button', { name: 'Say it again' }).click();
+  await page.waitForFunction(() => (window as unknown as { __spoken: string[] }).__spoken.at(-1) === 'go');
+  assert.equal((await langsUsed(page)).at(-1), 'es-US');
+  // Pronunciation override survives replay.
+  await openFolder(page, 'family');
+  await page.locator('.board-grid [data-tile-id="family-mama"]').click();
+  await page.getByRole('button', { name: 'Say it again' }).click();
+  const said = await spoken(page);
+  assert.deepEqual(said.slice(-2), ['Mah-mah', 'Mah-mah']);
+  assert.equal(await page.locator('.spoken-text').textContent(), 'Mama', 'shown as the label');
+  await ctx.close();
+});
+
+test('My Day shows the phrase being said, and a failure with retry (no "top of the screen" claim)', async () => {
+  const { ctx, page } = await openApp();
+  await openMyDay(page);
+  await page.locator('.first-then .sched-card').first().click();
+  await page.getByTestId('myday-saying').getByText(/“First Brush teeth”/).waitFor();
+  await speechMode(page, 'error');
+  await page.getByRole('button', { name: 'Say it' }).click();
+  const box = page.getByTestId('myday-saying');
+  await box.getByText(/couldn’t say “First Brush teeth, then Play cars”/).waitFor();
+  assert.doesNotMatch((await box.textContent()) ?? '', /top of the screen/);
+  assert.equal(await page.getByTestId('speech-fail').count(), 0, 'shown in My Day, not as a second banner');
+  await speechMode(page, 'ok');
+  await box.getByRole('button', { name: 'Try again' }).click();
+  await box.getByText(/Said: “First Brush teeth, then Play cars”/).waitFor();
+  await ctx.close();
+});
+
+test('dialog focus: Edit schedule → PIN → editor → picture chooser / confirm; Escape closes only the top one; focus returns', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  const opener = page.getByTestId('edit-schedule');
+  await opener.focus();
+  await page.keyboard.press('Enter');
+  const inDialog = (sel: string) => page.evaluate((s) => !!document.activeElement && !!document.querySelector(s)?.contains(document.activeElement), sel);
+  assert.ok(await inDialog('.pin-modal'), 'focus moves into the PIN dialog');
+  for (let i = 0; i < 20; i++) await page.keyboard.press('Tab');
+  assert.ok(await inDialog('.pin-modal'), 'Tab stays inside the PIN dialog');
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).waitFor();
+  assert.ok(await inDialog('[data-testid="schedule-editor"]'), 'focus moves into the editor');
+  for (let i = 0; i < 40; i++) await page.keyboard.press('Shift+Tab');
+  assert.ok(await inDialog('[data-testid="schedule-editor"]'), 'Shift+Tab stays inside the editor');
+  // Picture chooser on top: Escape closes just the chooser.
+  await editor(page).getByTestId('ft-first').getByRole('button', { name: /Change picture/ }).click();
+  await page.getByTestId('picture-chooser').waitFor();
+  assert.ok(await inDialog('[data-testid="picture-chooser"]'));
+  await page.keyboard.press('Escape');
+  await page.getByTestId('picture-chooser').waitFor({ state: 'detached' });
+  assert.equal(await editor(page).count(), 1, 'editor still open');
+  // Unsaved change → Escape asks first; Escape on the question closes only the question.
+  await editor(page).getByLabel('FIRST words').fill('Shoes');
+  await page.keyboard.press('Escape');
+  const confirm = page.getByRole('alertdialog');
+  await confirm.getByText('Discard your changes?').waitFor();
+  assert.ok(await inDialog('[role="alertdialog"]'), 'focus moves into the confirmation');
+  await page.keyboard.press('Escape');
+  await confirm.waitFor({ state: 'detached' });
+  assert.equal(await editor(page).getByLabel('FIRST words').inputValue(), 'Shoes', 'edits kept');
+  await editor(page).getByTestId('save-schedule').click();
+  await editor(page).waitFor({ state: 'detached' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'edit-schedule');
+  await page.locator('.first-then').getByText('Shoes').waitFor();
+  await ctx.close();
+});
+
+test('sentence bar for screen readers: readable message, short announcements, one Speak action', async () => {
+  const { ctx, page } = await openApp();
+  await page.locator('.board-grid [data-tile-id="core-i"]').click();
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  await page.getByTestId('message-text').getByText('Message: I want', { exact: true }).waitFor();
+  await page.getByTestId('message-live').getByText('Added want', { exact: true }).waitFor();
+  assert.equal(await page.locator('.sentence-bar').getByRole('button', { name: /speak|say/i }).count(), 1, 'one Speak action');
+  const speak = page.getByRole('button', { name: 'Speak message' });
+  assert.equal(await speak.getAttribute('aria-describedby'), 'message-text');
+  await page.getByRole('button', { name: 'Remove last word' }).click();
+  await page.getByTestId('message-live').getByText('Removed want', { exact: true }).waitFor();
+  await page.locator('.sentence-words').click(); // the familiar tap on the pictures still speaks
+  assert.equal((await spoken(page)).at(-1), 'I');
+  await page.getByRole('button', { name: 'Clear message' }).click();
+  await page.getByTestId('message-live').getByText('Message cleared', { exact: true }).waitFor();
+  await page.getByTestId('message-text').getByText('Message is empty', { exact: true }).waitFor();
+  await ctx.close();
+});
+
+test('compact screens: "Groups" opens the word-group list when enabled; hidden when the setting is off', async () => {
+  const { ctx, page } = await openApp({ width: 600, height: 960 });
+  const groups = page.getByTestId('groups-btn');
+  await groups.click();
+  const sheet = page.getByTestId('groups-sheet');
+  await sheet.getByRole('button', { name: /Feelings/ }).click();
+  await page.getByTestId('page-title').getByText('Feelings').waitFor();
+  await page.getByRole('button', { name: 'Home' }).click();
+  await page.getByTestId('page-title').getByText('Home').waitFor();
+  await groups.click();
+  await page.keyboard.press('Escape');
+  await sheet.waitFor({ state: 'detached' });
+  assert.ok(await groups.evaluate((el) => el === document.activeElement), 'focus back on Groups');
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  await page.getByTestId('page-list-setting').selectOption('hide');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  assert.equal(await page.getByTestId('groups-btn').count(), 0, 'off → no group list');
+  await openFolder(page, 'feelings'); // folders still work
+  await page.getByTestId('page-title').getByText('Feelings').waitFor();
+  await ctx.close();
+});
+
+test('My Day tabs: arrow keys, one tab stop, labelled panels, stable "My Steps"', async () => {
+  const { ctx, page } = await openApp();
+  await openMyDay(page);
+  const tabs = page.getByRole('tab');
+  assert.deepEqual(await tabs.evaluateAll((els) => els.map((e) => e.getAttribute('tabindex'))), ['0', '-1', '-1'], 'one tab stop');
+  await tabs.first().focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'I’m working for');
+  assert.equal(await tabs.nth(1).getAttribute('aria-selected'), 'true');
+  await page.keyboard.press('End');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'My Steps');
+  const panel = page.getByRole('tabpanel');
+  assert.equal(await panel.getAttribute('aria-labelledby'), 'myday-tab-routine');
+  await panel.getByTestId('routine-note').getByText(/Numbered: three steps · 3 steps/).waitFor();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), 'First / Then', 'wraps around');
+  await ctx.close();
+});
+
+test('saved boards switch only on "Use board"; active board shown; routine templates keep "show upcoming"', async () => {
+  const { ctx, page } = await openApp();
+  await openScheduleEditor(page, 'Open routine builder');
+  await editor(page).getByTestId('layout-oneAtATime').check();
+  await editor(page).getByText('Show small pictures of the next steps').click(); // off for this routine
+  await editor(page).getByLabel('Routine name').fill('Quiet');
+  await editor(page).getByTestId('template-name').fill('Quiet');
+  await editor(page).getByTestId('save-template').click();
+  await saveSchedule(page);
+  const vs = page.getByTestId('vs-routine');
+  await vs.getByTestId('active-board').getByText('Quiet').waitFor();
+  await vs.getByLabel('Choose saved Routine — Quiet').selectOption({ label: 'Morning Routine' });
+  assert.match((await vs.getByTestId('active-board').textContent()) ?? '', /Quiet/, 'nothing switches on selection');
+  await vs.getByText(/Switching starts it fresh/).waitFor();
+  await vs.getByRole('button', { name: 'Use board' }).click();
+  await page.getByTestId('vs-routine').getByTestId('active-board').getByText('Morning Routine').waitFor();
+  // Older template (no saved setting) → keeps the current setting (off).
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  await page.getByRole('tab', { name: 'My Steps' }).click();
+  assert.equal(await page.locator('.one-step-next').count(), 0);
+  // Back to Quiet via the editor: its own "off" is restored; a routine saved with "on" restores on.
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).getByText('Show small pictures of the next steps').click(); // on
+  await editor(page).getByTestId('template-name').fill('Busy');
+  await editor(page).getByTestId('save-template').click();
+  await editor(page).locator('[data-template="Quiet"]').getByRole('button', { name: 'Use' }).click();
+  assert.equal(await editor(page).getByText('Show small pictures of the next steps').locator('input').isChecked(), false);
+  await editor(page).locator('[data-template="Busy"]').getByRole('button', { name: 'Use' }).click();
+  assert.equal(await editor(page).getByText('Show small pictures of the next steps').locator('input').isChecked(), true);
+  await editor(page).locator('[data-template="Busy"][data-active]').getByText('On screen').waitFor();
+  await saveSchedule(page);
+  await page.locator('.one-step-next').waitFor();
+  await ctx.close();
+});
+
+/* ---------------- Viewport sweep: phones and compact tablet, normal and largest text ---------------- */
+
+const SWEEP = [
+  ['phone portrait', { width: 390, height: 844 }],
+  ['phone landscape', { width: 844, height: 390 }],
+  ['tablet portrait', { width: 600, height: 960 }],
+  ['tablet landscape', { width: 960, height: 600 }],
+] as const;
+
+for (const [name, vp] of SWEEP) {
+  test(`viewport sweep: ${name} (${vp.width}×${vp.height})`, async () => {
+    const { ctx, page } = await openApp(vp);
+    const problems: string[] = [];
+    const check = async (where: string) => {
+      const r = await page.evaluate(() => {
+        const out: string[] = [];
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        if (document.documentElement.scrollWidth > vw + 1) out.push('page scrolls sideways');
+        const onScreen = (el: Element) => {
+          const b = el.getBoundingClientRect();
+          return b.width > 0 && b.top >= -1 && b.left >= -1 && b.bottom <= vh + 1 && b.right <= vw + 1;
+        };
+        for (const q of document.querySelectorAll('.quick-bar .tile')) {
+          const b = q.getBoundingClientRect();
+          if (!onScreen(q) || b.width < 44 || b.height < 44) out.push(`quick word ${q.getAttribute('aria-label')} ${Math.round(b.width)}×${Math.round(b.height)}`);
+        }
+        for (const s of document.querySelectorAll('.board-grid .sign-btn')) {
+          const b = s.getBoundingClientRect();
+          if (b.width < 44 || b.height < 44) out.push(`ASL hit area ${Math.round(b.width)}×${Math.round(b.height)}`);
+          const tag = s.querySelector('.sign-tag')!.getBoundingClientRect();
+          const pic = s.closest('.tile-wrap')!.querySelector('.tile-media')!.getBoundingClientRect();
+          if (tag.top < pic.bottom - 1 && tag.bottom > pic.top && tag.left < pic.right && tag.right > pic.left) out.push('ASL tag over picture');
+        }
+        for (const t of document.querySelectorAll('.board-grid .tile')) {
+          const b = t.getBoundingClientRect();
+          if (b.height < 44 || b.width < 44) out.push(`tile ${t.getAttribute('aria-label')} ${Math.round(b.width)}×${Math.round(b.height)}`);
+        }
+        for (const sel of ['.nav-btn', '.page-toolbar button']) for (const el of document.querySelectorAll(sel)) if (getComputedStyle(el).display !== 'none' && !onScreen(el)) out.push(`${sel} off screen`);
+        return out;
+      });
+      problems.push(...r.map((x) => `${where}: ${x}`));
+    };
+    for (const scale of [1, 1.6]) {
+      if (scale !== 1) {
+        await enterParentMode(page);
+        await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+        await page.locator('input[type=range]').first().fill(String(scale));
+        await page.getByRole('button', { name: /back to Talk/ }).click();
+      }
+      const tag = `text ${scale * 100}%`;
+      await page.screenshot({ path: `${SHOTS}sweep-${vp.width}x${vp.height}-${scale}-home-early.png` });
+      await page.locator('.board-grid [data-tile-id="core-want"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
+      await check(`${tag} Home`);
+      await page.screenshot({ path: `${SHOTS}sweep-${vp.width}x${vp.height}-${scale}-home.png` });
+      await openFolder(page, 'feelings');
+      await check(`${tag} Feelings`);
+      await page.getByRole('button', { name: 'Back' }).click();
+      const groups = page.getByTestId('groups-btn');
+      if (await groups.isVisible()) {
+        await groups.click();
+        await page.getByTestId('groups-sheet').getByRole('button', { name: /Food/ }).click();
+        await page.getByTestId('page-title').getByText(/Food/).waitFor();
+        await page.getByRole('button', { name: 'Home' }).click();
+      }
+      await openMyDay(page);
+      for (const tab of [/First \/ Then/, /working for/, 'My Steps']) {
+        await page.getByRole('tab', { name: tab }).click();
+        const ok = await page.evaluate(() => [...document.querySelectorAll('.myday .sched-media, .myday .reward-goal .sched-media')].every((m) => m.getBoundingClientRect().height >= 36));
+        if (!ok) problems.push(`${tag} My Day ${tab}: picture too small`);
+        await check(`${tag} My Day ${tab}`);
+      }
+      await page.screenshot({ path: `${SHOTS}sweep-${vp.width}x${vp.height}-${scale}-myday.png` });
+      await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Talk' }).click();
+    }
+    // Parent Mode and the schedule editor with a simulated on-screen keyboard (≈45% of the height).
+    await enterParentMode(page, false);
+    const tabsOk = await page.getByRole('tab', { name: 'Visual schedules' }).isVisible();
+    if (!tabsOk) problems.push('Parent Mode: tabs not reachable');
+    await page.getByRole('tab', { name: 'Visual schedules' }).click();
+    await page.getByRole('button', { name: 'Edit First / Then' }).click();
+    await editor(page).waitFor();
+    await page.setViewportSize({ width: vp.width, height: Math.round(vp.height * 0.55) });
+    const field = editor(page).getByLabel('THEN spoken words');
+    await field.click();
+    await page.waitForTimeout(700);
+    const fb = (await field.boundingBox())!;
+    if (fb.y < 0 || fb.y + fb.height > vp.height * 0.55 + 1) problems.push('keyboard: field hidden');
+    for (const id of ['save-schedule', 'cancel-schedule']) {
+      const r = await page.evaluate((i) => {
+        const el = document.querySelector(`[data-testid="${i}"]`)!;
+        const b = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+        return b.top >= 0 && b.bottom <= window.innerHeight && !!hit && el.contains(hit);
+      }, id);
+      if (!r) problems.push(`keyboard: ${id} not reachable`);
+    }
+    await page.screenshot({ path: `${SHOTS}sweep-${vp.width}x${vp.height}-keyboard.png` });
+    await page.setViewportSize(vp);
+    await editor(page).getByTestId('ft-then').getByRole('button', { name: /Change picture/ }).click();
+    const chooserOk = await page.evaluate(() => {
+      const c = document.querySelector('[data-testid="picture-chooser"]')!.getBoundingClientRect();
+      const cancel = document.querySelector('[data-testid="picture-chooser"] .modal-actions .btn') as HTMLElement;
+      cancel.scrollIntoView({ block: 'nearest' });
+      const b = cancel.getBoundingClientRect();
+      return c.left >= 0 && c.right <= window.innerWidth + 1 && b.bottom <= window.innerHeight + 1;
+    });
+    if (!chooserOk) problems.push('picture chooser does not fit');
+    await page.screenshot({ path: `${SHOTS}sweep-${vp.width}x${vp.height}-chooser.png` });
+    assert.deepEqual(problems, [], problems.join('\n'));
     await ctx.close();
   });
 }

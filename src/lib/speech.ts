@@ -12,7 +12,15 @@
  *  - reports which voice was actually used, so Parent Mode can explain any fallback,
  *  - reports failures so the screen can still show the words.
  */
-export type SpeakResult = 'spoken' | 'recorded' | 'unsupported' | 'error';
+/**
+ * spoken / recorded: it played. interrupted: a newer tap (or Stop) cut it off on purpose —
+ * not a failure. error: the engine reported a failure, or nothing ever started playing.
+ * unsupported: no speech on this device.
+ */
+export type SpeakResult = 'spoken' | 'recorded' | 'interrupted' | 'unsupported' | 'error';
+
+/** How long to wait for an engine to begin before treating the request as failed. */
+export const START_TIMEOUT_MS = 4000;
 
 export interface SpeakOptions {
   rate: number;
@@ -189,22 +197,50 @@ export function speakText(text: string, opts: SpeakOptions): Promise<SpeakResult
       u.pitch = clamp(opts.pitch ?? 1, 0.5, 1.5);
       u.volume = clamp(opts.volume ?? 1, 0, 1);
       u.lang = opts.lang;
-      const { voice, reason } = chooseVoice(getVoices(), opts.voiceURI, opts.lang, isOnline(), { voiceName: opts.voiceName, sharedVoiceName: opts.sharedVoiceName });
+      let { voice, reason } = chooseVoice(getVoices(), opts.voiceURI, opts.lang, isOnline(), { voiceName: opts.voiceName, sharedVoiceName: opts.sharedVoiceName });
+      // A word with its own language (e.g. a Spanish word on an English board) must not be read
+      // by a voice for another language: use the best voice for that language, or none (the
+      // engine then picks its own voice for `lang`).
+      const base = (opts.lang || '').slice(0, 2).toLowerCase();
+      if (voice && base && !(voice.lang || '').toLowerCase().startsWith(base)) {
+        const forLang = bestVoice(getVoices().filter((v) => (v.lang || '').toLowerCase().startsWith(base)), opts.lang);
+        voice = forLang;
+        reason = forLang ? reason : undefined;
+      }
       if (voice) {
         u.voice = voice;
         u.lang = voice.lang || opts.lang;
       }
       lastUse = { requested: opts.voiceURI, used: voice?.voiceURI, usedName: voice?.name, reason, at: Date.now() };
       listeners.forEach((l) => l(lastUse!));
+      let started = false;
+      u.onstart = () => {
+        started = true;
+      };
       u.onend = () => finish('spoken');
       u.onerror = (e: SpeechSynthesisErrorEvent) => {
-        // A newer tap cancelling this one is normal, not a failure.
-        finish(e.error === 'interrupted' || e.error === 'canceled' ? 'spoken' : 'error');
+        // A newer tap cancelling this one is intentional, not a failure.
+        finish(e.error === 'interrupted' || e.error === 'canceled' ? 'interrupted' : 'error');
       };
       synth.speak(u);
       if (synth.paused) synth.resume();
-      // Some engines never fire `end`; don't leave callers hanging.
-      setTimeout(() => finish('spoken'), 2500 + clean.length * 120);
+      // Some engines never fire start/end. Don't report success unless playback began:
+      // it counts as started once `onstart` fires or the engine reports it is speaking.
+      const t0 = Date.now();
+      const watch = () => {
+        if (settled) return;
+        if (synth.speaking) started = true;
+        const waited = Date.now() - t0;
+        if (!started) {
+          // Still queued behind another utterance ("finish current word" mode) → keep waiting.
+          if (waited >= START_TIMEOUT_MS && !synth.pending) return finish('error');
+          if (waited >= START_TIMEOUT_MS * 3) return finish('error');
+        } else if (waited >= START_TIMEOUT_MS + 2500 + clean.length * 120) {
+          return finish('spoken'); // started, but the engine never said it ended
+        }
+        setTimeout(watch, 250);
+      };
+      setTimeout(watch, 250);
     } catch {
       finish('error');
     }
@@ -225,9 +261,13 @@ export function playRecording(url: string, rate: number, volume = 1): Promise<Sp
       audio.volume = clamp(volume, 0, 1);
       audio.onended = () => resolve('recorded');
       audio.onerror = () => resolve('error');
+      // Stopped by a newer tap → interrupted (not a failure).
+      audio.onpause = () => {
+        if (!audio.ended && currentAudio !== audio) resolve('interrupted');
+      };
       audio.play().then(
         () => undefined,
-        () => resolve('error'),
+        (e: unknown) => resolve(e instanceof DOMException && e.name === 'AbortError' ? 'interrupted' : 'error'),
       );
     } catch {
       resolve('error');
@@ -241,10 +281,11 @@ export function spokenFor(t: { label: string; speak?: string; pronunciation?: st
 }
 
 /** Speak a tile: optional recording first, then the built-in voice (always available). */
+/** A recording if there is one; if it can't play, the built-in voice says the word instead. */
 export async function speakTile(speak: string, audioUrl: string | undefined, opts: SpeakOptions): Promise<SpeakResult> {
   if (audioUrl) {
     const r = await playRecording(audioUrl, opts.rate, opts.volume);
-    if (r === 'recorded') return r;
+    if (r === 'recorded' || r === 'interrupted') return r;
   }
   return speakText(speak, opts);
 }

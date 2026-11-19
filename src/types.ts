@@ -262,6 +262,8 @@ export interface RoutineTemplate {
   /** 1–5 steps. */
   steps: ScheduleItem[];
   layout?: RoutineLayout;
+  /** One-at-a-time view: show the next steps small. Older templates: use the current setting. */
+  showUpcoming?: boolean;
 }
 
 export type MyDayTool = 'firstThen' | 'reward' | 'routine';
@@ -347,4 +349,23 @@ export interface VocabEvent {
   date: string;
   type: 'added' | 'shown' | 'hidden' | 'scheduled' | 'skipped' | 'canceled' | 'created';
   source: 'manual' | 'scheduled';
+}
+
+/** Something Mimzi said, kept exactly so it can be replayed or retried the same way. */
+export interface Utterance {
+  /** The words shown to people. */
+  text: string;
+  /** What the voice says (pronunciation override applied). */
+  speak: string;
+  /** Per-word voice language. */
+  lang?: string;
+  /** A caregiver recording, played first (built-in voice if it can't play). */
+  audioUrl?: string;
+}
+
+export interface SpeechState {
+  utterance: Utterance;
+  status: 'speaking' | 'done' | 'failed' | 'unsupported';
+  /** Whether the phrase is shown in the bar at the top of the screen. */
+  atTop: boolean;
 }

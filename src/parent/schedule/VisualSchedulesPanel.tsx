@@ -37,12 +37,12 @@ export function VisualSchedulesPanel() {
       }
     } else {
       const t = myDay.routineTemplates.find((x) => x.id === id);
-      if (t) await updateMyDay({ ...myDay, routine: { steps: t.steps.map(fresh), name: t.name }, routineLayout: t.layout ?? myDay.routineLayout });
+      if (t) await updateMyDay({ ...myDay, routine: { steps: t.steps.map(fresh), name: t.name }, routineLayout: t.layout ?? myDay.routineLayout, showUpcoming: t.showUpcoming ?? myDay.showUpcoming });
       setStatus(`My Day now shows “${t?.name}”.`);
     }
   };
 
-  const section = (tool: MyDayTool, title: string, button: string, body: ReactNode, templates: { id: string; name: string }[]) => (
+  const section = (tool: MyDayTool, title: string, button: string, body: ReactNode, templates: { id: string; name: string }[], active?: string) => (
     <section className="vs-section" data-testid={`vs-${tool}`}>
       <div className="vs-head">
         <h3>{title}</h3>
@@ -52,21 +52,7 @@ export function VisualSchedulesPanel() {
         </button>
       </div>
       <div className="vs-preview">{body}</div>
-      {templates.length > 0 && (
-        <div className="vs-quick">
-          <label className="field inline">
-            <span>Switch to a saved one</span>
-            <select value="" onChange={(e) => e.target.value && void quickUse(tool, e.target.value)} aria-label={`Choose saved ${title}`}>
-              <option value="">Choose…</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      )}
+      {templates.length > 0 && <BoardSwitcher title={title} active={active} templates={templates} onUse={(id) => void quickUse(tool, id)} />}
     </section>
   );
 
@@ -89,6 +75,7 @@ export function VisualSchedulesPanel() {
             <ScheduleCard item={myDay.firstThen.then} heading="THEN" tiles={tileMap} mediaUrls={mediaUrls} />
           </div>,
           myDay.firstThenTemplates,
+          myDay.firstThen.name,
         )}
         {section(
           'reward',
@@ -101,6 +88,7 @@ export function VisualSchedulesPanel() {
             </p>
           </div>,
           myDay.rewardTemplates,
+          myDay.reward.name,
         )}
         {section(
           'routine',
@@ -114,6 +102,7 @@ export function VisualSchedulesPanel() {
             ))}
           </ol>,
           myDay.routineTemplates,
+          myDay.routine.name,
         )}
       </div>
 
@@ -156,5 +145,45 @@ export function VisualSchedulesPanel() {
 
       {editing && <ScheduleEditor initial={editing} onClose={() => setEditing(null)} />}
     </section>
+  );
+}
+
+/** Pick a saved board, then press "Use board" — nothing switches on selection alone. */
+function BoardSwitcher({ title, active, templates, onUse }: { title: string; active?: string; templates: { id: string; name: string }[]; onUse: (id: string) => void }) {
+  const [chosen, setChosen] = useState('');
+  return (
+    <div className="vs-quick">
+      <p className="muted small" data-testid="active-board">
+        On screen now: <strong>{active || 'your own (not saved as a template)'}</strong>
+      </p>
+      <div className="row">
+        <label className="field inline">
+          <span>Saved boards</span>
+          <select value={chosen} onChange={(e) => setChosen(e.target.value)} aria-label={`Choose saved ${title}`}>
+            <option value="">Choose…</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={!chosen}
+          onClick={() => {
+            onUse(chosen);
+            setChosen('');
+          }}
+          aria-describedby={`fresh-${title.replace(/\W+/g, '-')}`}
+        >
+          Use board
+        </button>
+      </div>
+      <p className="muted small" id={`fresh-${title.replace(/\W+/g, '-')}`}>
+        Switching starts it fresh: done marks and tokens reset. Editing the board on screen keeps its progress.
+      </p>
+    </div>
   );
 }

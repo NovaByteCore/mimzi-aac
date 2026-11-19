@@ -1219,3 +1219,86 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
   .schedule-preview .sched-media { min-height: 44px; }
   .schedule-preview .steps, .schedule-preview .first-then, .schedule-preview .nnl { gap: 6px; }
 }
+.progress-row { background: #f3f7fb; border: 2px solid #d6e2ee; border-radius: 14px; padding: 8px 10px; align-items: center; }
+.progress-title { font-weight: 800; margin-right: auto; }
+.grownup-live:empty { display: none; }
+.grownup-live { margin: 0; font-weight: 700; color: var(--slate); background: #fff7e0; border-radius: 12px; padding: 6px 10px; }
+.myday-saying { margin: 0; padding: 6px 12px; border-radius: 12px; background: #eef5ff; font-weight: 800; font-size: calc(16px * var(--text-scale)); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.myday-saying-fail, .speech-fail { background: #fff1e6; color: #7a3300; }
+.speech-fail { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + var(--safe-b, 0px)); z-index: 40; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); max-width: min(92vw, 640px); font-weight: 700; }
+/* Compact screens: the word-group list opens from a "Groups" button (when the setting shows it). */
+.groups-btn { display: none; }
+@media (orientation: portrait) and (max-width: 700px), (orientation: landscape) and (max-height: 700px) {
+  .groups-btn { display: inline-flex; }
+}
+.groups-sheet { max-width: min(560px, 94vw); max-height: 88dvh; overflow-y: auto; }
+.groups-head { display: flex; align-items: center; justify-content: space-between; }
+.groups-head h2 { margin: 0; }
+.groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+.groups-grid .category-btn { min-height: 56px; }
+.sentence-words { cursor: pointer; }
+.myday-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.myday-panel-note { margin: 0; font-weight: 700; color: var(--slate-soft); font-size: calc(14px * var(--text-scale)); }
+.active-badge { font-size: 12px; font-weight: 800; color: #2f6f4f; background: #e6f4ea; border-radius: 8px; padding: 3px 8px; white-space: nowrap; }
+
+/* Very short landscape screens (phones on their side): give the pictures the height.
+   The grid and word positions don't change — only the chrome gets slimmer. */
+@media (orientation: landscape) and (max-height: 460px) {
+  .child-view { gap: 4px; padding-top: calc(2px + var(--safe-t)); padding-bottom: calc(2px + var(--safe-b)); }
+  .sentence-bar { min-height: 46px; padding: 2px 6px; }
+  .sentence-bar .icon-btn { width: 44px; height: 44px; }
+  .chip-media { width: 26px; height: 26px; }
+  .page-toolbar { gap: 6px; }
+  .page-btn { min-height: 44px; padding: 0 10px; font-size: 14px; }
+  .page-title { font-size: 17px; }
+  /* Pager moves beside the grid as a slim column instead of taking a full row. */
+  .board { flex-direction: row; }
+  .board .board-grid { flex: 1; min-width: 0; }
+  .pager { flex-direction: column; justify-content: center; gap: 6px; width: 48px; flex: none; }
+  .pager-btn { width: 44px; height: 44px; min-height: 44px; }
+  .pager-dots { flex-direction: column; }
+  .main-nav { min-height: 0; gap: 4px; }
+  .nav-btn { min-height: 44px; padding: 2px 6px; font-size: 14px; }
+  .nav-btn .ui-icon { width: 20px; height: 20px; }
+  .tile { padding: 3px; gap: 1px; }
+  .tile-label { font-size: calc(13px * var(--text-scale)); line-height: 1.1; }
+  .quick-bar .tile-label { font-size: calc(12px * var(--text-scale)); }
+}
+
+/* Short landscape phones, My Day: tabs on one slim row, and the panel scrolls
+   instead of squashing the pictures to nothing at larger text sizes. */
+@media (orientation: landscape) and (max-height: 460px) {
+  .myday { gap: 6px; overflow-y: auto; }
+  .myday-tabs { flex-wrap: nowrap; gap: 6px; }
+  .myday-tab { min-height: 44px; padding: 4px 10px; font-size: calc(14px * min(var(--text-scale), 1.25)); line-height: 1.1; white-space: nowrap; }
+  .myday-top .btn { min-height: 44px; padding: 4px 10px; font-size: 14px; }
+  .myday-body, .myday-panel { flex: 1 0 auto; min-height: 240px; }
+  .sched-card { min-height: 150px; }
+  .sched-media { min-height: 84px; }
+  .reward-goal .sched-media { min-height: 84px; }
+  .sched-heading { font-size: calc(15px * min(var(--text-scale), 1.3)); }
+  .sched-label { font-size: calc(15px * min(var(--text-scale), 1.3)); }
+}
+
+/* Narrow screens: the toolbar never pushes the page sideways. The title shrinks
+   with an ellipsis and the buttons size to their words. */
+.page-title { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.page-toolbar > .page-btn { flex: none; }
+@media (max-width: 480px) {
+  .page-toolbar { gap: 6px; }
+  .page-btn { min-width: 44px; padding: 0 8px; font-size: calc(15px * min(var(--text-scale), 1.2)); }
+}
+.board-area > .board-wrap { min-width: 0; }
+.page-toolbar { min-width: 0; }
+@media (max-width: 480px) { .page-btn .ui-icon { width: 18px; height: 18px; } .page-btn { gap: 4px; } }
+
+/* Narrow phones at large text: whole words beat cut-off words. Text grows a
+   little less than on tablets, and two-word labels may wrap onto a second line. */
+@media (max-width: 480px) {
+  .board-grid .tile-label, .quick-bar .tile-label {
+    font-size: calc(14px * min(var(--text-scale), 1.25));
+    white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: normal; word-break: keep-all;
+  }
+  .main-nav .nav-btn { font-size: calc(12px * min(var(--text-scale), 1.15)); padding: 2px 2px; min-width: 0; overflow: hidden; }
+  .main-nav .nav-btn > :not(.ui-icon) { overflow-wrap: anywhere; }
+}

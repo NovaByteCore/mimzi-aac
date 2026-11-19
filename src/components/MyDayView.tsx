@@ -1,6 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMimzi } from '../state/MimziStore';
-import type { MyDayTool, RewardBoard, ScheduleItem, Tile } from '../types';
+import type { MyDayTool, RewardBoard, ScheduleItem, SpeechState, Tile } from '../types';
 import { ScheduleCard } from './ScheduleCard';
 import { HoldButton } from './HoldButton';
 import {
@@ -20,6 +20,9 @@ import { TileFace } from './TileFace';
 
 interface Props {
   say: (text: string) => void;
+  /** What Mimzi is saying / just said, shown right here on My Day. */
+  speech?: SpeechState | null;
+  onRetry?: () => void;
   /** Grown-ups only: opens the schedule editor (after the Parent Mode PIN). */
   onEdit?: (tool: MyDayTool) => void;
 }
@@ -27,10 +30,11 @@ interface Props {
 const HOLD = 800;
 const NUMBER_WORDS = ['', 'one', 'two', 'three', 'four', 'five'];
 
+/** How the routine is being shown (inside the My Steps panel and the editor preview). */
 export function routineTabLabel(layout: string, steps: number): string {
   if (layout === 'nowNextLater') return 'Now / Next / Later';
   if (layout === 'oneAtATime') return 'One step at a time';
-  return steps === 1 ? 'My one step' : `My ${NUMBER_WORDS[steps] ?? steps} steps`;
+  return steps === 1 ? 'Numbered: one step' : `Numbered: ${NUMBER_WORDS[steps] ?? steps} steps`;
 }
 
 /**
@@ -38,16 +42,32 @@ export function routineTabLabel(layout: string, steps: number): string {
  * speaks it. Marking things done and adding tokens are grown-up actions (press and hold);
  * changing the schedule itself needs the Parent Mode PIN.
  */
-export function MyDayView({ say, onEdit }: Props) {
+export function MyDayView({ say, onEdit, speech, onRetry }: Props) {
   const { myDay, updateMyDay, tiles, mediaUrls, settings } = useMimzi();
   const [tool, setTool] = useState<MyDayTool>('firstThen');
+  // A quick tap on a grown-up control (they need a press-and-hold so a child can't trigger
+  // them by accident) explains both ways to do it, so nothing depends on a sustained hold.
+  const [hint, setHint] = useState('');
+  const showHint = () =>
+    setHint(onEdit ? 'Grown-ups: press and hold that button, or tap “Edit schedule”, enter your PIN, and use the Progress buttons.' : 'Grown-ups: press and hold that button.');
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const steps = myDay.routine.steps;
   const tabs: { id: MyDayTool; label: string; icon: string }[] = [
     { id: 'firstThen', label: 'First / Then', icon: 'arrowRight' },
     { id: 'reward', label: 'I’m working for', icon: 'star' },
-    { id: 'routine', label: routineTabLabel(myDay.routineLayout, steps.length), icon: 'steps' },
+    { id: 'routine', label: 'My Steps', icon: 'steps' },
   ];
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  // Arrow keys move between tabs (one tab stop for the whole group).
+  const onTabKey = (e: { key: string; preventDefault: () => void }, i: number) => {
+    const n = tabs.length;
+    const to = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? (i + 1) % n : e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? (i + n - 1) % n : e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    setTool(tabs[to].id);
+    setHint('');
+    tabRefs.current[tabs[to].id]?.focus();
+  };
 
   const sayItem = (item: ScheduleItem, prefix = '') => {
     const t = spokenText(item);
@@ -62,14 +82,24 @@ export function MyDayView({ say, onEdit }: Props) {
     <section className="myday" aria-label="My Day">
       <div className="myday-top">
         <div className="myday-tabs" role="tablist" aria-label="My Day tools">
-          {tabs.map((t) => (
+          {tabs.map((t, i) => (
             <button
               key={t.id}
+              ref={(el) => {
+                tabRefs.current[t.id] = el;
+              }}
+              id={`myday-tab-${t.id}`}
+              aria-controls={`myday-panel-${t.id}`}
+              tabIndex={tool === t.id ? 0 : -1}
+              onKeyDown={(e) => onTabKey(e, i)}
               type="button"
               role="tab"
               aria-selected={tool === t.id}
               className={`myday-tab${tool === t.id ? ' myday-tab-on' : ''}`}
-              onClick={() => setTool(t.id)}
+              onClick={() => {
+                setTool(t.id);
+                setHint('');
+              }}
             >
               <Icon name={t.icon} /> {t.label}
             </button>
@@ -82,6 +112,29 @@ export function MyDayView({ say, onEdit }: Props) {
         )}
       </div>
 
+      {speech && (
+        <div className={`myday-saying${speech.status === 'failed' || speech.status === 'unsupported' ? ' myday-saying-fail' : ''}`} role={speech.status === 'failed' || speech.status === 'unsupported' ? 'alert' : 'status'} data-testid="myday-saying">
+          {speech.status === 'speaking' && <>Saying: “{speech.utterance.text}”</>}
+          {speech.status === 'done' && <>Said: “{speech.utterance.text}”</>}
+          {speech.status === 'failed' && (
+            <>
+              Mimzi couldn’t say “{speech.utterance.text}”.{' '}
+              <button type="button" className="btn small" onClick={onRetry}>
+                Try again
+              </button>
+            </>
+          )}
+          {speech.status === 'unsupported' && <>This device can’t speak right now: “{speech.utterance.text}”</>}
+        </div>
+      )}
+
+      <div className="myday-panel" role="tabpanel" id={`myday-panel-${tool}`} aria-labelledby={`myday-tab-${tool}`}>
+      {tool === 'routine' && (
+        <p className="myday-panel-note" data-testid="routine-note">
+          {myDay.routine.name ? `${myDay.routine.name} · ` : ''}
+          {routineTabLabel(myDay.routineLayout, steps.length)} · {steps.length} {steps.length === 1 ? 'step' : 'steps'}
+        </p>
+      )}
       {tool === 'firstThen' && (
         <div className="myday-body">
           <div className="first-then">
@@ -96,15 +149,15 @@ export function MyDayView({ say, onEdit }: Props) {
               <Icon name="speak" /> Say it
             </button>
             {!myDay.firstThen.first.done ? (
-              <HoldButton holdMs={HOLD} className="btn big-btn grownup" label="Hold to mark FIRST done" onHold={() => void updateMyDay({ ...myDay, firstThen: { ...myDay.firstThen, first: markDone(myDay.firstThen.first) } })}>
+              <HoldButton onTap={showHint} holdMs={HOLD} className="btn big-btn grownup" label="Hold to mark FIRST done" onHold={() => void updateMyDay({ ...myDay, firstThen: { ...myDay.firstThen, first: markDone(myDay.firstThen.first) } })}>
                 <Icon name="check" /> First done
               </HoldButton>
             ) : !myDay.firstThen.then.done ? (
-              <HoldButton holdMs={HOLD} className="btn big-btn grownup" label="Hold to mark THEN done" onHold={() => void updateMyDay({ ...myDay, firstThen: { ...myDay.firstThen, then: markDone(myDay.firstThen.then) } })}>
+              <HoldButton onTap={showHint} holdMs={HOLD} className="btn big-btn grownup" label="Hold to mark THEN done" onHold={() => void updateMyDay({ ...myDay, firstThen: { ...myDay.firstThen, then: markDone(myDay.firstThen.then) } })}>
                 <Icon name="check" /> Then done
               </HoldButton>
             ) : null}
-            <HoldButton
+            <HoldButton onTap={showHint}
               holdMs={HOLD}
               className="btn big-btn grownup"
               label="Hold to start First / Then again"
@@ -119,7 +172,7 @@ export function MyDayView({ say, onEdit }: Props) {
         </div>
       )}
 
-      {tool === 'reward' && <RewardBoardView say={say} />}
+      {tool === 'reward' && <RewardBoardView say={say} showHint={showHint} />}
 
       {tool === 'routine' && (
         <div className="myday-body">
@@ -139,7 +192,7 @@ export function MyDayView({ say, onEdit }: Props) {
               <Icon name="speak" /> Say the steps
             </button>
             {currentStepIndex(steps) >= 0 && (
-              <HoldButton
+              <HoldButton onTap={showHint}
                 holdMs={HOLD}
                 className="btn big-btn grownup"
                 label="Hold to mark this step done"
@@ -152,7 +205,7 @@ export function MyDayView({ say, onEdit }: Props) {
                 <Icon name="check" /> Step done
               </HoldButton>
             )}
-            <HoldButton
+            <HoldButton onTap={showHint}
               holdMs={HOLD}
               className="btn big-btn grownup"
               label="Hold to start the steps again"
@@ -168,6 +221,10 @@ export function MyDayView({ say, onEdit }: Props) {
           )}
         </div>
       )}
+      </div>
+      <p className="grownup-live" role="status" data-testid="grownup-hint">
+        {hint}
+      </p>
     </section>
   );
 
@@ -214,7 +271,7 @@ export function MyDayView({ say, onEdit }: Props) {
   }
 }
 
-function RewardBoardView({ say }: { say: (t: string) => void }) {
+function RewardBoardView({ say, showHint }: { say: (t: string) => void; showHint: () => void }) {
   const { myDay, updateMyDay, tiles, mediaUrls, settings } = useMimzi();
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const { reward } = myDay;
@@ -229,7 +286,7 @@ function RewardBoardView({ say }: { say: (t: string) => void }) {
     >
       <div className="grownup-row">
         {!rewardComplete(reward) && (
-          <HoldButton
+          <HoldButton onTap={showHint}
             holdMs={HOLD}
             className="btn big-btn grownup"
             label="Hold to add a token"
@@ -242,16 +299,16 @@ function RewardBoardView({ say }: { say: (t: string) => void }) {
             <Icon name="plus" /> Add token
           </HoldButton>
         )}
-        <HoldButton
+        <HoldButton onTap={showHint}
           holdMs={HOLD}
           className="btn big-btn grownup"
-          label="Hold to start a new board"
+          label="Hold to reset tokens"
           onHold={() => void updateMyDay({ ...myDay, reward: { ...reward, earned: 0 } })}
         >
-          <Icon name="reset" /> New board
+          <Icon name="reset" /> Reset tokens
         </HoldButton>
       </div>
-      <p className="muted small grownup-hint">Grown-ups: press and hold to add a token. Tokens are never taken away.</p>
+      <p className="muted small grownup-hint">Grown-ups: press and hold to add a token, or use Edit schedule → Progress. Tokens are never taken away as punishment.</p>
     </RewardBoardDisplay>
   );
 }
