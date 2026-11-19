@@ -126,6 +126,8 @@ Copy `.env.example` to `.env.local`. Only `VITE_*` variables reach the app and *
 
 ## Installing on devices
 
+**Straight from GitHub (free):** the web app at `https://novabytecore.github.io/mimzi-aac/` (all devices), or the Android app — [download Mimzi.apk](https://github.com/NovaByteCore/mimzi-aac/releases/latest/download/Mimzi.apk) for the onn tablet and Galaxy. Setup and differences: [docs/ANDROID.md](docs/ANDROID.md).
+
 Mimzi must be opened from an **HTTPS** address to install and to work offline (localhost is the only exception, for development).
 
 - **iPad (Safari):** open the Mimzi address → Share → **Add to Home Screen**. Open it from the Home Screen icon once while online so it saves itself for offline use.

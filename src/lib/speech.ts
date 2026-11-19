@@ -17,6 +17,7 @@
  * not a failure. error: the engine reported a failure, or nothing ever started playing.
  * unsupported: no speech on this device.
  */
+import { nativeSpeak, nativeStop, nativeTtsAvailable } from './nativeTts';
 export type SpeakResult = 'spoken' | 'recorded' | 'interrupted' | 'unsupported' | 'error';
 
 /** How long to wait for an engine to begin before treating the request as failed. */
@@ -52,12 +53,17 @@ let currentAudio: HTMLAudioElement | null = null;
 let lastUse: VoiceUse | null = null;
 const listeners = new Set<(u: VoiceUse) => void>();
 
-export function speechSupported(): boolean {
+function webSpeech(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
 }
 
+/** True when this device can speak: the browser's speech, or the tablet's engine inside the Android app. */
+export function speechSupported(): boolean {
+  return webSpeech() || nativeTtsAvailable();
+}
+
 export function getVoices(): SpeechSynthesisVoice[] {
-  if (!speechSupported()) return [];
+  if (!webSpeech()) return [];
   try {
     return window.speechSynthesis.getVoices();
   } catch {
@@ -67,7 +73,7 @@ export function getVoices(): SpeechSynthesisVoice[] {
 
 /** Voices load asynchronously in Chrome; call back whenever the list changes. */
 export function onVoicesChanged(cb: () => void): () => void {
-  if (!speechSupported()) return () => undefined;
+  if (!webSpeech()) return () => undefined;
   const synth = window.speechSynthesis;
   synth.addEventListener?.('voiceschanged', cb);
   return () => synth.removeEventListener?.('voiceschanged', cb);
@@ -168,7 +174,8 @@ export function stopAll(): void {
     currentAudio.pause();
     currentAudio = null;
   }
-  if (speechSupported()) {
+  nativeStop();
+  if (webSpeech()) {
     try {
       window.speechSynthesis.cancel();
     } catch {
@@ -180,7 +187,11 @@ export function stopAll(): void {
 export function speakText(text: string, opts: SpeakOptions): Promise<SpeakResult> {
   const clean = text.trim();
   if (!clean) return Promise.resolve('spoken');
-  if (!speechSupported()) return Promise.resolve('unsupported');
+  if (nativeTtsAvailable()) {
+    if ((opts.interrupt ?? 'interrupt') === 'interrupt') stopAll();
+    return nativeSpeak(clean, { lang: opts.lang, rate: clamp(opts.rate, 0.5, 1.5), pitch: clamp(opts.pitch ?? 1, 0.5, 1.5), volume: clamp(opts.volume ?? 1, 0, 1) });
+  }
+  if (!webSpeech()) return Promise.resolve('unsupported');
   const synth = window.speechSynthesis;
   if ((opts.interrupt ?? 'interrupt') === 'interrupt') stopAll();
   return new Promise((resolve) => {

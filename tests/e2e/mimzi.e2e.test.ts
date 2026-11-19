@@ -233,7 +233,9 @@ test('Parent Mode always needs the PIN — a tap, keyboard, or hold opens the PI
   assert.equal(await page.getByRole('heading', { name: /Parent Mode/ }).count(), 0, 'not Parent Mode without the PIN');
   await page.keyboard.press('Escape');
   await page.getByRole('dialog').waitFor({ state: 'detached' });
-  assert.ok(await page.locator('.nav-parent').evaluate((el) => el === document.activeElement), 'focus returns to the Grown-ups button');
+  // Focus comes back right after the dialog closes (allow a moment for React to finish).
+  const back = await page.waitForFunction(() => document.activeElement?.classList.contains('nav-parent'), null, { timeout: 2000 }).then(() => true, () => false);
+  assert.ok(back, 'focus returns to the Grown-ups button');
   await page.keyboard.press('Enter'); // keyboard activation
   await page.getByRole('dialog').waitFor();
   assert.equal(await page.getByRole('dialog').count(), 1, 'exactly one PIN screen');
@@ -2138,3 +2140,41 @@ for (const [name, vp] of SWEEP) {
     await ctx.close();
   });
 }
+
+test('Android app: speech uses the tablet engine when the web view has no browser speech', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, hasTouch: true });
+  // Simulate the Capacitor web view: no speechSynthesis, a native TextToSpeech plugin.
+  await ctx.addInitScript({
+    content: `
+      delete window.speechSynthesis; delete window.SpeechSynthesisUtterance;
+      Object.defineProperty(window, 'speechSynthesis', { value: undefined, configurable: true });
+      window.__native = [];
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'android',
+        Plugins: { TextToSpeech: {
+          speak: (o) => { window.__native.push(o); return Promise.resolve(); },
+          stop: () => Promise.resolve(),
+        } },
+      };
+    `,
+  });
+  await mockSymbolServices(ctx);
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(BASE);
+  await page.waitForSelector('.board-grid .tile');
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  await page.waitForFunction(() => (window as unknown as { __native: unknown[] }).__native.length > 0);
+  const calls = await page.evaluate(() => (window as unknown as { __native: { text: string; lang: string; rate: number }[] }).__native);
+  assert.equal(calls[0].text.toLowerCase(), 'want');
+  assert.match(calls[0].lang, /^en/);
+  assert.ok(calls[0].rate > 0.5 && calls[0].rate <= 1.5);
+  assert.equal(await page.getByTestId('speech-fail').count(), 0, 'no failure banner');
+  // No service worker inside the app (its files are in the APK).
+  const sw = await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length);
+  assert.equal(sw, 0);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});

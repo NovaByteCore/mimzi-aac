@@ -18,5 +18,6 @@ export const config = {
    */
   commercialUse: String(env.VITE_COMMERCIAL_USE || '').toLowerCase() === 'true',
   /** Same-origin OpenSymbols search function (holds the shared secret server-side). */
-  openSymbolsUrl: String(env.VITE_OPENSYMBOLS_URL || '/api/symbols'),
+  /** 'off' where there's no server (GitHub Pages, the Android app): the search says so instead of failing. */
+  openSymbolsUrl: env.VITE_OPENSYMBOLS_URL === 'off' ? '' : String(env.VITE_OPENSYMBOLS_URL || '/api/symbols'),
 };

@@ -134,7 +134,7 @@ export function SymbolSearch({ suggest = '', initialQuery = '', selected, onPick
   const q = (typed ?? suggest).trim();
   const [source, setSource] = useState<Source>('all');
   const [aras, setAras] = useState<{ q: string; results: PickResult[]; error?: string } | null>(null);
-  const [os, setOs] = useState<{ q: string; state: OsState; results: PickResult[] }>({ q: '', state: 'idle', results: [] });
+  const [os, setOs] = useState<{ q: string; state: OsState; results: PickResult[] }>({ q: '', state: config.openSymbolsUrl ? 'idle' : 'not-configured', results: [] });
   const arasaacOn = libraryAllowed('arasaac');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
