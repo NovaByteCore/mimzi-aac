@@ -233,7 +233,14 @@ export function App() {
             <button type="button" className="page-btn" onClick={() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st))} disabled={stack.length <= 1} aria-label="Back">
               <Icon name="back" /> Back
             </button>
-            <button type="button" className="page-btn" onClick={() => setStack([HOME_PAGE])} disabled={categoryId === HOME_PAGE} aria-label="Home">
+            <button type="button" className="page-btn" onClick={() => {
+                // Home always opens the first Home page (core words + first folders).
+                setStack([HOME_PAGE]);
+                setPages((s) => ({ ...s, [`cat:${HOME_PAGE}`]: 0 }));
+              }}
+              disabled={categoryId === HOME_PAGE && !(pages[`cat:${HOME_PAGE}`] > 0)}
+              aria-label="Home"
+            >
               <Icon name="home" /> Home
             </button>
             <h2 className="page-title" data-testid="page-title">{boardLabel}</h2>

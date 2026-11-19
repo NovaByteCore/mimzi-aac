@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMimzi } from '../../state/MimziStore';
 import type { MediaRecord, MyDay, MyDayTool, RewardTemplate, RoutineLayout, ScheduleItem, TileColor } from '../../types';
 import {
@@ -27,6 +27,7 @@ import { ScheduleCard } from '../../components/ScheduleCard';
 import { RewardBoardDisplay, routineTabLabel } from '../../components/MyDayView';
 import { Icon, TokenShape } from '../../components/Icon';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { referencedMediaIds } from '../../lib/media';
 import { CardEditor } from './CardEditor';
 
 const fresh = (i: ScheduleItem): ScheduleItem => ({ ...i, done: false });
@@ -54,12 +55,10 @@ export function ScheduleEditor({ initial, onClose }: Props) {
   const [status, setStatus] = useState('');
   const [newName, setNewName] = useState('');
 
-  // Pictures picked in this session must show in the preview before they're saved.
-  const previewUrls = useMemo(() => {
-    const extra: Record<string, string> = {};
-    for (const m of pending) extra[m.id] = URL.createObjectURL(m.blob);
-    return { ...mediaUrls, ...extra };
-  }, [mediaUrls, pending]);
+  // Photos picked in this session show in the card editors and the live preview before they're
+  // saved. Each gets one temporary URL, released when it's no longer pending or the editor closes.
+  const pendingUrls = usePendingUrls(pending);
+  const previewUrls = useMemo(() => ({ ...mediaUrls, ...pendingUrls }), [mediaUrls, pendingUrls]);
 
   const edit = (next: MyDay, media: MediaRecord[] = []) => {
     setDraft(next);
@@ -69,7 +68,9 @@ export function ScheduleEditor({ initial, onClose }: Props) {
   };
 
   const save = async () => {
-    await updateMyDay(draft, pending);
+    // Only store photos the saved schedules actually use (a replaced photo is dropped).
+    const used = referencedMediaIds({ tiles: [], myDay: draft, observations: [] });
+    await updateMyDay(draft, pending.filter((m) => used.has(m.id)));
     setPending([]);
     setDirty(false);
     onClose();
@@ -169,11 +170,18 @@ export function ScheduleEditor({ initial, onClose }: Props) {
         )}
 
         <div className="se-body">
-          <div className="se-form">
+          <div
+            className="se-form"
+            onFocus={(e) => {
+              // On-screen keyboards cover part of the screen: keep the field being typed in visible.
+              const el = e.target as HTMLElement;
+              if (el.matches('input, textarea, select')) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 250);
+            }}
+          >
             {tool === 'firstThen' && (
               <>
-                <CardEditor title="FIRST" testId="ft-first" item={ft.first} onChange={(first, m) => edit({ ...draft, firstThen: { ...ft, first } }, m)} />
-                <CardEditor title="THEN" testId="ft-then" item={ft.then} onChange={(then, m) => edit({ ...draft, firstThen: { ...ft, then } }, m)} />
+                <CardEditor mediaUrls={previewUrls} title="FIRST" testId="ft-first" item={ft.first} onChange={(first, m) => edit({ ...draft, firstThen: { ...ft, first } }, m)} />
+                <CardEditor mediaUrls={previewUrls} title="THEN" testId="ft-then" item={ft.then} onChange={(then, m) => edit({ ...draft, firstThen: { ...ft, then } }, m)} />
                 <div className="row">
                   <button type="button" className="btn" onClick={() => edit({ ...draft, firstThen: { ...ft, first: { ...ft.first, done: true } } })} disabled={ft.first.done}>
                     <Icon name="check" /> Mark FIRST done
@@ -190,7 +198,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
 
             {tool === 'reward' && (
               <>
-                <CardEditor title="Reward" testId="reward-item" item={reward.item} onChange={(item, m) => edit({ ...draft, reward: { ...reward, item } }, m)} />
+                <CardEditor mediaUrls={previewUrls} title="Reward" testId="reward-item" item={reward.item} onChange={(item, m) => edit({ ...draft, reward: { ...reward, item } }, m)} />
                 <label className="field">
                   <span>What your child is working on (optional)</span>
                   <input value={reward.goal ?? ''} maxLength={80} placeholder="e.g. Sit for the story" onChange={(e) => edit({ ...draft, reward: { ...reward, goal: e.target.value || undefined } })} aria-label="Goal" />
@@ -278,6 +286,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
                 {steps.map((s, i) => (
                   <CardEditor
                     key={i}
+                    mediaUrls={previewUrls}
                     title={`Step ${i + 1}`}
                     testId={`step-${i + 1}`}
                     item={s}
@@ -311,6 +320,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
             {/* ---------- saved templates (same for all three) ---------- */}
             <section className="se-templates" aria-label="Saved templates">
               <h3>Saved {tool === 'firstThen' ? 'First / Then boards' : tool === 'reward' ? 'reward boards' : 'routines'}</h3>
+              <p className="muted small">“Use” puts a saved one on screen and starts it fresh (done marks and tokens reset). Saved ones keep their pictures, words, voice and colours.</p>
               <ul className="template-list">
                 {templates.map((t) => (
                   <li key={t.id} data-template={t.name}>
@@ -407,4 +417,30 @@ function RoutinePreview({ layout, steps, showUpcoming, tileMap, mediaUrls }: { l
       </ol>
     </>
   );
+}
+
+/** One temporary object URL per pending photo; revoked when it leaves the list or on close. */
+function usePendingUrls(pending: MediaRecord[]): Record<string, string> {
+  const urls = useRef(new Map<string, string>());
+  const [snapshot, setSnapshot] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const map = urls.current;
+    const ids = new Set(pending.map((m) => m.id));
+    for (const m of pending) if (!map.has(m.id)) map.set(m.id, URL.createObjectURL(m.blob));
+    for (const [id, url] of map) {
+      if (!ids.has(id)) {
+        URL.revokeObjectURL(url);
+        map.delete(id);
+      }
+    }
+    setSnapshot(Object.fromEntries(map));
+  }, [pending]);
+  useEffect(() => {
+    const map = urls.current;
+    return () => {
+      for (const url of map.values()) URL.revokeObjectURL(url);
+      map.clear();
+    };
+  }, []);
+  return snapshot;
 }

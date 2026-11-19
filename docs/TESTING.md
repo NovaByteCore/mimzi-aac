@@ -4,8 +4,8 @@
 
 | Suite | Command | Covers |
 | --- | --- | --- |
-| Unit (82) | `npm run test:unit` | Vocabulary integrity, Food & Drink starts empty, sentence builder, grid paging and fixed positions, reordering, crop maths, settings migration, backup v2 round-trip including media, My Day and My Words, v1 backup compatibility, backup validation, PIN hashing, First/Then sentence, token rules (1–10, never removed by adding), routine current step and Now/Next/Later, schedule pictures, My Words CSV (quoting, formula-injection safety) and therapist summary, sync conflict rules, media reference tracking, recording format choice, WCAG AA contrast of every tile colour. **Google:** two-device Drive sync (new device gets photos; per-word newest-wins; deletes spread; My Day/settings; unused media cleaned up; PIN and voice stay per device), photo pass-through security (Google-only URLs, Bearer required, images only), Google Photos picker flow. |
-| End-to-end (54) | `npm run test:e2e` | **Phase 1:** opens straight to the board; one-tap speech; sentence across groups; hold + PIN, wrong PIN refused; photo tile survives reload; rename / reorder / delete / restore; 2×2 grid; backup → restore into a fresh browser; offline reload. **Phase 2:** recorded voice replaces text-to-speech (fake microphone); sign video only plays after "See sign"; quick-word picker. **Phase 3:** First/Then speak, hold to mark done, reset; tokens (3 default, quick tap ignored, hold adds, celebration, saved across reload, no remove button); routine edit + Now/Next/Later switch; templates. **Phase 4:** My Words note + CSV/summary export; Food & Drink empty state and private notes; sync status and no outside network requests. **Google (simulated):** sign in on one device, sign in on a second and get photos and notes, delete on one and see it removed on the other; pick a photo from Google Photos into a tile. **Phase 5:** iPad-landscape and Galaxy-portrait layouts (Talk and My Day) fit without sideways scrolling; every child-screen control has an accessible name and a ≥ 44 px touch target. |
+| Unit (84) | `npm run test:unit` | Vocabulary integrity, Food & Drink starts empty, sentence builder, grid paging and fixed positions, reordering, crop maths, settings migration, backup v2 round-trip including media, My Day and My Words, v1 backup compatibility, backup validation, PIN hashing, First/Then sentence, token rules (1–10, never removed by adding), routine current step and Now/Next/Later, schedule pictures, My Words CSV (quoting, formula-injection safety) and therapist summary, sync conflict rules, media reference tracking, recording format choice, WCAG AA contrast of every tile colour. **Google:** two-device Drive sync (new device gets photos; per-word newest-wins; deletes spread; My Day/settings; unused media cleaned up; PIN and voice stay per device), photo pass-through security (Google-only URLs, Bearer required, images only), Google Photos picker flow. |
+| End-to-end (64) | `npm run test:e2e` | **Phase 1:** opens straight to the board; one-tap speech; sentence across groups; hold + PIN, wrong PIN refused; photo tile survives reload; rename / reorder / delete / restore; 2×2 grid; backup → restore into a fresh browser; offline reload. **Phase 2:** recorded voice replaces text-to-speech (fake microphone); sign video only plays after "See sign"; quick-word picker. **Phase 3:** First/Then speak, hold to mark done, reset; tokens (3 default, quick tap ignored, hold adds, celebration, saved across reload, no remove button); routine edit + Now/Next/Later switch; templates. **Phase 4:** My Words note + CSV/summary export; Food & Drink empty state and private notes; sync status and no outside network requests. **Google (simulated):** sign in on one device, sign in on a second and get photos and notes, delete on one and see it removed on the other; pick a photo from Google Photos into a tile. **Phase 5:** iPad-landscape and Galaxy-portrait layouts (Talk and My Day) fit without sideways scrolling; every child-screen control has an accessible name and a ≥ 44 px touch target. |
 
 **V3 (unit):** every Mulberry symbol name resolves to a bundled file, Home has core words plus folders, every folder opens a page, colour coding by word type, voice choice and offline fallback, pronunciation override, Grow My Words scheduling (daily/weekly, overdue, pause, approve/skip), vocabulary migration that keeps caregiver edits, backup v3 round-trip.
 
@@ -23,6 +23,17 @@
 - My Day and the editor fit on phone, onn landscape, onn portrait and iPad, with no sideways scrolling, every picture visible and the preview on screen.
 - Older saved schedules load: caregiver data is kept, routines are trimmed to 5 steps, and the example templates are added only once.
 - The board's word positions and speech are unchanged after editing schedules.
+
+**Quality pass (e2e):**
+- **Saved schedules, all three kinds:** create, edit (words, spoken words, colour, photo and symbol), duplicate, rename, switch, delete. Cancel discards only unsaved edits and Save keeps everything, through a reload. The child sees and hears exactly what was saved.
+- **New photos show before saving,** in the card editor and in the live preview, including routine steps. Every temporary photo URL is released on Cancel and on Save, and a photo that was replaced isn't stored.
+- **Switching saved boards starts them fresh** (the intended reset). Editing a board keeps its progress.
+- **Layouts with completed steps:** numbered (check marks and the current step), Now / Next / Later on the last step (empty NEXT and LATER), one step at a time (no upcoming steps after the last; "All done", then start again).
+- **Editor on 8" onn sizes with the on-screen keyboard open** (simulated by shrinking the page, which is what Chrome on Android does with `interactive-widget=resizes-content`):
+  - the field being typed in stays visible
+  - Save, Cancel and the preview are reachable and not covered
+  - the picture chooser and its Cancel button fit
+- **Compact onn layouts:** the quick words (help, stop, no, more, all done) are on screen and at least 44 px. Speak, Remove and Clear are visible. All 13 folders open from Home, and Back and Home return. Home always opens the first Home page.
 
 **Professional board (e2e):** no emoji anywhere on the child screen, and the ASL tag sits outside the AAC picture, at four screen sizes. Quick words stay available when hidden on their page.
 
@@ -50,6 +61,15 @@ Automated tests run in desktop Chromium. They are **not** a substitute for these
 - [ ] Speech works in Airplane Mode with a voice not marked “needs internet”.
 - [ ] Speed slider changes speed; chosen voice is remembered.
 - [ ] Mimzi Voice lists the tablet's voices; ▶ Preview plays each one.
+### Not yet tested on a physical device
+I had no access to a physical device, so none of these has been checked on the onn tablet, an iPad or a Galaxy yet:
+- [ ] The real Android voices (Speech Services by Google) and offline speech in Airplane Mode.
+- [ ] The camera: **Take a photo** in the schedule and word editors.
+- [ ] Installing the PWA ("Add to Home screen" / "Install app"), then opening it offline.
+- [ ] Data surviving a tablet restart, and an app update.
+- [ ] The real on-screen keyboard in the schedule editor. Automated tests only simulate it.
+- [ ] Touch accuracy with the protective case on.
+
 - [ ] My Day → Edit schedule → Photo → **Take a photo** opens the onn tablet's camera, and the photo appears on the card.
 - [ ] A First / Then board with two real photos is easy for your child to follow at arm's length.
 - [ ] ARASAAC pictures appear on the starter words after the first online launch, and still show in Airplane Mode.

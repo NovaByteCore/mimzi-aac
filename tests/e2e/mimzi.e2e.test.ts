@@ -1452,3 +1452,286 @@ for (const [name, viewport] of [
     await ctx.close();
   });
 }
+
+/* ---------------- Schedule editor on an 8" Android tablet, with the on-screen keyboard ---------------- */
+
+/** Is the element fully on screen and actually the thing under its centre (not covered)? */
+const reachable = (page: Page, testIdOrSelector: string) =>
+  page.evaluate((sel) => {
+    const el = (/^[\w-]+$/.test(sel) ? document.querySelector(`[data-testid="${sel}"]`) : document.querySelector(sel)) as HTMLElement | null;
+    if (!el) return 'missing';
+    const r = el.getBoundingClientRect();
+    if (r.top < 0 || r.left < 0 || r.bottom > window.innerHeight + 1 || r.right > window.innerWidth + 1) return `off-screen ${JSON.stringify([r.top, r.bottom, window.innerHeight])}`;
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return hit && (hit === el || el.contains(hit)) ? 'ok' : `covered by ${hit?.className}`;
+  }, testIdOrSelector);
+
+for (const [name, size, keyboard] of [
+  ['onn landscape', { width: 960, height: 600 }, { width: 960, height: 300 }],
+  ['onn portrait', { width: 600, height: 960 }, { width: 600, height: 560 }],
+] as const) {
+  test(`schedule editor on the ${name} tablet stays usable with the keyboard open`, async () => {
+    const { ctx, page } = await openApp(size);
+    await openMyDay(page);
+    await page.getByRole('tab', { name: /three steps/ }).click();
+    await page.getByTestId('edit-schedule').click();
+    await typePin(page, PIN);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await typePin(page, PIN);
+    await page.getByRole('button', { name: 'Unlock' }).click();
+    await editor(page).waitFor();
+    // Keyboard opens (Chrome on Android resizes the page to the space above it).
+    await page.setViewportSize(keyboard);
+    for (const field of ['Step 3 words', 'New template name']) {
+      const input = editor(page).getByLabel(field);
+      await input.click();
+      await input.pressSequentially('ab');
+      await page.waitForTimeout(700);
+      const box = (await input.boundingBox())!;
+      assert.ok(box.y >= 0 && box.y + box.height <= keyboard.height + 1, `${field} visible above the keyboard (${box.y})`);
+    }
+    await page.screenshot({ path: `${SHOTS}editor-keyboard-${name.replace(' ', '-')}.png` });
+    for (const id of ['save-schedule', 'cancel-schedule', 'schedule-preview']) assert.equal(await reachable(page, id), 'ok', id);
+    const overlap = await page.evaluate(() => {
+      const p = document.querySelector('.se-preview')!.getBoundingClientRect();
+      const f = document.querySelector('.se-form')!.getBoundingClientRect();
+      const visibleForm = { top: Math.max(f.top, 0), bottom: Math.min(f.bottom, window.innerHeight) };
+      return p.left < f.right - 1 && p.right > f.left + 1 && p.top < visibleForm.bottom - 1 && p.bottom > visibleForm.top + 1 && getComputedStyle(document.querySelector('.se-preview')!).position !== 'sticky';
+    });
+    assert.equal(overlap, false, 'preview and form never overlap');
+    // Keyboard closes; picture selection works and its Cancel is reachable.
+    await page.setViewportSize(size);
+    await editor(page).getByTestId('step-1').getByRole('button', { name: /Change picture/ }).click();
+    await page.getByTestId('picture-chooser').getByTestId('symbol-search').waitFor();
+    assert.equal(await reachable(page, '[data-testid="picture-chooser"] .modal-actions .btn'), 'ok', 'chooser Cancel reachable');
+    await page.getByTestId('picture-chooser').getByRole('button', { name: 'Cancel' }).click();
+    await page.screenshot({ path: `${SHOTS}editor-${name.replace(' ', '-')}.png` });
+    await ctx.close();
+  });
+}
+
+/* ---------------- Saved schedules: full lifecycle for all three kinds ---------------- */
+
+const KINDS = [
+  { kind: 'First / Then', open: 'Edit First / Then', card: 'ft-first', words: 'FIRST words', speak: 'FIRST spoken words', child: /First \/ Then/, childCard: '.first-then .sched-card', spokenPrefix: 'First ' },
+  { kind: 'reward', open: 'Edit reward', card: 'reward-item', words: 'Reward words', speak: 'Reward spoken words', child: /working for/, childCard: '.reward-goal', spokenPrefix: "I'm working for " },
+  { kind: 'routine', open: 'Open routine builder', card: 'step-1', words: 'Step 1 words', speak: 'Step 1 spoken words', child: /three steps/, childCard: '.steps .sched-card', spokenPrefix: '' },
+] as const;
+
+for (const k of KINDS) {
+  test(`saved ${k.kind}: create, edit, duplicate, rename, switch, delete; Cancel discards, Save keeps`, async () => {
+    const { ctx, page } = await openApp();
+    await openScheduleEditor(page, k.open);
+    const card = editor(page).getByTestId(k.card);
+    // Edit the current one: words, voice, colour, symbol and a photo (shown before saving).
+    await editor(page).getByLabel(k.words).fill('Blue swing');
+    await editor(page).getByLabel(k.speak).fill('Swing time');
+    await card.getByRole('button', { name: 'blue card' }).click();
+    await pickPhoto(page, k.card);
+    await card.locator('.card-picture img.tile-photo').waitFor(); // card editor shows the new photo before Save
+    await preview(page).locator('img.tile-photo').first().waitFor(); // and so does the live preview
+    await pickArasaac(page, k.card, 'swing');
+    await card.locator(`.card-picture img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('swing')}"]`).waitFor();
+    // Save as template, duplicate, rename the copy.
+    await editor(page).getByTestId('template-name').fill('Plan A');
+    await editor(page).getByTestId('save-template').click();
+    await editor(page).getByRole('button', { name: 'Duplicate Plan A' }).click();
+    await editor(page).getByLabel('Name of Plan A copy').fill('Plan B');
+    await editor(page).getByLabel('Name of Plan B').blur();
+    // Change the current one, then switch back to Plan B: its picture, words, voice and colour come back.
+    await editor(page).getByLabel(k.words).fill('Something else');
+    await editor(page).locator('[data-template="Plan B"]').getByRole('button', { name: 'Use' }).click();
+    assert.equal(await editor(page).getByLabel(k.words).inputValue(), 'Blue swing');
+    assert.equal(await editor(page).getByLabel(k.speak).inputValue(), 'Swing time');
+    await card.locator(`.card-picture.tile-blue img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('swing')}"]`).waitFor();
+    // Delete Plan A and save everything.
+    await editor(page).getByRole('button', { name: 'Delete Plan A' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+    await saveSchedule(page);
+
+    // Cancel throws away only the unsaved edits.
+    await page.getByRole('button', { name: k.open }).click();
+    await editor(page).getByLabel(k.words).fill('Not saved');
+    await editor(page).getByTestId('template-name').fill('Plan C');
+    await editor(page).getByTestId('save-template').click();
+    await editor(page).getByTestId('cancel-schedule').click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Discard' }).click();
+    await page.getByRole('button', { name: k.open }).click();
+    assert.equal(await editor(page).getByLabel(k.words).inputValue(), 'Blue swing', 'saved change kept');
+    assert.equal(await editor(page).locator('[data-template="Plan C"]').count(), 0, 'unsaved template discarded');
+    assert.equal(await editor(page).locator('[data-template="Plan A"]').count(), 0, 'deleted template stays deleted');
+    await editor(page).locator('[data-template="Plan B"]').waitFor();
+    await editor(page).getByTestId('cancel-schedule').click(); // nothing changed → closes straight away
+    await editor(page).waitFor({ state: 'detached' });
+
+    // The child sees and hears exactly that, and it all survives a reload.
+    await page.getByRole('button', { name: /back to Talk/ }).click();
+    await page.reload();
+    await openMyDay(page);
+    await page.getByRole('tab', { name: k.child }).click();
+    const first = page.locator(k.childCard).first();
+    await first.click();
+    assert.equal((await spoken(page)).at(-1), `${k.spokenPrefix}Swing time`);
+    await first.locator(`img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('swing')}"]`).waitFor();
+    if (k.kind !== 'reward') assert.match((await first.getAttribute('class')) ?? '', /tile-blue/);
+    await ctx.close();
+  });
+}
+
+test('switching saved boards resets progress as intended; earned tokens never disappear otherwise', async () => {
+  const { ctx, page } = await openApp();
+  await openMyDay(page);
+  await page.getByRole('tab', { name: /working for/ }).click();
+  await holdGrownup(page, 'Hold to add a token');
+  await holdGrownup(page, 'Hold to add a token');
+  await page.waitForFunction(() => document.querySelectorAll('.token-on').length === 2);
+  // Editing the reward (not switching) keeps progress.
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).getByLabel('Goal').fill('Tidy toys');
+  await editor(page).getByTestId('token-count').fill('4');
+  await saveSchedule(page);
+  assert.equal(await page.locator('.token-on').count(), 2, 'progress kept after editing');
+  assert.equal(await page.locator('.token').count(), 4);
+  // Choosing another saved board starts it fresh (the intended reset).
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).locator('[data-template="Working for music"]').getByRole('button', { name: 'Use' }).click();
+  await saveSchedule(page);
+  assert.equal(await page.locator('.token-on').count(), 0);
+  await page.locator('[data-testid="tokens"][data-style="heart"]').waitFor();
+  await page.locator('.reward-goal').getByText('Music').waitFor();
+  await ctx.close();
+});
+
+test('layouts with completed steps: numbered, Now / Next / Later and one step at a time', async () => {
+  const { ctx, page } = await openApp();
+  await openMyDay(page);
+  await page.getByRole('tab', { name: /three steps/ }).click();
+  await holdGrownup(page, 'Hold to mark this step done');
+  await holdGrownup(page, 'Hold to mark this step done');
+  await page.waitForFunction(() => document.querySelectorAll('.steps .sched-done').length === 2);
+  assert.match((await page.locator('.steps .sched-current').textContent()) ?? '', /Go outside/, 'current step highlighted');
+  assert.equal(await page.locator('.steps .sched-done .sched-check').count(), 2, 'done steps show a check');
+  // Now / Next / Later on the last step: NEXT and LATER are empty placeholders.
+  for (const [layout, tab] of [['layout-nowNextLater', /Now \/ Next \/ Later/], ['layout-oneAtATime', /One step at a time/]] as const) {
+    await page.getByTestId('edit-schedule').click();
+    await typePin(page, PIN);
+    if (layout === 'layout-nowNextLater') {
+      await page.getByRole('button', { name: 'Next', exact: true }).click();
+      await typePin(page, PIN);
+    }
+    await page.getByRole('button', { name: 'Unlock' }).click();
+    await editor(page).getByRole('tab', { name: 'Routine' }).click();
+    await editor(page).getByTestId(layout).check();
+    await saveSchedule(page);
+    await page.getByRole('tab', { name: tab }).click();
+    if (layout === 'layout-nowNextLater') {
+      assert.match((await page.locator('.nnl-now').textContent()) ?? '', /Go outside/);
+      assert.equal(await page.locator('.nnl-next.sched-empty').count(), 1);
+      assert.equal(await page.locator('.nnl-later.sched-empty').count(), 1);
+    } else {
+      await page.getByTestId('one-step').getByText('STEP 3 OF 3').waitFor();
+      assert.equal(await page.locator('.one-step-next').count(), 0, 'nothing comes after the last step');
+    }
+  }
+  await holdGrownup(page, 'Hold to mark this step done');
+  await page.getByText('All done! A grown-up can start again.').waitFor();
+  await holdGrownup(page, 'Hold to start the steps again');
+  await page.getByTestId('one-step').getByText('STEP 1 OF 3').waitFor();
+  await ctx.close();
+});
+
+test('schedule editor releases every temporary photo URL (no memory leak)', async () => {
+  const { ctx, page } = await openApp();
+  await page.evaluate(() => {
+    const w = window as unknown as { __urls: Set<string> };
+    w.__urls = new Set();
+    const create = URL.createObjectURL.bind(URL);
+    const revoke = URL.revokeObjectURL.bind(URL);
+    URL.createObjectURL = (b: Blob | MediaSource) => {
+      const u = create(b);
+      w.__urls.add(u);
+      return u;
+    };
+    URL.revokeObjectURL = (u: string) => {
+      w.__urls.delete(u);
+      revoke(u);
+    };
+  });
+  const live = () => page.evaluate(() => (window as unknown as { __urls: Set<string> }).__urls.size);
+  await openScheduleEditor(page, 'Edit First / Then');
+  await pickPhoto(page, 'ft-first');
+  await pickPhoto(page, 'ft-first'); // replaces the first one
+  await pickPhoto(page, 'ft-then');
+  assert.ok((await live()) >= 2, 'previews are showing');
+  await editor(page).getByTestId('cancel-schedule').click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Discard' }).click();
+  await editor(page).waitFor({ state: 'detached' });
+  assert.equal(await live(), 0, 'all temporary URLs released after Cancel');
+  // Save: only the two photos in use are stored (the replaced one is dropped), and the
+  // editor's own temporary URLs are released (the app keeps one URL per stored photo).
+  await page.getByRole('button', { name: 'Edit First / Then' }).click();
+  await pickPhoto(page, 'ft-first');
+  await pickPhoto(page, 'ft-first');
+  await pickPhoto(page, 'ft-then');
+  await saveSchedule(page);
+  assert.equal(await live(), 2, 'one URL per stored photo, none left over from the editor');
+  const stored = await page.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((res) => {
+      const r = indexedDB.open('mimzi');
+      r.onsuccess = () => res(r.result);
+    });
+    return new Promise<number>((res) => {
+      const q = db.transaction('media').objectStore('media').count();
+      q.onsuccess = () => res(q.result);
+    });
+  });
+  assert.equal(stored, 2, 'replaced photo not stored');
+  await ctx.close();
+});
+
+/* ---------------- Compact tablet layout: essential words and navigation ---------------- */
+
+for (const [name, viewport] of [
+  ['onn landscape', { width: 960, height: 600 }],
+  ['onn portrait', { width: 600, height: 960 }],
+] as const) {
+  test(`compact ${name}: essential words always reachable; every page reachable from Home with Back/Home`, async () => {
+    const { ctx, page } = await openApp(viewport);
+    assert.equal(await page.locator('.category-bar').isVisible().catch(() => false), false, 'page list hidden on 8" tablets');
+    for (const word of ['help', 'stop', 'no', 'more', 'all done']) {
+      const t = page.locator(`.quick-bar .tile[aria-label="${word}"]`);
+      const b = (await t.boundingBox())!;
+      assert.ok(b && b.width >= 44 && b.height >= 44 && b.y + b.height <= viewport.height, `${word} quick word is on screen and big enough`);
+    }
+    for (const control of ['Speak message', 'Remove last word', 'Clear message']) {
+      const b = await page.getByRole('button', { name: control }).boundingBox();
+      assert.ok(b && b.y >= 0, `${control} visible`);
+    }
+    // Every folder on Home opens its page; Back returns to Home; quick words stay on every page.
+    const folders: string[] = [];
+    for (let p = 0; p < 3; p++) {
+      folders.push(...(await page.locator('.board-grid .tile-folder').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id')!))));
+      const next = page.getByRole('button', { name: 'Next page' });
+      if (!(await next.isEnabled())) break;
+      await next.click();
+    }
+    assert.equal(new Set(folders).size, 13, 'all 13 pages have a folder on Home');
+    for (const id of folders) {
+      const home = page.locator('.page-toolbar').getByRole('button', { name: 'Home' });
+      if (await home.isEnabled()) await home.click();
+      for (let p = 0; p < 3 && (await page.locator(`.board-grid [data-tile-id="${id}"]`).count()) === 0; p++) await page.getByRole('button', { name: 'Next page' }).click();
+      await page.locator(`.board-grid [data-tile-id="${id}"]`).click();
+      assert.notEqual(await page.getByTestId('page-title').textContent(), 'Home');
+      assert.equal(await page.locator('.quick-bar .tile[aria-label="help"]').count(), 1, 'quick words on every page');
+      await page.getByRole('button', { name: 'Back' }).click();
+      await page.getByTestId('page-title').getByText('Home').waitFor();
+    }
+    await ctx.close();
+  });
+}

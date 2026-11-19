@@ -1175,3 +1175,47 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 .sched-media > .tile-symbol,
 .sched-media > .tile-photo,
 .sched-media > .symbol-svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+
+/* Schedule editor with an on-screen keyboard (the page shrinks to the space above it):
+   header with Save / Cancel stays at the top, the form scrolls, the preview gets smaller. */
+.schedule-editor { height: 100dvh; }
+.se-header { flex: none; }
+@media (max-height: 460px) {
+  .se-header { padding-top: 6px; padding-bottom: 6px; gap: 6px; }
+  .se-header h2 { display: none; }
+  .se-header .btn { min-height: 44px; }
+  .se-body { padding-top: 6px; padding-bottom: 6px; gap: 10px; }
+  .se-preview h3 { display: none; }
+  .schedule-preview { min-height: 0; }
+}
+@media (max-height: 460px) and (orientation: landscape) {
+  .se-body { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+}
+@media (max-height: 700px) and (orientation: portrait) {
+  .se-body { grid-template-rows: auto; }
+  .schedule-preview { max-height: 30vh; min-height: 160px; }
+}
+/* Portrait: the live preview stays pinned above the form while scrolling. */
+@media (max-width: 820px), (orientation: portrait) {
+  .se-preview { position: sticky; top: 0; z-index: 2; background: var(--cream, #fffaf0); padding-bottom: 6px; }
+}
+@media (orientation: portrait) and (max-height: 600px) {
+  .schedule-preview { max-height: 24vh; min-height: 110px; padding: 6px; }
+  .schedule-preview .sched-heading { font-size: 12px; }
+  .schedule-preview .sched-label { font-size: 13px; }
+}
+/* Narrow editor with little height (portrait tablet with the keyboard open): small preview. */
+@media (max-width: 820px) and (max-height: 640px) {
+  .se-header h2 { display: none; }
+  .se-header { padding-top: 6px; padding-bottom: 6px; }
+  .se-preview h3 { display: none; }
+  .schedule-preview { max-height: 26vh; min-height: 120px; padding: 6px; }
+  .schedule-preview .sched-heading { font-size: 12px; }
+  .schedule-preview .sched-label { font-size: 13px; }
+}
+@media (max-width: 820px) and (max-height: 640px) {
+  .schedule-preview > p.muted { display: none; }
+  .schedule-preview .sched-card { padding: 4px; gap: 2px; border-width: 3px; border-radius: 14px; }
+  .schedule-preview .sched-media { min-height: 44px; }
+  .schedule-preview .steps, .schedule-preview .first-then, .schedule-preview .nnl { gap: 6px; }
+}

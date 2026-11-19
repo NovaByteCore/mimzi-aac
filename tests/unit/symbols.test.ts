@@ -4,7 +4,7 @@ import { arasaacUrl, effectiveStyle, libraryAllowed, librariesInUse, licenseAllo
 import { bestArasaac, findStarterPictures, needsArasaac, searchArasaac, starterQueries } from '../../src/lib/arasaac.ts';
 import { openSymbolResults } from '../../src/parent/SymbolSearch.tsx';
 import { buildSeedTiles } from '../../src/data/vocabulary.ts';
-import { upgradeSymbolFields } from '../../src/state/migrations.ts';
+import { picksToForget, upgradeSymbolFields } from '../../src/state/migrations.ts';
 import { parseBackup, createBackup } from '../../src/lib/backup.ts';
 import { defaultSettings, defaultMyDay } from '../../src/lib/defaults.ts';
 import { handleSymbolSearch, normalizeOpenSymbols, resetOpenSymbolsToken } from '../../server/openSymbols.ts';
@@ -222,4 +222,20 @@ test('picture-by-picture review: wrong meanings are pinned to the right pictogra
   assert.equal(STARTER_PICTOS['core-break'].id, 16643, 'break means a rest');
   const byId = new Map(seed.map((t) => [t.id, t]));
   assert.equal(needsArasaac([byId.get('food-cereal')!, byId.get('safety-safe')!, byId.get('core-more')!]).length, 1);
+});
+
+test('a picture a grown-up chose is never replaced automatically', async () => {
+  const byId = new Map(seed.map((t) => [t.id, t]));
+  const stop = byId.get('core-stop')!;
+  const chosen: Tile = { ...stop, symbolAuto: false, symbol: 'mul:stop', autoArasaac: { id: 2499, name: 'stop' } };
+  const auto: Tile = { ...stop, id: 'core-stop', autoArasaac: { id: 2499, name: 'stop' } };
+  assert.deepEqual(picksToForget([chosen]), [], 'review fixes skip caregiver choices');
+  assert.equal(picksToForget([auto]).length, 1, 'automatic wrong pick is fixed');
+  assert.deepEqual(needsArasaac([chosen]), [], 'the finder never looks up caregiver-chosen words');
+  assert.equal(shownSymbol(chosen, {}, false).info?.library, 'mulberry', 'default style never overrides a choice');
+  assert.equal(shownSymbol({ ...chosen, symbol: 'arasaac:42' }, { symbolStyle: 'mulberry' }, false).url, arasaacUrl(42));
+  // A photo always shows instead of any symbol (handled by TileFace); upgrades keep caregiver choices.
+  const { tiles } = upgradeSymbolFields([{ ...stop, symbolAuto: undefined, symbol: 'mul:hand' } as Tile]);
+  assert.equal(tiles[0].symbolAuto, false);
+  assert.equal(tiles[0].symbol, 'mul:hand');
 });

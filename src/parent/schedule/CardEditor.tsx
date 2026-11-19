@@ -15,14 +15,18 @@ export function CardEditor({
   onChange,
   testId,
   extra,
+  mediaUrls: urlsOverride,
 }: {
   title: string;
   item: ScheduleItem;
   onChange: (item: ScheduleItem, newMedia?: MediaRecord[]) => void;
   testId?: string;
   extra?: ReactNode;
+  /** Store URLs plus photos picked in this editing session (not saved yet). */
+  mediaUrls?: Record<string, string>;
 }) {
-  const { tiles, mediaUrls } = useMimzi();
+  const { tiles, mediaUrls: storeUrls } = useMimzi();
+  const mediaUrls = urlsOverride ?? storeUrls;
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const [choosing, setChoosing] = useState(false);
   const pic = itemPicture(item, tileMap, mediaUrls);
@@ -80,6 +84,7 @@ export function CardEditor({
       {choosing && (
         <PictureChooser
           suggest={item.label}
+          extraUrls={urlsOverride}
           onCancel={() => setChoosing(false)}
           onPick={(c) => {
             setChoosing(false);

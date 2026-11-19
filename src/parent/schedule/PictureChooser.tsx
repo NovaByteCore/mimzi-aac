@@ -21,8 +21,20 @@ type Source = 'symbols' | 'photo' | 'words' | 'library';
  * OpenSymbols), a photo (upload, tablet camera, Google Photos), a picture already on the
  * board, or one already used in another schedule (reused — never copied).
  */
-export function PictureChooser({ suggest, onPick, onCancel }: { suggest: string; onPick: (c: PictureChoice) => void; onCancel: () => void }) {
-  const { tiles, mediaUrls, mediaMime, myDay } = useMimzi();
+export function PictureChooser({
+  suggest,
+  onPick,
+  onCancel,
+  extraUrls,
+}: {
+  suggest: string;
+  onPick: (c: PictureChoice) => void;
+  onCancel: () => void;
+  /** Includes photos picked earlier in this editing session (not saved yet). */
+  extraUrls?: Record<string, string>;
+}) {
+  const { tiles, mediaUrls: storeUrls, mediaMime, myDay } = useMimzi();
+  const mediaUrls = extraUrls ?? storeUrls;
   const [source, setSource] = useState<Source>('symbols');
   const [cropFile, setCropFile] = useState<Blob | null>(null);
   const [q, setQ] = useState('');
@@ -37,7 +49,7 @@ export function PictureChooser({ suggest, onPick, onCancel }: { suggest: string;
 
   const words = tiles.filter((t) => !t.deletedAt && t.label.toLowerCase().includes((q || suggest).trim().toLowerCase())).slice(0, 60);
   const library = useMemo(() => {
-    const photos = Object.keys(mediaUrls).filter((id) => (mediaMime[id] ?? '').startsWith('image/'));
+    const photos = Object.keys(mediaUrls).filter((id) => (mediaMime[id] ?? 'image/').startsWith('image/'));
     const symbols = new Map<string, SymbolInfo | undefined>();
     for (const i of allScheduleItems(myDay)) if (i.symbol) symbols.set(i.symbol, i.symbolInfo);
     return { photos, symbols: [...symbols] };

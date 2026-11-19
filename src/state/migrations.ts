@@ -98,18 +98,25 @@ export async function migrateSymbolsV4(tiles: Tile[]): Promise<void> {
  * picks (e.g. a firework for "crackers", the WHO logo for "who") and retry words that had no
  * match, now that better search words exist. Only automatic pictures are touched.
  */
+/** Automatic ARASAAC picks to forget (known-bad, pinned differently, or kept bundled). Only
+ *  Mimzi-chosen pictures are ever considered — a grown-up's chosen picture is never touched. */
+export function picksToForget(tiles: Tile[]): Tile[] {
+  return tiles.filter((t) => {
+    if (!t.symbolAuto || !t.autoArasaac) return false;
+    const pinned = STARTER_PICTOS[t.id];
+    return ARASAAC_SKIP.has(t.autoArasaac.id) || KEEP_BUNDLED.has(t.id) || (!!pinned && pinned.id !== t.autoArasaac.id);
+  });
+}
+
 export async function fixArasaacPicksV2(tiles: Tile[]): Promise<void> {
   if (((await db.getKv<number>('symbols:picks')) ?? 0) >= 3) return;
+  const forget = new Set(picksToForget(tiles).map((t) => t.id));
   const changed: Tile[] = [];
   for (let i = 0; i < tiles.length; i++) {
-    const t = tiles[i];
-    const pinned = STARTER_PICTOS[t.id];
-    const bad = t.autoArasaac && (ARASAAC_SKIP.has(t.autoArasaac.id) || KEEP_BUNDLED.has(t.id) || (pinned && pinned.id !== t.autoArasaac.id));
-    if (bad) {
-      const { autoArasaac: _old, ...rest } = t;
-      tiles[i] = { ...rest, updatedAt: Date.now() } as Tile;
-      changed.push(tiles[i]);
-    }
+    if (!forget.has(tiles[i].id)) continue;
+    const { autoArasaac: _old, ...rest } = tiles[i];
+    tiles[i] = { ...rest, updatedAt: Date.now() } as Tile;
+    changed.push(tiles[i]);
   }
   if (changed.length) await db.putMany('tiles', changed);
   await db.setKv('symbols:missing', {});
