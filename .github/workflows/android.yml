@@ -36,7 +36,8 @@ jobs:
       - name: Install dependencies (+ Capacitor wrapper and speech plugin)
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
-          npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor-community/text-to-speech@6
+          # Saved into package.json on the build machine only: Capacitor finds plugins there.
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor-community/text-to-speech@6
 
       - name: Build the web app for Android
         env:
@@ -51,6 +52,8 @@ jobs:
           npx cap add android
           npx cap sync android
           node android-app/prepare.mjs
+          # Fail the build if the speech plugin isn't registered (Mimzi can't talk without it).
+          grep -q "TextToSpeech" android/app/src/main/assets/capacitor.plugins.json || { cat android/app/src/main/assets/capacitor.plugins.json; exit 1; }
 
       - name: Build the APK
         working-directory: android
