@@ -99,7 +99,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
     setNewName('');
     setStatus(`Saved “${name}” as a template.`);
   };
-  const useTemplate = (id: string) => {
+  const applyTemplate = (id: string) => {
     if (tool === 'firstThen') {
       const t = draft.firstThenTemplates.find((x) => x.id === id);
       if (t) edit({ ...draft, firstThen: { first: fresh(t.first), then: fresh(t.then), name: t.name } });
@@ -315,7 +315,7 @@ export function ScheduleEditor({ initial, onClose }: Props) {
                 {templates.map((t) => (
                   <li key={t.id} data-template={t.name}>
                     <input className="template-name" value={t.name} maxLength={40} aria-label={`Name of ${t.name}`} onChange={(e) => setTemplates(templates.map((x) => (x.id === t.id ? { ...x, name: e.target.value } : x)))} onBlur={(e) => setTemplates(renameTemplate(templates, t.id, e.target.value))} />
-                    <button type="button" className="btn small btn-primary" onClick={() => useTemplate(t.id)}>
+                    <button type="button" className="btn small btn-primary" onClick={() => applyTemplate(t.id)}>
                       Use
                     </button>
                     <button type="button" className="btn small icon-btn" aria-label={`Duplicate ${t.name}`} onClick={() => setTemplates(duplicateTemplate(templates, t.id, newId('tpl')))}>

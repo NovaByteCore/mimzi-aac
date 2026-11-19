@@ -399,7 +399,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     await db.setKv('grow', plan);
     setStamp('grow');
     setData((d) => ({ ...d, grow: plan }));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   const resolveGrow = useCallback(
     async (itemIds: string[], action: 'approve' | 'skip' | 'cancel') => {
