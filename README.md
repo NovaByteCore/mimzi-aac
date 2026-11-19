@@ -16,10 +16,11 @@ Mimzi is a personal Augmentative and Alternative Communication (AAC) app for a t
 - **Built-in voice for every word.** You don't need to record anything: new words speak as soon as they are saved. A caregiver recording, if added, plays instead.
 - **Mimzi Voice:** pick any voice the device reports (with ▶ Preview), plus speed, pitch and volume. Words can have a **pronunciation override**, so the word shown and the word spoken can differ. Offline, a voice that "needs internet" automatically falls back to an on-device voice, and the panel says so. Other settings: speak on tap, speak folder names, interrupt or finish the current word, and a repeat guard against double taps.
 - **Real AAC symbols, ARASAAC by default.** Every starter word gets an [ARASAAC](https://arasaac.org) pictogram automatically, saved for offline use. Until a pictogram has downloaded, the word shows its built-in [Mulberry](https://mulberrysymbols.org) or Mimzi picture, so nothing is ever blank.
-- **Change any single picture** from ARASAAC, Mulberry (bundled), Mimzi originals, or other open libraries through OpenSymbols. A real photo can also replace any symbol. Changing a picture never moves the word or changes its label, speech or ASL sign.
+- **Change any single picture** from ARASAAC, Mulberry (bundled), Mimzi originals, or other open libraries through OpenSymbols. A real photo can also replace any symbol. Changing a picture never moves the word or changes its label, speech or recording.
 - **Licences are tracked and enforced.** Each picture records its source, author and licence. Unlicensed results are never offered. Non-commercial sets (ARASAAC) switch off automatically if `VITE_COMMERCIAL_USE=true`. No emoji are used. See `docs/SYMBOLS.md`.
 - **Fitzgerald-style colour coding** by word type: people/pronouns yellow, actions green, describing blue, things orange, social pink, questions purple, important red, little words white, folders grey. Custom colours are also available.
-- **ASL is separate from the picture.** The main button always shows the AAC picture. A small **ASL** tag in the label strip opens a verified ASL drawing (17 signs, each with a how-to and source) or a parent-provided video. Mimzi never invents signs.
+- **Auto layout** fits tile size and spacing to the tablet in portrait and landscape; words keep their order, and rotating keeps the same words on screen. **Manage words** shows, hides or swaps single words; **Arrange words** drags words to new spots (with Undo, Save, Cancel).
+- **Quick My Day editor**: after the PIN, change First / Then, the reward or the routine in a few taps, with recent and everyday pictures (no typing).
 - **No emoji.** The board, navigation and controls use simple line icons and real AAC pictures.
 - **Navigation for small tablets:** on phones and 8" tablets the page list is hidden automatically, because folder buttons and Home/Back already cover it. You can also hide it everywhere.
 - **Stable positions:** words keep fixed slots. Hidden words leave a gap and nothing shifts. Grids from 2×2 to 5×6 are available.
@@ -63,7 +64,7 @@ Parent Mode is grouped into **Talk board · Visual schedules · Pictures & voice
 | Pages | Add, rename, hide and reorder pages. |
 | Mimzi Voice | Voice, preview, speed, pitch, volume, pronunciations, offline fallback status. |
 | Symbol Library | Default picture style (ARASAAC or Mulberry), search every library, put a symbol on any word, see credits and licences. |
-| Photo / ASL Library | Browse every photo and sign. |
+| Photo Library | Browse every photo. |
 | Visual schedules | First / Then, reward and routine editors (one shared editor with a live preview), saved templates with quick switching, the picture library, and schedule settings. |
 | Quick words | The always-visible quick words (up to 6), set separately from the vocabulary pages. A word hidden on its page stays available here. |
 | My Words | Private notebook with CSV and therapist-summary export (no scores). |
@@ -201,5 +202,4 @@ docs/                   testing checklist, deployment, sync design & research
 
 - **ARASAAC pictograms**: author Sergio Palao. Origin: ARASAAC (https://arasaac.org). Licence: CC BY-NC-SA 4.0. Owner: Government of Aragón (Spain). They are used for personal, non-commercial AAC only.
 - **Mulberry Symbols** © Steve Lee, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), from mulberrysymbols.org (`public/symbols/mulberry/LICENSE.txt`). The symbols are unchanged.
-- The ASL drawings are original illustrations of standard signs. Each one links to the reference it was checked against.
 - No artwork, layouts or audio from Proloquo2Go, TouchChat, TD Snap or other commercial AAC apps are used.

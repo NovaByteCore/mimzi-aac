@@ -1,13 +1,12 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useMimzi } from '../../state/MimziStore';
-import type { MyDayTool, ScheduleItem } from '../../types';
+import type { MyDayTool } from '../../types';
 import { ScheduleCard } from '../../components/ScheduleCard';
 import { Icon } from '../../components/Icon';
-import { allScheduleItems, ROUTINE_LAYOUTS } from '../../lib/myday';
+import { allScheduleItems, applyFirstThenTemplate, applyRewardTemplate, applyRoutineTemplate, ROUTINE_LAYOUTS } from '../../lib/myday';
 import { TileFace } from '../../components/TileFace';
 import { ScheduleEditor } from './ScheduleEditor';
 
-const fresh = (i: ScheduleItem): ScheduleItem => ({ ...i, done: false });
 
 /**
  * Parent Mode → Visual schedules: one place for First / Then, the reward board and routines,
@@ -26,18 +25,17 @@ export function VisualSchedulesPanel() {
   const quickUse = async (tool: MyDayTool, id: string) => {
     if (tool === 'firstThen') {
       const t = myDay.firstThenTemplates.find((x) => x.id === id);
-      if (t) await updateMyDay({ ...myDay, firstThen: { first: fresh(t.first), then: fresh(t.then), name: t.name } });
+      if (t) await updateMyDay(applyFirstThenTemplate(myDay, t));
       setStatus(`My Day now shows “${t?.name}”.`);
     } else if (tool === 'reward') {
       const t = myDay.rewardTemplates.find((x) => x.id === id);
       if (t) {
-        const { id: _i, name, ...board } = t;
-        await updateMyDay({ ...myDay, reward: { ...board, item: fresh(t.item), earned: 0, name } });
-        setStatus(`My Day now shows “${name}”.`);
+        await updateMyDay(applyRewardTemplate(myDay, t));
+        setStatus(`My Day now shows “${t.name}”.`);
       }
     } else {
       const t = myDay.routineTemplates.find((x) => x.id === id);
-      if (t) await updateMyDay({ ...myDay, routine: { steps: t.steps.map(fresh), name: t.name }, routineLayout: t.layout ?? myDay.routineLayout, showUpcoming: t.showUpcoming ?? myDay.showUpcoming });
+      if (t) await updateMyDay(applyRoutineTemplate(myDay, t));
       setStatus(`My Day now shows “${t?.name}”.`);
     }
   };

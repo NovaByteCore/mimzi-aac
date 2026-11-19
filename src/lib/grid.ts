@@ -25,11 +25,17 @@ export function slotMap(tiles: Tile[]): Map<number, Tile> {
   return map;
 }
 
-export function pageCount(tiles: Tile[] | number, grid: GridSize, slotted = true): number {
+/**
+ * Pages needed for a page's words. Hidden words keep their slots, but a trailing page that
+ * would only hold hidden words isn't shown to the child (`includeHidden` counts it, for
+ * Parent Mode).
+ */
+export function pageCount(tiles: Tile[] | number, grid: GridSize, slotted = true, includeHidden = false): number {
   if (typeof tiles === 'number') return Math.max(1, Math.ceil(tiles / size(grid)));
   if (!slotted) return Math.max(1, Math.ceil(tiles.length / size(grid)));
   const map = slotMap(tiles);
-  const max = map.size ? Math.max(...map.keys()) : 0;
+  const used = [...map.entries()].filter(([, t]) => includeHidden || !t.hidden).map(([slot]) => slot);
+  const max = used.length ? Math.max(...used) : 0;
   return Math.max(1, Math.floor(max / size(grid)) + 1);
 }
 

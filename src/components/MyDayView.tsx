@@ -49,7 +49,7 @@ export function MyDayView({ say, onEdit, speech, onRetry }: Props) {
   // them by accident) explains both ways to do it, so nothing depends on a sustained hold.
   const [hint, setHint] = useState('');
   const showHint = () =>
-    setHint(onEdit ? 'Grown-ups: press and hold that button, or tap “Edit schedule”, enter your PIN, and use the Progress buttons.' : 'Grown-ups: press and hold that button.');
+    setHint(onEdit ? 'Grown-ups: press and hold that button, or tap “Edit schedule”, enter your PIN, then “More options” → Progress.' : 'Grown-ups: press and hold that button.');
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const steps = myDay.routine.steps;
   const tabs: { id: MyDayTool; label: string; icon: string }[] = [

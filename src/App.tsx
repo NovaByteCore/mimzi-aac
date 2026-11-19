@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useMimzi } from './state/MimziStore';
 import { Board } from './components/Board';
+import { getRecentPictures, onRecentPictures, pictureUrls, type RecentPicture } from './lib/recentPictures';
+import { everydayPictures } from './lib/pictureSets';
 import { SentenceBar, SpokenBar } from './components/SentenceBar';
 import { Icon } from './components/Icon';
 import { GroupsSheet } from './components/GroupsSheet';
@@ -19,24 +21,27 @@ import { ParentGate } from './parent/ParentGate';
 import { ParentMode } from './parent/ParentMode';
 import { MyDayView } from './components/MyDayView';
 import { ScheduleEditor } from './parent/schedule/ScheduleEditor';
-import { SignPlayer } from './components/SignPlayer';
+import { QuickScheduleEditor } from './parent/schedule/QuickScheduleEditor';
 
 type View = 'talk' | 'myday' | 'favorites' | 'people' | 'parent';
 
 export function App() {
   const store = useMimzi();
-  const { tiles, categories, settings, mediaUrls, mediaMime } = store;
+  const { tiles, categories, settings, mediaUrls } = store;
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   // "Edit schedule" on My Day: PIN first, then the schedule editor (grown-ups only).
   const [scheduleGate, setScheduleGate] = useState<MyDayTool | null>(null);
+  /** After the PIN: the small quick editor for the board on screen (full editor via More options). */
+  const [quickEdit, setQuickEdit] = useState<MyDayTool | null>(null);
   const [scheduleEdit, setScheduleEdit] = useState<MyDayTool | null>(null);
   // Page navigation: a stack of page ids (Home at the bottom) for folders, Back and Home.
   const [stack, setStack] = useState<string[]>([HOME_PAGE]);
   const categoryId = stack[stack.length - 1];
   const setCategoryId = (id: string) => setStack(id === HOME_PAGE ? [HOME_PAGE] : [HOME_PAGE, id]);
   const lastTap = useRef<{ id: string; at: number }>({ id: '', at: 0 });
+  /** Per page: the first slot on screen (not a page number), so rotating keeps the same words. */
   const [pages, setPages] = useState<Record<string, number>>({});
   const [sentence, dispatch] = useReducer(sentenceReducer, []);
   // What was last said, exactly as it was said, so "Say it again" and "Try again" replay the
@@ -44,7 +49,6 @@ export function App() {
   const [lastSpoken, setLastSpokenRaw] = useState<Utterance | null>(null);
   const [speech, setSpeech] = useState<SpeechState | null>(null);
   const speechSeq = useRef(0);
-  const [signTile, setSignTile] = useState<Tile | null>(null);
 
   const visibleCategories = useMemo(
     () => categories.filter((c) => !c.hidden).sort((a, b) => a.order - b.order),
@@ -55,12 +59,22 @@ export function App() {
   }, [categories, categoryId]);
 
   const tilesById = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
+  const [recentPics, setRecentPics] = useState<RecentPicture[]>([]);
+  useEffect(() => {
+    void getRecentPictures().then(setRecentPics);
+    return onRecentPictures(setRecentPics);
+  }, []);
 
   // Save every symbol the board uses for offline use (service worker cache).
   useEffect(() => {
     if (!('serviceWorker' in navigator) || store.status !== 'ready') return;
     const t = setTimeout(() => {
-      const urls = new Set<string>([...remoteSymbolUrls(tiles, { symbolStyle: settings.symbolStyle }), ...scheduleSymbolUrls(store.myDay)]);
+      const urls = new Set<string>([
+        ...remoteSymbolUrls(tiles, { symbolStyle: settings.symbolStyle }),
+        ...scheduleSymbolUrls(store.myDay),
+        // Recent and everyday pictures, so the picture picker works offline on the tablet.
+        ...pictureUrls([...recentPics, ...everydayPictures()]),
+      ]);
       for (const x of [...tiles, ...categories]) {
         if (x.symbol?.startsWith('mul:')) urls.add(mulberryUrl(x.symbol.slice(4)));
         const fb = (x as Tile).fallbackSymbol;
@@ -69,7 +83,7 @@ export function App() {
       void navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage({ type: 'mimzi:cache-symbols', urls: [...urls] }));
     }, 1500);
     return () => clearTimeout(t);
-  }, [tiles, categories, store.status, settings.symbolStyle, store.myDay]);
+  }, [tiles, categories, store.status, settings.symbolStyle, store.myDay, recentPics]);
   const speechOpts: SpeakOptions = {
     rate: settings.speechRate,
     lang: settings.speechLang,
@@ -268,10 +282,10 @@ export function App() {
           slotted={slotted}
           tiles={boardTiles}
           grid={settings.grid}
-          page={pages[pageKey] ?? 0}
-          onPage={(p) => setPages((s) => ({ ...s, [pageKey]: p }))}
+          auto={settings.layoutMode === 'fixed' ? undefined : { textScale: settings.textScale, maxGap: settings.tileGap }}
+          anchor={pages[pageKey] ?? 0}
+          onAnchor={(slot) => setPages((s) => ({ ...s, [pageKey]: slot }))}
           onTap={onTap}
-          onSign={settings.showSignButtons ? setSignTile : undefined}
           mediaUrls={mediaUrls}
           label={boardLabel}
           emptyMessage={emptyMessage}
@@ -326,17 +340,6 @@ export function App() {
         </div>
       )}
 
-      {signTile && (
-        <SignPlayer
-          label={signTile.label}
-          url={signTile.signId ? mediaUrls[signTile.signId] : undefined}
-          aslSign={settings.showAslDrawings ? signTile.aslSign : undefined}
-          mime={(signTile.signId && mediaMime[signTile.signId]) || 'video/mp4'}
-          loop={settings.signLoop}
-          speed={settings.signSpeed}
-          onClose={() => setSignTile(null)}
-        />
-      )}
 
       {groupsOpen && (
         <GroupsSheet
@@ -353,8 +356,18 @@ export function App() {
         <ParentGate
           onCancel={() => setScheduleGate(null)}
           onUnlock={() => {
-            setScheduleEdit(scheduleGate);
+            setQuickEdit(scheduleGate);
             setScheduleGate(null);
+          }}
+        />
+      )}
+      {quickEdit && (
+        <QuickScheduleEditor
+          tool={quickEdit}
+          onClose={() => setQuickEdit(null)}
+          onMore={() => {
+            setScheduleEdit(quickEdit);
+            setQuickEdit(null);
           }}
         />
       )}

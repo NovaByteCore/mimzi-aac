@@ -2,10 +2,9 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import type { Category, MediaRecord, SymbolInfo, Tile } from '../types';
 import { TILE_COLORS } from '../types';
 import { useMimzi } from '../state/MimziStore';
-import { SymbolSearch } from './SymbolSearch';
+import { PicturePicker, type PickedPicture } from './PicturePicker';
 import { WORD_TYPE_LABEL, type WordType } from '../types';
 import { displayColor } from '../lib/colors';
-import { ASL_KEYS, ASL_SIGNS } from '../data/aslSigns';
 import { TileFace } from '../components/TileFace';
 import { PhotoCropper } from './PhotoCropper';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -14,7 +13,6 @@ import { nextOrder } from '../lib/grid';
 import { speakTile } from '../lib/speech';
 import { AudioRecorder } from './AudioRecorder';
 import { GooglePhotosButton } from './GooglePhotosButton';
-import { isSignFile, MAX_SIGN_BYTES, SIGN_ACCEPT } from '../lib/media';
 import { Icon } from '../components/Icon';
 
 interface Props {
@@ -25,7 +23,7 @@ interface Props {
 }
 
 export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Props) {
-  const { tiles, mediaUrls, mediaMime, saveTile, softDeleteTile, settings } = useMimzi();
+  const { tiles, mediaUrls, saveTile, softDeleteTile, settings } = useMimzi();
   const isNew = !tile;
   const [label, setLabel] = useState(tile?.label ?? '');
   const [speak, setSpeak] = useState(tile?.speak ?? '');
@@ -41,7 +39,6 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
     setSymbolAuto(false);
   };
   const picture = { symbol: symbol || undefined, symbolInfo, symbolAuto, autoArasaac: tile?.autoArasaac, fallbackSymbol: tile?.fallbackSymbol };
-  const [aslSign, setAslSign] = useState(tile?.aslSign);
   const [pronunciation, setPronunciation] = useState(tile?.pronunciation ?? '');
   const [lang, setLang] = useState(tile?.lang ?? '');
   const [wordType, setWordType] = useState<WordType | ''>(tile?.wordType ?? (isNewTypeGuess(defaultCategoryId)));
@@ -51,10 +48,19 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
   const [cropFile, setCropFile] = useState<Blob | null>(null);
   const [audioId, setAudioId] = useState(tile?.audioId);
   const [pendingAudio, setPendingAudio] = useState<{ blob: Blob; url: string } | null>(null);
-  const [signId, setSignId] = useState(tile?.signId);
-  const [pendingSign, setPendingSign] = useState<{ blob: Blob; url: string; mime: string } | null>(null);
   const [privateNote, setPrivateNote] = useState(tile?.privateNote ?? '');
-  const signInput = useRef<HTMLInputElement>(null);
+  const [picking, setPicking] = useState(false);
+  const applyPicked = (p: PickedPicture) => {
+    if (p.kind === 'symbol') {
+      pickSymbol(p.symbol, p.info);
+      if (photoId || pendingPhoto) {
+        setPendingPhoto(null);
+        setPhotoId(undefined); // the chosen picture shows instead of the photo
+      }
+    } else if (p.media) setPendingPhoto({ blob: p.media.blob, url: URL.createObjectURL(p.media.blob) });
+    else setPhotoId(p.photoId);
+    setPicking(false);
+  };
   const [favorite, setFavorite] = useState(tile?.favorite ?? false);
   const [hidden, setHidden] = useState(tile?.hidden ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -70,30 +76,10 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
   useEffect(() => () => {
     if (pendingAudio) URL.revokeObjectURL(pendingAudio.url);
   }, [pendingAudio]);
-  useEffect(() => () => {
-    if (pendingSign) URL.revokeObjectURL(pendingSign.url);
-  }, [pendingSign]);
 
   const photoUrl = pendingPhoto?.url ?? (photoId ? mediaUrls[photoId] : undefined);
   const audioUrl = pendingAudio?.url ?? (audioId ? mediaUrls[audioId] : undefined);
-  const signUrl = pendingSign?.url ?? (signId ? mediaUrls[signId] : undefined);
-  const signMime = pendingSign?.mime ?? (signId ? mediaMime[signId] : undefined);
 
-  const onSignFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = '';
-    if (!f) return;
-    if (!isSignFile(f.type)) {
-      setError('Sign demonstrations must be a GIF, MP4, MOV or WebM file.');
-      return;
-    }
-    if (f.size > MAX_SIGN_BYTES) {
-      setError('That video is over 30 MB. Trim it to a few seconds and try again.');
-      return;
-    }
-    setError('');
-    setPendingSign({ blob: f, url: URL.createObjectURL(f), mime: f.type });
-  };
   const spoken = speakEdited ? speak : label;
 
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
@@ -127,11 +113,6 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         nextAudioId = newId('audio');
         media.push({ id: nextAudioId, kind: 'audio', mime: pendingAudio.blob.type || 'audio/webm', blob: pendingAudio.blob, createdAt: Date.now() });
       }
-      let nextSignId = signId;
-      if (pendingSign) {
-        nextSignId = newId('sign');
-        media.push({ id: nextSignId, kind: 'sign', mime: pendingSign.mime, blob: pendingSign.blob, createdAt: Date.now() });
-      }
       const movedCategory = tile && tile.categoryId !== categoryId;
       const next: Tile = {
         ...(tile ?? {}),
@@ -143,14 +124,12 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         symbol: symbol.trim() || undefined,
         symbolInfo: symbol.trim() && /^(arasaac|os|mul|svg):/.test(symbol) ? symbolInfo : undefined,
         symbolAuto: symbolAuto || undefined,
-        aslSign,
         pronunciation: pronunciation.trim() || undefined,
         lang: lang.trim() || undefined,
         wordType: wordType || undefined,
         linkTo: linkTo || undefined,
         photoId: nextPhotoId,
         audioId: nextAudioId,
-        signId: nextSignId,
         privateNote: privateNote.trim() || undefined,
         color,
         favorite,
@@ -184,10 +163,12 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         ) : (
           <div className="editor-body">
             <div className="editor-preview">
-              <div className={`tile tile-${displayColor({ color, wordType: wordType || undefined }, settings)} tile-preview${photoUrl ? ' tile-has-photo' : ''}`} aria-hidden="true">
-                <span className="tile-media">
-                  <TileFace tile={picture} asl={aslSign} photoUrl={photoUrl} label={label || '?'} />
-                </span>
+              <div className={`tile tile-${displayColor({ color, wordType: wordType || undefined }, settings)} tile-preview${photoUrl ? ' tile-has-photo' : ''}`}>
+                <button type="button" className="edit-picture" onClick={() => setPicking(true)} aria-label="Change picture">
+                  <span className="tile-media">
+                    <TileFace tile={picture} photoUrl={photoUrl} label={label || '?'} />
+                  </span>
+                </button>
                 <span className="tile-label">{label || 'Word'}</span>
               </div>
               <button
@@ -287,35 +268,6 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
               </fieldset>
 
               <fieldset className="field">
-                <legend>ASL sign drawing</legend>
-                <div className="symbol-picker asl-picker">
-                  <button type="button" className={`symbol-choice${!aslSign ? ' symbol-on' : ''}`} onClick={() => setAslSign(undefined)} aria-pressed={!aslSign}>
-                    None
-                  </button>
-                  {ASL_KEYS.map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      className={`symbol-choice${aslSign === k ? ' symbol-on' : ''}`}
-                      onClick={() => setAslSign(k)}
-                      aria-label={`ASL drawing ${ASL_SIGNS[k].gloss}`}
-                      aria-pressed={aslSign === k}
-                    >
-                      <TileFace asl={k} forceAsl label={k} />
-                    </button>
-                  ))}
-                </div>
-                {aslSign && ASL_SIGNS[aslSign] && (
-                  <p className="muted small" data-testid="asl-how">
-                    <strong>{ASL_SIGNS[aslSign].gloss}:</strong> {ASL_SIGNS[aslSign].how}{' '}
-                    <a href={ASL_SIGNS[aslSign].source} target="_blank" rel="noopener noreferrer">
-                      Reference
-                    </a>
-                  </p>
-                )}
-              </fieldset>
-
-              <fieldset className="field">
                 <legend>Voice</legend>
                 <p className="muted small">A recording plays instead of the device voice, and works offline.</p>
                 <AudioRecorder
@@ -326,38 +278,6 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                     setAudioId(undefined);
                   }}
                 />
-              </fieldset>
-
-              <fieldset className="field">
-                <legend>Sign (ASL) demonstration</legend>
-                <p className="muted small">
-                  Add a short GIF or video of the sign — one you recorded, or from a resource you have permission to use. Mimzi doesn’t include
-                  sign videos and never guesses signs. It plays only when “See sign” is tapped.
-                </p>
-                <div className="row">
-                  <button type="button" className="btn" onClick={() => signInput.current?.click()}>
-                    {signUrl ? 'Replace sign video' : 'Add sign video'}
-                  </button>
-                  {signUrl && (
-                    <button
-                      type="button"
-                      className="btn btn-quiet"
-                      onClick={() => {
-                        setPendingSign(null);
-                        setSignId(undefined);
-                      }}
-                    >
-                      Remove sign
-                    </button>
-                  )}
-                </div>
-                {signUrl &&
-                  (signMime === 'image/gif' ? (
-                    <img className="sign-preview" src={signUrl} alt="Sign preview" />
-                  ) : (
-                    <video className="sign-preview" src={signUrl} muted playsInline controls preload="metadata" data-testid="sign-preview" />
-                  ))}
-                <input ref={signInput} type="file" accept={SIGN_ACCEPT} hidden onChange={onSignFile} data-testid="sign-input" />
               </fieldset>
 
               <label className="field">
@@ -395,7 +315,9 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                     )}
                   </div>
                 )}
-                <SymbolSearch suggest={label} selected={symbolAuto ? undefined : symbol} onPick={pickSymbol} />
+                <button type="button" className="btn" onClick={() => setPicking(true)} data-testid="choose-picture">
+                  <Icon name="image" /> Choose picture
+                </button>
               </fieldset>
 
               <fieldset className="field">
@@ -474,6 +396,7 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
             }}
           />
         )}
+        {picking && <PicturePicker title={`Picture for “${label || 'this word'}”`} suggest={label} onCancel={() => setPicking(false)} onUse={applyPicked} />}
       </div>
     </div>
   );

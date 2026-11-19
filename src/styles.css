@@ -1302,3 +1302,106 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
   .main-nav .nav-btn { font-size: calc(12px * min(var(--text-scale), 1.15)); padding: 2px 2px; min-width: 0; overflow: hidden; }
   .main-nav .nav-btn > :not(.ui-icon) { overflow-wrap: anywhere; }
 }
+
+/* Longer names ("Food & Drinks", "Toys & Play", phrases) wrap onto a second line instead of
+   being cut off, at every text size. Words are never split in the middle. */
+.board-grid .tile-label, .quick-bar .tile-label, .groups-sheet .tile-label, .category-list .tile-label {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: normal;
+  word-break: keep-all;
+  text-overflow: clip;
+}
+
+/* Auto layout: the grid fills the measured area; rows × columns come from its size. */
+.board-fit { flex: 1; min-height: 0; min-width: 0; display: flex; }
+.board-fit > .board-grid { flex: 1; min-width: 0; }
+@media (orientation: landscape) and (max-height: 460px) {
+  .board .board-fit { flex: 1; min-width: 0; }
+}
+
+/* ---------- Picture picker (tiles, My Day cards, quick editor) ---------- */
+.picture-picker { max-width: 860px; }
+.picker-preview { display: flex; align-items: center; gap: 14px; padding: 10px; border-radius: 14px; background: var(--panel, #f6f4ef); min-height: 112px; flex-wrap: wrap; }
+.picker-preview-pic { width: 96px; height: 96px; flex: none; display: grid; place-items: center; background: #fff; border-radius: 12px; overflow: hidden; }
+.picker-preview-pic img, .picker-preview-pic svg { width: 100%; height: 100%; object-fit: contain; }
+.picker-preview-text { flex: 1; min-width: 160px; }
+.picker-use { min-height: 52px; font-size: 18px; }
+.picker-styles { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.picker-style { width: 52px; height: 52px; padding: 3px; border-radius: 10px; border: 2px solid transparent; background: #fff; }
+.picker-section { margin-top: 12px; }
+.picker-section h3 { margin: 4px 0; font-size: 16px; }
+.picker-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.picker-choice { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; min-height: 104px; border-radius: 12px; border: 2px solid #e2ddd3; background: #fff; }
+.picker-pic { width: 68px; height: 68px; display: grid; place-items: center; overflow: hidden; }
+.picker-pic img, .picker-pic svg { width: 100%; height: 100%; object-fit: contain; }
+.picker-name { font-size: 13px; font-weight: 700; text-align: center; line-height: 1.1; }
+.picker-more { position: absolute; top: 4px; right: 6px; font-size: 11px; font-weight: 800; background: #eef; border-radius: 8px; padding: 0 5px; }
+.picker-on, .picker-style.picker-on { border-color: var(--slate, #28384a); box-shadow: 0 0 0 3px #ffd36b; }
+.picker-search input { font-size: 18px; min-height: 48px; }
+.picker-filter summary { cursor: pointer; padding: 6px 0; font-weight: 700; }
+.picker-photo .big-btn { width: 100%; justify-content: center; }
+.picture-picker-inline { border-top: 2px solid #e2ddd3; padding-top: 8px; }
+
+/* ---------- Edit AAC board: picture and word are separate controls ---------- */
+.edit-tile { display: flex; flex-direction: column; padding: 4px; }
+.edit-picture { position: relative; flex: 1; display: block; border: 0; background: transparent; padding: 0; border-radius: 10px; min-height: 84px; cursor: pointer; }
+.edit-picture:focus-visible, .edit-picture:hover { outline: 3px dashed var(--slate, #28384a); outline-offset: 2px; }
+.edit-picture-hint { position: absolute; right: 2px; bottom: 2px; background: #fff; border-radius: 8px; padding: 2px; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.edit-word { margin-top: 4px; width: 100%; justify-content: center; }
+
+/* ---------- Arrange words ---------- */
+.arrange-words { max-width: min(1100px, 96vw); }
+.arrange-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.arrange-grid { gap: 8px; margin-bottom: 10px; }
+.arrange-tile { touch-action: none; user-select: none; cursor: grab; min-height: 84px; }
+.arrange-empty { min-height: 84px; border: 2px dashed #cfc8bb; border-radius: 14px; background: transparent; }
+.arrange-selected { box-shadow: 0 0 0 4px #fff, 0 0 0 8px #2f6fd6 !important; }
+.arrange-can-drop { outline: 2px dashed #2f6fd6; outline-offset: 2px; }
+.arrange-target { box-shadow: 0 0 0 4px #fff, 0 0 0 8px #1f9d55 !important; background-color: #e3f6ea; }
+.arrange-dragging { opacity: 0.45; }
+.arrange-status { font-weight: 700; min-height: 1.4em; }
+
+/* ---------- Manage words ---------- */
+.wob-selected { box-shadow: 0 0 0 4px #fff, 0 0 0 8px #2f6fd6; }
+.wob-empty { min-height: 72px; border: 2px dashed #cfc8bb; border-radius: 12px; background: transparent; }
+.wob-actions { position: sticky; bottom: 0; background: #fff; border: 2px solid #e2ddd3; border-radius: 14px; padding: 10px; margin-top: 10px; box-shadow: 0 -4px 12px rgba(0,0,0,.08); }
+.wob-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: 40vh; overflow: auto; }
+.wob-cand { display: flex; flex-direction: column; align-items: center; padding: 6px; border-radius: 12px; border: 2px solid #e2ddd3; background: #fff; min-height: 104px; }
+.wob-cand-pic { width: 60px; height: 60px; display: grid; place-items: center; }
+.wob-cand-pic img, .wob-cand-pic svg { width: 100%; height: 100%; object-fit: contain; }
+.wob-cand-label { font-weight: 700; font-size: 14px; }
+.wob-cand-note { font-size: 11px; color: #666; }
+.wob-status { font-weight: 700; }
+.layout-choice { border: 0; padding: 0; }
+.layout-choice legend { font-weight: 700; margin-bottom: 4px; }
+
+/* ---------- Quick My Day editor ---------- */
+.quick-editor { max-width: 900px; }
+.quick-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.quick-cards { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+.quick-card { flex: 1 1 0; min-width: 140px; border: 3px solid transparent; border-radius: 18px; background: transparent; padding: 4px; }
+.quick-card-big .sched-card { min-height: 180px; }
+.quick-card-on { border-color: #2f6fd6; box-shadow: 0 0 0 4px #cfe0fb; }
+.quick-steps .quick-card { min-width: 100px; }
+.quick-tokens { align-self: center; font-weight: 800; font-size: 18px; }
+.quick-choices, .quick-saved { margin-top: 12px; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.quick-choice { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; min-height: 104px; border-radius: 12px; border: 2px solid #e2ddd3; background: #fff; }
+.quick-choice .sched-card { min-height: 0; width: 100%; pointer-events: none; }
+.quick-routine-pics { display: flex; gap: 2px; width: 100%; }
+.quick-routine-pics .sched-card { flex: 1; min-width: 0; }
+.quick-routine { grid-column: span 2; }
+.quick-confirm { border: 2px solid #e0a800; background: #fff8e1; border-radius: 12px; padding: 10px; margin-top: 8px; }
+.quick-actions { position: sticky; bottom: 0; background: inherit; padding-top: 8px; }
+.quick-actions .big-btn { min-height: 56px; font-size: 18px; }
+/* The tappable picture inside a tile keeps the tile's picture layout. */
+.tile > .edit-picture { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; width: 100%; }
+.tile > .edit-picture > .tile-media { flex: 1 1 auto; min-height: 0; }
+.edit-tile { min-height: 132px; }
+.pager-count { font-weight: 800; font-size: 15px; white-space: nowrap; }
+/* The quick editor and picture picker keep their buttons on screen (keyboard open, small tablets). */
+.picture-picker .modal-actions, .quick-editor .quick-actions { position: sticky; bottom: 0; background: var(--card, #fff); padding-top: 8px; z-index: 2; }
+.pager-idle { visibility: hidden; pointer-events: none; }

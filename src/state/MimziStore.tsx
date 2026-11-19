@@ -7,7 +7,7 @@ import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, Sym
 import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../lib/grow';
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
-import { fixArasaacPicksV2, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
+import { applyNewDefaultsV5, fixArasaacPicksV2, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
 import { findStarterPictures, needsArasaac } from '../lib/arasaac';
 import { effectiveStyle } from '../lib/symbols';
 import { mergeMyDay, mergeSettings } from '../lib/defaults';
@@ -15,6 +15,7 @@ import { moveTile as computeMove, nextOrder, slotMap } from '../lib/grid';
 import { createBackup, type BackupFile, type RestoredData } from '../lib/backup';
 import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
+import { swapWordInto, type SwapResult } from '../lib/manageWords';
 import { currentToken, fetchProfile, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
 import { createDriveClient } from '../lib/google/drive';
 import { runSync, sharedSettings, type Stamps, type Tombstone, type TombstoneStore } from '../lib/google/driveSync';
@@ -60,6 +61,8 @@ export interface MimziActions {
   restoreTile(id: string): Promise<void>;
   purgeTile(id: string): Promise<void>;
   moveTile(id: string, dir: -1 | 1): Promise<void>;
+  /** Arrange words: save new slots for several words at once (positions only). */
+  saveTileOrders(changes: { id: string; order: number }[]): Promise<void>;
   saveCategory(cat: Category): Promise<void>;
   saveCategories(cats: Category[]): Promise<void>;
   deleteCategory(id: string): Promise<void>;
@@ -69,6 +72,8 @@ export interface MimziActions {
   deleteObservation(id: string): Promise<void>;
   /** Show or hide words (keeps their slots) and record it in the vocabulary history. */
   setTilesHidden(ids: string[], hidden: boolean, source?: VocabEvent['source']): Promise<void>;
+  /** Manage words: put a word into the selected slot (the word there is hidden, not deleted). */
+  swapWord(categoryId: string, slot: number, incomingId: string): Promise<SwapResult | null>;
   updateGrow(plan: GrowPlan): Promise<void>;
   /** Approve (show now) or skip/cancel scheduled words. */
   resolveGrow(itemIds: string[], action: 'approve' | 'skip' | 'cancel'): Promise<void>;
@@ -84,6 +89,11 @@ export interface MimziActions {
    * (default style). Label, speech, sign, photo and board position never change.
    */
   setTileSymbol(id: string, choice: { symbol: string; symbolInfo?: SymbolInfo } | 'auto'): Promise<void>;
+  /**
+   * Change only a word's picture from the picture picker: a symbol or a photo. The word,
+   * spoken text, recording, sign and board position stay exactly as they were.
+   */
+  setTilePicture(id: string, picked: { kind: 'symbol'; symbol: string; info: SymbolInfo } | { kind: 'photo'; photoId: string; media?: MediaRecord }): Promise<void>;
   /** Look for ARASAAC pictures for starter words now (e.g. after coming online). */
   findSymbols(): void;
 }
@@ -167,6 +177,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         const categories = await migrate(rawCategories);
         await migrateVocabularyV3(tiles, categories);
         await migrateSymbolsV4(tiles);
+        await applyNewDefaultsV5(tiles, categories);
         await fixArasaacPicksV2(tiles);
         stamps.current = { settings: 0, myday: 0, grow: 0, history: 0, ...((await db.getKv<Partial<Stamps>>('sync:stamps')) ?? {}) };
         // Grow My Words: apply anything that became due while Mimzi was closed.
@@ -395,6 +406,30 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     await recordHistory(changed.map((t) => vocabEvent(t, hidden ? 'hidden' : source === 'scheduled' ? 'added' : 'shown', source, today)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const saveTileOrders = useCallback(async (changes: { id: string; order: number }[]) => {
+    if (!changes.length) return;
+    const now = Date.now();
+    const byId = new Map(changes.map((c) => [c.id, c.order]));
+    const changed = dataRef.current.tiles.filter((t) => byId.has(t.id)).map((t) => ({ ...t, order: byId.get(t.id)!, updatedAt: now }));
+    await db.putMany('tiles', changed);
+    const next = new Map(changed.map((t) => [t.id, t]));
+    setData((d) => ({ ...d, tiles: d.tiles.map((t) => next.get(t.id) ?? t) }));
+  }, []);
+
+  const swapWord = useCallback(async (categoryId: string, slot: number, incomingId: string) => {
+    const r = swapWordInto(dataRef.current.tiles, categoryId, slot, incomingId, () => newId('tile'));
+    if (!r || !r.changed.length) return r;
+    await db.putMany('tiles', r.changed);
+    const byId = new Map(r.changed.map((t) => [t.id, t]));
+    setData((d) => {
+      const known = new Set(d.tiles.map((t) => t.id));
+      return { ...d, tiles: [...d.tiles.map((t) => byId.get(t.id) ?? t), ...r.changed.filter((t) => !known.has(t.id))] };
+    });
+    const today = dayString();
+    await recordHistory([vocabEvent(r.placed, 'shown', 'manual', today), ...(r.displaced ? [vocabEvent(r.displaced, 'hidden', 'manual', today)] : [])]);
+    return r;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const updateGrow = useCallback(async (plan: GrowPlan) => {
     await db.setKv('grow', plan);
     setStamp('grow');
@@ -583,6 +618,29 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const setTilePicture = useCallback(
+    async (id: string, picked: { kind: 'symbol'; symbol: string; info: SymbolInfo } | { kind: 'photo'; photoId: string; media?: MediaRecord }) => {
+      const t = dataRef.current.tiles.find((x) => x.id === id);
+      if (!t) return;
+      if (picked.kind === 'photo') {
+        await saveTile({ ...t, photoId: picked.photoId, updatedAt: Date.now() }, picked.media ? [picked.media] : undefined);
+        return;
+      }
+      const next: Tile = {
+        ...t,
+        photoId: undefined, // the chosen symbol shows instead of the photo (the photo stays in the Photo Library)
+        symbol: picked.symbol,
+        symbolInfo: picked.info,
+        symbolAuto: false,
+        fallbackSymbol: t.fallbackSymbol ?? (t.symbol && /^(mul|svg):/.test(t.symbol) ? t.symbol : undefined),
+        updatedAt: Date.now(),
+      };
+      await db.put('tiles', next);
+      setData((d) => ({ ...d, tiles: d.tiles.map((x) => (x.id === id ? next : x)) }));
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   /* Automatic ARASAAC pictures for starter words: found in the background, a few at a time,
      only changing each word's picture (never its place, label, speech or sign). */
   const finding = useRef<{ cancelled: boolean } | null>(null);
@@ -659,6 +717,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     () => ({
       ...data,
       setTileSymbol,
+      setTilePicture,
       findSymbols,
       saveTile,
       softDeleteTile,
@@ -673,6 +732,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       saveObservation,
       deleteObservation,
       setTilesHidden,
+      swapWord,
+      saveTileOrders,
       updateGrow,
       resolveGrow,
       exportBackup,
@@ -684,6 +745,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     [
       data,
       setTileSymbol,
+      setTilePicture,
       findSymbols,
       saveTile,
       softDeleteTile,
@@ -698,6 +760,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       saveObservation,
       deleteObservation,
       setTilesHidden,
+      swapWord,
+      saveTileOrders,
       updateGrow,
       resolveGrow,
       exportBackup,

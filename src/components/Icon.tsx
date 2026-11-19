@@ -36,6 +36,13 @@ const PATHS: Record<string, string> = {
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
   upload: 'M12 20V9M7 14l5-5 5 5M5 4h14',
   sprout: 'M12 20v-8M12 12c0-4 3-6 7-6 0 4-3 6-7 6zM12 14c0-3-2.5-5-6-5 0 3 2.5 5 6 5z',
+  eye: 'M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  'eye-off': 'M4 4l16 16M9.9 5.8A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a16 16 0 0 1-2.8 3.6M6.4 7.6A15.4 15.4 0 0 0 2.5 12s3.5 6.5 9.5 6.5c1.4 0 2.6-.3 3.7-.8M10 10a3 3 0 0 0 4 4',
+  swap: 'M5 8h13M14 4l4 4-4 4M19 16H6M10 12l-4 4 4 4',
+  search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L20 20',
+  arrange: 'M4 4h6v6H4zM14 14h6v6h-6zM14 7h5M16.5 4.5v5M7 14v5M4.5 16.5h5',
+  undo: 'M9 7L4 12l5 5M4 12h11a5 5 0 0 1 0 10h-2',
+  filter: 'M4 5h16l-6 7.5V19l-4 1.5v-8z',
 };
 
 export function Icon({ name, size = 22 }: { name: keyof typeof PATHS | string; size?: number }) {

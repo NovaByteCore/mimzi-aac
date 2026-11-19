@@ -107,7 +107,6 @@ export const STARTER_QUERIES: Record<string, string[]> = {
   'core-folder-family': ['family'],
   'core-folder-play': ['toys', 'play'],
   'core-folder-feelings': ['emotions', 'feelings'],
-  'core-folder-needs': ['toilet', 'needs'],
   'core-folder-questions': ['question'],
   'core-folder-actions': ['actions', 'run'],
   'core-folder-body': ['body'],
@@ -155,7 +154,41 @@ export const STARTER_PICTOS: Record<string, { id: number; name: string }> = {
  * Starter words that keep their bundled Mulberry picture because ARASAAC has no picture with
  * the right meaning (checked Nov 2026): "cereal" (only grain plants) and "safe" (a strongbox).
  */
-export const KEEP_BUNDLED = new Set(['food-cereal', 'safety-safe']);
+export const KEEP_BUNDLED = new Set(['food-cereal', 'safety-safe', 'core-folder-needs']);
+
+/**
+ * Pictures chosen for the word itself (Nov 2026 toddler review), so every tile with that word —
+ * Home, Quick Words, folders and phrases — shows the same picture:
+ *  - "all done": 28429, two open hands with the turning motion (was 5358, an arrow to a line)
+ *  - "no": 5526, a red X; "no thank you": 31859, a child shaking their head; "I don't want it":
+ *    6156, a hand pushing away — three different pictures for three different messages
+ *  - "hurt" / "it hurts": 30620, a face in pain (was 5484, an arm with a cut)
+ */
+export const PICTOS_BY_LABEL: Record<string, { id: number; name: string }> = {
+  'all done': { id: 28429, name: 'finished' },
+  no: { id: 5526, name: 'no' },
+  'no thank you': { id: 31859, name: 'no (shaking head)' },
+  "i don't want it": { id: 6156, name: "I don't want" },
+  hurt: { id: 30620, name: 'hurt' },
+  'it hurts': { id: 30620, name: 'hurt' },
+};
+
+/** Words that use a Mimzi drawing instead of ARASAAC (ARASAAC's "more" is abstract squares). */
+export const BUNDLED_BY_LABEL: Record<string, string> = {
+  more: 'svg:more-bubbles',
+};
+
+const labelKey = (label: string) => label.replace(/[!?.]/g, '').trim().toLowerCase().replace(/[’']/g, "'");
+
+/** The pinned ARASAAC picture for a starter word, if any. */
+export function pinnedPicto(t: Pick<Tile, 'id' | 'label'>): { id: number; name: string } | undefined {
+  return STARTER_PICTOS[t.id] ?? PICTOS_BY_LABEL[labelKey(t.label)];
+}
+
+/** Starter words that keep their bundled (offline) picture rather than an ARASAAC one. */
+export function keepBundled(t: Pick<Tile, 'id' | 'label'>): boolean {
+  return KEEP_BUNDLED.has(t.id) || labelKey(t.label) in BUNDLED_BY_LABEL;
+}
 
 /** Ordered search terms to try for a starter word. */
 export function starterQueries(tile: Pick<Tile, 'id' | 'label' | 'fallbackSymbol' | 'symbol'>): string[] {
@@ -172,7 +205,7 @@ export function starterQueries(tile: Pick<Tile, 'id' | 'label' | 'fallbackSymbol
 
 /** Starter words whose ARASAAC picture hasn't been found yet. */
 export function needsArasaac(tiles: Tile[], missing: Record<string, string> = {}): Tile[] {
-  return tiles.filter((t) => t.symbolAuto && !t.autoArasaac && !t.deletedAt && !KEEP_BUNDLED.has(t.id) && missing[t.id] !== t.label);
+  return tiles.filter((t) => t.symbolAuto && !t.autoArasaac && !t.deletedAt && !keepBundled(t) && missing[t.id] !== t.label);
 }
 
 /**
@@ -193,7 +226,7 @@ export async function findStarterPictures(
     while (queue.length && !opts.signal?.cancelled) {
       const t = queue.shift()!;
       try {
-        const pinned = STARTER_PICTOS[t.id];
+        const pinned = pinnedPicto(t);
         if (pinned) {
           found++;
           await onFound(t.id, pinned);

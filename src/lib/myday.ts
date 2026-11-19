@@ -3,7 +3,7 @@
  * Rules from the brief: earned tokens are never taken away (only a deliberate reset clears
  * a board), and nothing here gates communication, food, comfort, care or breaks.
  */
-import type { MyDay, RewardBoard, RoutineLayout, ScheduleItem, Tile, TokenStyle } from '../types';
+import type { FirstThenTemplate, MyDay, RewardBoard, RewardTemplate, RoutineLayout, RoutineTemplate, ScheduleItem, Tile, TokenStyle } from '../types';
 import { shownSymbol } from './symbols';
 
 export const MIN_TOKENS = 1;
@@ -71,11 +71,11 @@ export function itemPicture(
   item: ScheduleItem,
   tiles: Map<string, Tile>,
   mediaUrls: Record<string, string>,
-): { photoUrl?: string; symbol?: string; symbolInfo?: ScheduleItem['symbolInfo']; asl?: string; tile?: Tile } {
+): { photoUrl?: string; symbol?: string; symbolInfo?: ScheduleItem['symbolInfo']; tile?: Tile } {
   if (item.photoId && mediaUrls[item.photoId]) return { photoUrl: mediaUrls[item.photoId] };
   if (item.symbol) return { symbol: item.symbol, symbolInfo: item.symbolInfo };
   const tile = item.tileId ? tiles.get(item.tileId) : undefined;
-  if (tile) return { photoUrl: tile.photoId ? mediaUrls[tile.photoId] : undefined, symbol: tile.symbol, tile, ...(tile.aslSign ? { asl: tile.aslSign } : {}) };
+  if (tile) return { photoUrl: tile.photoId ? mediaUrls[tile.photoId] : undefined, symbol: tile.symbol, tile };
   return {};
 }
 
@@ -173,4 +173,28 @@ export function scheduleSymbolUrls(day: MyDay): string[] {
     if (s.url) urls.add(s.url);
   }
   return [...urls];
+}
+
+/** A card shown fresh (not done). */
+export const freshItem = (i: ScheduleItem): ScheduleItem => ({ ...i, done: false });
+
+/** Put a saved First / Then board on screen (starts fresh). */
+export function applyFirstThenTemplate(day: MyDay, t: FirstThenTemplate): MyDay {
+  return { ...day, firstThen: { first: freshItem(t.first), then: freshItem(t.then), name: t.name } };
+}
+
+/** Put a saved reward board on screen. Switching boards starts it fresh: earned tokens go to 0. */
+export function applyRewardTemplate(day: MyDay, t: RewardTemplate): MyDay {
+  const { id: _id, name, ...board } = t;
+  return { ...day, reward: { ...board, item: freshItem(t.item), earned: 0, name } };
+}
+
+/** Put a saved routine on screen, with its own layout and "show upcoming steps" setting. */
+export function applyRoutineTemplate(day: MyDay, t: RoutineTemplate): MyDay {
+  return {
+    ...day,
+    routine: { steps: t.steps.map(freshItem), name: t.name },
+    routineLayout: t.layout ?? day.routineLayout,
+    showUpcoming: t.showUpcoming ?? day.showUpcoming,
+  };
 }

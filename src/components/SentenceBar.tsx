@@ -46,7 +46,7 @@ export function SentenceBar({ items, tilesById, mediaUrls, onSpeak, onBackspace,
             return (
               <span className="chip" key={item.key} data-testid="sentence-chip">
                 <span className="chip-media">
-                  <TileFace symbol={t?.symbol} tile={t} asl={t?.aslSign} photoUrl={t?.photoId ? mediaUrls[t.photoId] : undefined} label={item.label} />
+                  <TileFace symbol={t?.symbol} tile={t} photoUrl={t?.photoId ? mediaUrls[t.photoId] : undefined} label={item.label} />
                 </span>
                 <span className="chip-label">{item.label}</span>
               </span>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { SymbolSearch } from './SymbolSearch';
+import { PicturePicker } from './PicturePicker';
 import { useMimzi } from '../state/MimziStore';
 import { TileFace } from '../components/TileFace';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -102,7 +102,7 @@ export function CategoriesPanel() {
       </div>
       <details className="field">
         <summary>Page picture (optional — a star if you skip this)</summary>
-        <SymbolSearch suggest={name} selected={emoji} onPick={(sym) => setEmoji(sym)} />
+        <PicturePicker inline showBack={false} allowPhoto={false} suggest={name} onCancel={() => undefined} onUse={(p) => p.kind === 'symbol' && setEmoji(p.symbol)} />
       </details>
       {error && (
         <p className="form-error" role="alert">

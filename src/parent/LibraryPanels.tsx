@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
-import { SymbolSearch } from './SymbolSearch';
+import { PicturePicker } from './PicturePicker';
 import { TileFace } from '../components/TileFace';
 import { TileEditor } from './TileEditor';
-import { AslSignSvg, ASL_KEYS, ASL_SIGNS } from '../data/aslSigns';
 import type { SymbolInfo, Tile } from '../types';
 import { effectiveStyle, libraryAllowed, librariesInUse, LIBRARIES } from '../lib/symbols';
 
@@ -32,7 +31,7 @@ export function SymbolLibraryPanel() {
       <h2>Symbol Library</h2>
       <p className="muted">
         Mimzi shows a real AAC symbol on every starter word. Choose the default style below, or give any single word a different symbol (or a photo).
-        Changing a picture never moves the word, changes what it says, or removes its ASL sign.
+        Changing a picture never moves the word, changes what it says, or removes its recording.
       </p>
 
       <h3>Default picture style</h3>
@@ -71,7 +70,7 @@ export function SymbolLibraryPanel() {
       )}
 
       <h3>Find a symbol</h3>
-      <SymbolSearch selected={picked?.symbol} onPick={(symbol, info) => setPicked({ symbol, info })} />
+      <PicturePicker inline showBack={false} allowPhoto={false} onCancel={() => setPicked(null)} onUse={(p) => p.kind === 'symbol' && setPicked({ symbol: p.symbol, info: p.info })} />
       {picked && (
         <div className="add-row">
           <span className="mini-tile big tile-white">
@@ -153,70 +152,6 @@ export function PhotoLibraryPanel() {
           ))}
         </div>
       )}
-      {editor}
-    </section>
-  );
-}
-
-/** ASL Library — the ASL drawings and the family's own sign videos. */
-export function AslLibraryPanel() {
-  const { tiles, settings, updateSettings } = useMimzi();
-  const { setEditing, editor } = useEditor();
-  const withVideo = tiles.filter((t) => t.signId && !t.deletedAt);
-  return (
-    <section className="panel">
-      <h2>ASL Library</h2>
-      <p className="muted">
-        Signs appear only when someone taps the small “ASL” button in the corner of the word’s label. The main button always keeps its AAC picture, and signs never interrupt
-        the voice. The drawings were checked against the linked ASL references; a video of a real signer (yours, or one you have permission to
-        use) is the best way to learn a sign — add one to any word.
-      </p>
-      <label className="check">
-        <input type="checkbox" checked={settings.showSignButtons} onChange={(e) => updateSettings({ showSignButtons: e.target.checked })} />
-        Show “See sign” buttons on the board
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={settings.showAslDrawings} onChange={(e) => updateSettings({ showAslDrawings: e.target.checked })} />
-        Offer Mimzi’s ASL drawings for words without a video
-      </label>
-      <h3>Your sign videos ({withVideo.length})</h3>
-      {withVideo.length === 0 ? (
-        <p className="muted">None yet. Edit a word → “Add sign video”.</p>
-      ) : (
-        <ul className="grow-list">
-          {withVideo.map((t) => (
-            <li key={t.id}>
-              <strong>{t.label}</strong>
-              <span className="spacer" />
-              <button type="button" className="btn small" onClick={() => setEditing(t)}>
-                Edit
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <h3>ASL drawings ({ASL_KEYS.length})</h3>
-      <div className="asl-library">
-        {ASL_KEYS.map((k) => {
-          const s = ASL_SIGNS[k];
-          const used = tiles.filter((t) => t.aslSign === k && !t.deletedAt).map((t) => t.label);
-          return (
-            <div key={k} className="asl-card">
-              <AslSignSvg name={k} />
-              <div>
-                <strong>{s.gloss}</strong>
-                <p className="small">{s.how}</p>
-                <p className="muted small">
-                  On: {used.length ? [...new Set(used)].join(', ') : '—'} ·{' '}
-                  <a href={s.source} target="_blank" rel="noopener noreferrer">
-                    Reference
-                  </a>
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
       {editor}
     </section>
   );

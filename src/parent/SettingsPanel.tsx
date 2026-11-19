@@ -15,23 +15,40 @@ export function SettingsPanel() {
   return (
     <section className="panel settings">
       <h2>Board</h2>
-      <label className="field">
-        <span>Pictures per page</span>
-        <select
-          value={gridValue}
-          onChange={(e) => {
-            const [rows, cols] = e.target.value.split('x').map(Number);
-            void updateSettings({ grid: { rows, cols } });
-          }}
-          data-testid="grid-select"
-        >
-          {GRID_PRESETS.map((p) => (
-            <option key={p.label} value={`${p.grid.rows}x${p.grid.cols}`}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <fieldset className="field layout-choice" data-testid="layout-choice">
+        <legend>Board layout</legend>
+        <label className="check">
+          <input type="radio" name="layout" checked={settings.layoutMode !== 'fixed'} onChange={() => void updateSettings({ layoutMode: 'auto' })} data-testid="layout-auto" />
+          <span>
+            <strong>Auto (recommended)</strong> — Mimzi sizes the pictures and spacing to fit the tablet, in portrait and landscape. If the words don’t all fit with
+            large, easy-to-tap pictures, the page continues on the next page. Words keep their order.
+          </span>
+        </label>
+        <label className="check">
+          <input type="radio" name="layout" checked={settings.layoutMode === 'fixed'} onChange={() => void updateSettings({ layoutMode: 'fixed' })} data-testid="layout-fixed" />
+          <span>Fixed size — the same rows and columns on every screen</span>
+        </label>
+        {settings.layoutMode === 'fixed' && (
+          <label className="field">
+            <span>Pictures per page</span>
+            <select
+              value={gridValue}
+              onChange={(e) => {
+                const [rows, cols] = e.target.value.split('x').map(Number);
+                void updateSettings({ grid: { rows, cols } });
+              }}
+              data-testid="grid-select"
+            >
+              {GRID_PRESETS.map((p) => (
+                <option key={p.label} value={`${p.grid.rows}x${p.grid.cols}`}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <p className="muted small">Which words your child sees is chosen in Manage words. Layout only changes how the board fits the screen.</p>
+      </fieldset>
       <label className="check">
         <input type="checkbox" checked={settings.showSentenceBar} onChange={(e) => updateSettings({ showSentenceBar: e.target.checked })} />
         Show the sentence bar (build messages from several pictures)
@@ -83,20 +100,6 @@ export function SettingsPanel() {
         ))}
       </ul>
       <p className="muted small">Based on the Modified Fitzgerald Key. Words always have labels and pictures too, so colour is never the only clue.</p>
-
-      <h2>Signs</h2>
-      <label className="check">
-        <input type="checkbox" checked={settings.showSignButtons} onChange={(e) => updateSettings({ showSignButtons: e.target.checked })} />
-        Show “See sign” buttons on tiles that have a sign video
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={settings.signLoop} onChange={(e) => updateSettings({ signLoop: e.target.checked })} />
-        Repeat sign videos
-      </label>
-      <label className="field">
-        <span>Sign video speed ({Math.round(settings.signSpeed * 100)}%)</span>
-        <input type="range" min={0.5} max={1} step={0.25} value={settings.signSpeed} onChange={(e) => updateSettings({ signSpeed: Number(e.target.value) })} />
-      </label>
 
       <h2>Celebrations (My Day)</h2>
       <label className="check">

@@ -44,6 +44,7 @@ test('every starter word has a picture, chosen automatically, and none uses emoj
 });
 
 test('ARASAAC is shown once found; bundled picture until then; the style can switch back', () => {
+  const more = seed.find((t) => t.id === 'core-want')!; // a word whose bundled picture is Mulberry
   assert.equal(shownSymbol(more, {}, false).info?.library, 'mulberry', 'before download');
   const found = { ...more, autoArasaac: { id: 2340, name: 'more' } };
   const shown = shownSymbol(found, {}, false);
@@ -103,14 +104,16 @@ test('starter words: search terms, then the bundled concept; misses keep the bui
   assert.equal(starterQueries(allDone)[0], 'finished');
   const snack = seed.find((t) => t.label === 'snack')!;
   assert.deepEqual(starterQueries(snack), ['snack', 'biscuits']);
-  const f = fakeFetch({ '/bestsearch/more': [{ _id: 5, keywords: [{ keyword: 'more' }] }], '/bestsearch/biscuits': [{ _id: 6, keywords: [{ keyword: 'biscuits' }] }] });
+  const want = seed.find((t) => t.id === 'core-want')!;
+  const look = seed.find((t) => t.id === 'core-look')!;
+  const f = fakeFetch({ '/bestsearch/want': [{ _id: 5, keywords: [{ keyword: 'want' }] }], '/bestsearch/biscuits': [{ _id: 6, keywords: [{ keyword: 'biscuits' }] }] });
   const found: Record<string, number> = {};
   const missing: string[] = [];
-  const r = await findStarterPictures([more, snack, allDone], (id, hit) => void (found[id] = hit.id), { fetchImpl: f, onMissing: (id) => missing.push(id) });
-  assert.deepEqual(found, { 'core-more': 5, [snack.id]: 6 });
-  assert.deepEqual(missing, ['core-all-done']);
-  assert.deepEqual(r, { found: 2, missing: 1, failed: 0 });
-  assert.equal(needsArasaac([more, { ...snack, autoArasaac: { id: 6, name: 's' } }, allDone], { 'core-all-done': 'all done' }).length, 1);
+  const r = await findStarterPictures([want, snack, allDone, look], (id, hit) => void (found[id] = hit.id), { fetchImpl: f, onMissing: (id) => missing.push(id) });
+  assert.deepEqual(found, { 'core-want': 5, [snack.id]: 6, 'core-all-done': 28429 }, '"all done" is pinned to the open-hands picture');
+  assert.deepEqual(missing, ['core-look']);
+  assert.deepEqual(r, { found: 3, missing: 1, failed: 0 });
+  assert.equal(needsArasaac([want, { ...snack, autoArasaac: { id: 6, name: 's' } }, look], { 'core-look': 'look' }).length, 1);
 });
 
 test('offline: lookups fail quietly and are retried later', async () => {
@@ -221,7 +224,72 @@ test('picture-by-picture review: wrong meanings are pinned to the right pictogra
   assert.equal(STARTER_PICTOS['core-stop'].id, 7195, 'stop is a hand, not a bus stop');
   assert.equal(STARTER_PICTOS['core-break'].id, 16643, 'break means a rest');
   const byId = new Map(seed.map((t) => [t.id, t]));
-  assert.equal(needsArasaac([byId.get('food-cereal')!, byId.get('safety-safe')!, byId.get('core-more')!]).length, 1);
+  assert.equal(needsArasaac([byId.get('food-cereal')!, byId.get('safety-safe')!, byId.get('core-want')!]).length, 1);
+});
+
+test('toddler review: one picture per word everywhere; More, All done and Needs use concrete pictures', async () => {
+  const { pinnedPicto, keepBundled } = await import('../../src/lib/arasaac.ts');
+  const byLabel = (l: string) => seed.filter((t) => t.label.toLowerCase() === l.toLowerCase() && !t.linkTo);
+  // Every "All done" tile (Home, Quick Words, folders, phrases) gets the same open-hands picture,
+  // with the same offline drawing.
+  const allDone = byLabel('all done');
+  assert.ok(allDone.length >= 5);
+  for (const t of allDone) {
+    assert.equal(pinnedPicto(t)?.id, 28429, t.id);
+    assert.equal(t.symbol, 'svg:all-done-hands', `${t.id} offline picture`);
+  }
+  // "More" keeps the bubble drawing everywhere (no abstract ARASAAC squares).
+  for (const t of byLabel('more')) {
+    assert.ok(keepBundled(t), t.id);
+    assert.equal(t.symbol, 'svg:more-bubbles', t.id);
+    assert.deepEqual(needsArasaac([t]), []);
+  }
+  // No / No thank you / I don't want it look different from each other.
+  const ids = ['no', 'no thank you', "I don't want it"].map((l) => pinnedPicto(byLabel(l)[0])?.id);
+  assert.equal(new Set(ids).size, 3, `three different pictures: ${ids}`);
+  // Hurt is a face in pain.
+  for (const t of [...byLabel('hurt'), ...byLabel('it hurts')]) assert.equal(pinnedPicto(t)?.id, 30620, t.id);
+  // The Needs folder isn't a toilet; potty keeps its own picture.
+  const needsFolder = seed.find((t) => t.id === 'core-folder-needs')!;
+  assert.equal(needsFolder.symbol, 'svg:needs');
+  assert.ok(keepBundled(needsFolder));
+  assert.notEqual(seed.find((t) => t.id === 'needs-potty')!.symbol, 'svg:needs');
+});
+
+test('toddler review upgrade: Mimzi-chosen old defaults change; a grown-up’s picture and every position stay', async () => {
+  const { applyNewDefaults } = await import('../../src/state/migrations.ts');
+  const { buildSeedCategories } = await import('../../src/data/vocabulary.ts');
+  const oldMore = { ...seed.find((t) => t.id === 'core-more')!, symbol: 'mul:more', fallbackSymbol: 'mul:more', symbolAuto: true };
+  const oldDone = { ...seed.find((t) => t.id === 'needs-all-done')!, symbol: 'mul:finish', fallbackSymbol: 'mul:finish', symbolAuto: true, autoArasaac: { id: 5358, name: 'finish' } };
+  const chosenDone = { ...seed.find((t) => t.id === 'core-all-done')!, symbol: 'mul:finish', fallbackSymbol: 'mul:finish', symbolAuto: false }; // a grown-up picked it
+  const photo = { ...seed.find((t) => t.id === 'food-all-done')!, symbol: 'mul:finish', fallbackSymbol: 'mul:finish', symbolAuto: false, photoId: 'p1' };
+  const cats = buildSeedCategories().map((c) => (c.id === 'needs' ? { ...c, symbol: 'mul:toilet' } : c));
+  const r = applyNewDefaults([oldMore, oldDone, chosenDone, photo], cats);
+  const by = new Map(r.tiles.map((t) => [t.id, t]));
+  assert.equal(by.get('core-more')!.symbol, 'svg:more-bubbles');
+  assert.equal(by.get('needs-all-done')!.fallbackSymbol, 'svg:all-done-hands');
+  assert.equal(by.get('core-all-done')!.symbol, 'mul:finish', 'caregiver choice untouched');
+  assert.equal(by.get('food-all-done')!.photoId, 'p1');
+  for (const t of r.tiles) {
+    const before = [oldMore, oldDone, chosenDone, photo].find((x) => x.id === t.id)!;
+    assert.equal(t.categoryId, before.categoryId);
+    assert.equal(t.order, before.order);
+    assert.equal(t.label, before.label);
+  }
+  assert.equal(r.categories.find((c) => c.id === 'needs')!.symbol, 'svg:needs');
+  // ASL removed: a word whose only visual was a sign gets an AAC picture; photos and recordings stay.
+  const signOnly = { ...seed.find((t) => t.id === 'core-want')!, symbol: undefined, fallbackSymbol: undefined, symbolAuto: false, aslSign: 'want', audioId: 'a1' } as Tile;
+  const customSign = { ...seed.find((t) => t.id === 'core-go')!, id: 'tile-custom', label: 'swing', symbol: undefined, fallbackSymbol: undefined, symbolAuto: false, aslSign: 'go' } as Tile;
+  const withPhoto = { ...seed.find((t) => t.id === 'core-go')!, symbol: undefined, fallbackSymbol: undefined, photoId: 'p2', aslSign: 'go' } as Tile;
+  const r2 = applyNewDefaults([signOnly, customSign, withPhoto], []);
+  const w = r2.tiles[0];
+  assert.equal(w.symbol, seed.find((t) => t.id === 'core-want')!.symbol, 'starter picture restored');
+  assert.equal(w.audioId, 'a1', 'recording kept');
+  assert.ok(r2.tiles[1].symbolAuto && needsArasaac([r2.tiles[1]]).length === 1, 'a custom word gets a picture looked up by its label');
+  assert.equal(r2.tiles[2].photoId, 'p2', 'a photo stays the picture');
+  assert.equal(r2.changedTiles.length, 2);
+  // The old automatic arrow picture for "all done" is forgotten so the open hands load.
+  assert.equal(picksToForget([by.get('needs-all-done')!]).length, 1);
 });
 
 test('a picture a grown-up chose is never replaced automatically', async () => {

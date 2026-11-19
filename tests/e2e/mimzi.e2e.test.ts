@@ -54,12 +54,20 @@ const speechStubTemplate = `
     speak(u) {
       window.__spoken.push(u.text); window.__voices.push(u.voice ? u.voice.voiceURI : null); window.__rates.push(u.rate); window.__pitches.push(u.pitch); window.__langs.push(u.lang);
       const mode = window.__speechMode || 'ok';
+      window.__speakAt = (window.__speakAt || []).concat(Date.now());
       if (mode === 'silent') return; // engine accepts the request but never starts
+      // Chrome on Android: a word spoken right after cancel() is silently dropped.
+      if (mode === 'android-chrome' && Date.now() - (window.__lastCancel || 0) < 200) { window.__dropped = (window.__dropped || 0) + 1; return; }
+      // The chosen voice can't be used (e.g. not installed); the engine's own voice works.
+      if (mode === 'voice-fail' && u.voice) return setTimeout(() => u.onerror && u.onerror({ error: 'synthesis-failed' }), 5);
+      // Cold engine: the first word takes several seconds to start.
+      if (mode === 'slowstart') { window.__speechMode = 'ok'; synth.pending = true; return setTimeout(() => { synth.pending = false; window.__said = (window.__said || []).concat(u.text); u.onstart && u.onstart(new Event('start')); u.onend && u.onend(new Event('end')); }, 6000); }
+      if (mode !== 'error' && mode !== 'interrupt') setTimeout(() => { window.__said = (window.__said || []).concat(u.text); }, 4);
       if (mode === 'error') return setTimeout(() => u.onerror && u.onerror({ error: 'synthesis-failed' }), 5);
       if (mode === 'interrupt') return setTimeout(() => u.onerror && u.onerror({ error: 'interrupted' }), 5);
       setTimeout(() => { u.onstart && u.onstart(new Event('start')); u.onend && u.onend(new Event('end')); }, 5);
     },
-    cancel() {}, resume() {}, addEventListener() {}, removeEventListener() {},
+    cancel() { window.__cancels = (window.__cancels || 0) + 1; window.__lastCancel = Date.now(); }, resume() {}, addEventListener() {}, removeEventListener() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
   // The real utterance only accepts real SpeechSynthesisVoice objects; the fake voices need a plain one.
@@ -184,7 +192,7 @@ async function addPhotoTile(page: Page, label: string, group: string) {
   await page.getByRole('button', { name: 'Use photo' }).click();
   await page.locator('.tile-preview img.tile-photo').waitFor();
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator(`.edit-tile[aria-label="Edit ${label}"] img.tile-photo`).waitFor();
+  await page.locator(`.edit-item:has(.edit-word[aria-label="Edit ${label}"]) img.tile-photo`).waitFor();
 }
 
 test('opens straight to the Talk board — no login, quick words always there', async () => {
@@ -192,7 +200,10 @@ test('opens straight to the Talk board — no login, quick words always there', 
   assert.equal(await page.getByRole('dialog').count(), 0);
   const quick = await page.locator('.quick-bar .tile').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
   assert.deepEqual(quick, ['help', 'stop', 'no', 'more', 'all done']);
-  assert.equal(await page.locator('.board-grid > *').count(), 24, 'default 4 × 6 grid on a tablet');
+  // Auto layout: as many words as fit with large tiles (≥ 88 px).
+  const g = await page.locator('.board-grid').evaluate((el) => ({ rows: Number(el.getAttribute('data-rows')), cols: Number(el.getAttribute('data-cols')), n: el.children.length, min: Math.min(...[...el.querySelectorAll('.tile')].map((t) => Math.min(t.getBoundingClientRect().width, t.getBoundingClientRect().height))) }));
+  assert.equal(g.n, g.rows * g.cols, 'a full grid');
+  assert.ok(g.min >= 88, `tiles are large (${Math.round(g.min)} px)`);
   assert.equal(await page.getByTestId('page-title').textContent(), 'Home');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'My People' }).click();
   assert.equal(await page.locator('.quick-bar .tile').count(), 5, 'quick words stay on other child screens');
@@ -263,14 +274,13 @@ test('caregiver adds a photo tile; it speaks and survives a reload (IndexedDB)',
   await addPhotoTile(page, 'Red ball', 'Toys & Play');
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
-  await page.getByRole('button', { name: 'Next page' }).click();
-  const tile = page.locator('.board-grid .tile[aria-label="Red ball"]');
+  const tile = await findTile(page, '.tile[aria-label="Red ball"]');
   await tile.click();
   assert.equal((await spoken(page)).at(-1), 'Red ball');
 
   await page.reload();
   await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
-  await page.getByRole('button', { name: 'Next page' }).click();
+  await findTile(page, '.tile[aria-label="Red ball"]');
   const width = await page
     .locator('.board-grid .tile[aria-label="Red ball"] img')
     .evaluate((img: HTMLImageElement) => (img.complete ? img.naturalWidth : new Promise((r) => (img.onload = () => r(img.naturalWidth)))));
@@ -282,24 +292,28 @@ test('edit, reorder, delete and restore keep words where the caregiver puts them
   const { ctx, page } = await openApp();
   await enterParentMode(page);
   // Rename
-  await page.locator('.edit-tile[aria-label="Edit look"]').click();
+  await page.locator('.edit-word[aria-label="Edit look"]').click();
   await page.getByLabel('Word on the tile').fill('peek');
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit peek"]').waitFor();
-  // Reorder: move "want" earlier, before "I"
-  await page.getByRole('button', { name: 'Move want earlier' }).click();
-  await page.waitForFunction(() => document.querySelector('.edit-tile')?.getAttribute('aria-label') === 'Edit want', null, { timeout: 3000 });
-  const firstTwo = await page.locator('.edit-tile').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('aria-label')));
+  await page.locator('.edit-word[aria-label="Edit peek"]').waitFor();
+  // Reorder with Arrange words: tap "want", then tap "I" — they swap.
+  await page.getByTestId('arrange-words-btn').click();
+  const aw = page.getByTestId('arrange-words');
+  await aw.locator('[data-arrange-tile="core-want"]').click();
+  await aw.locator('[data-arrange-tile="core-i"]').click();
+  await aw.getByTestId('arrange-save').click();
+  await aw.waitFor({ state: 'detached' });
+  const firstTwo = await page.locator('.edit-word').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('aria-label')));
   assert.deepEqual(firstTwo, ['Edit want', 'Edit I']);
   // Delete with confirmation, then restore
-  await page.locator('.edit-tile[aria-label="Edit peek"]').click();
+  await page.locator('.edit-word[aria-label="Edit peek"]').click();
   await page.getByRole('button', { name: 'Delete', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
-  await page.locator('.edit-tile[aria-label="Edit peek"]').waitFor({ state: 'detached' });
+  await page.locator('.edit-word[aria-label="Edit peek"]').waitFor({ state: 'detached' });
   await page.getByRole('tab', { name: /Recently deleted/ }).click();
   await page.locator('[data-deleted-tile="core-look"]').getByRole('button', { name: 'Restore' }).click();
   await page.getByRole('tab', { name: 'Edit AAC board' }).click();
-  await page.locator('.edit-tile[aria-label="Edit peek"]').waitFor();
+  await page.locator('.edit-word[aria-label="Edit peek"]').waitFor();
   // Child board reflects the new order
   await page.getByRole('button', { name: /back to Talk/ }).click();
   const board = await page.locator('.board-grid .tile').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('aria-label')));
@@ -311,6 +325,8 @@ test('grid size can be changed (2 × 2 big tiles) and pages appear', async () =>
   const { ctx, page } = await openApp();
   await enterParentMode(page);
   await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  await page.getByText(/Fixed size — the same rows/).click();
+  await page.getByTestId('grid-select').waitFor();
   await page.getByTestId('grid-select').selectOption('2x2');
   await page.getByRole('button', { name: /back to Talk/ }).click();
   assert.equal(await page.locator('.board-grid > *').count(), 4);
@@ -398,14 +414,14 @@ for (const [name, viewport] of [
 test('caregiver voice recording plays instead of the device voice', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.locator('.edit-tile[aria-label="Edit go"]').click();
+  await page.locator('.edit-word[aria-label="Edit go"]').click();
   await page.getByRole('button', { name: /Record your voice/ }).click();
   await page.getByRole('button', { name: /Stop/ }).waitFor();
   await page.waitForTimeout(1200);
   await page.getByRole('button', { name: /Stop/ }).click();
   await page.locator('.recorder audio').waitFor();
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit go"]').waitFor();
+  await page.locator('.edit-word[aria-label="Edit go"]').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   const kinds = await page.evaluate(
     () =>
@@ -424,29 +440,18 @@ test('caregiver voice recording plays instead of the device voice', async () => 
   await ctx.close();
 });
 
-test('ASL sign video: only plays after tapping See sign', async () => {
+test('ASL is removed: no ASL badges or “See sign” buttons, and no sign options in Parent Mode or the tile editor', async () => {
   const { ctx, page } = await openApp();
+  assert.equal(await page.getByRole('button', { name: /See sign/ }).count(), 0, 'no See sign buttons on the board');
+  assert.equal(await page.locator('.sign-btn, .sign-tag').count(), 0, 'no ASL badges');
+  assert.equal(await page.locator('.quick-bar').getByText('ASL').count(), 0);
   await enterParentMode(page);
-  await page.locator('.edit-tile[aria-label="Edit more"]').click();
-  await page.getByTestId('sign-input').setInputFiles(SIGN);
-  await page.getByTestId('sign-preview').waitFor();
-  await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit more"]').waitFor();
-  await page.getByRole('button', { name: /back to Talk/ }).click();
-  assert.equal(await page.locator('video').count(), 0, 'no sign video on the board');
-  assert.ok(await page.getByRole('button', { name: 'See sign for more' }).count() >= 1);
-  await page.locator('.board-grid').getByRole('button', { name: 'See sign for more' }).click().catch(() => undefined);
-  const video = page.getByRole('dialog', { name: 'Sign for more' }).locator('video');
-  await video.waitFor();
-  await page.waitForFunction(() => {
-    const v = document.querySelector('.sign-modal video') as HTMLVideoElement | null;
-    return !!v && v.currentTime > 0;
-  });
-  await page.getByRole('button', { name: /Close/ }).click();
-  assert.equal(await page.locator('video').count(), 0);
-  // Tapping the tile itself still just speaks
-  await page.locator('.board-grid [data-tile-id="core-more"]').click();
-  assert.equal((await spoken(page)).at(-1), 'more');
+  assert.equal(await page.getByRole('tab', { name: /ASL/ }).count(), 0, 'no ASL Library');
+  await page.locator('.edit-word[aria-label="Edit more"]').click();
+  assert.equal(await page.getByText(/ASL|sign video|Sign \(ASL\)/).count(), 0, 'no sign options in the tile editor');
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  assert.equal(await page.getByText(/See sign|sign video/i).count(), 0, 'no sign settings');
   await ctx.close();
 });
 
@@ -462,8 +467,9 @@ test('quick words can be changed by a caregiver', async () => {
   assert.deepEqual(quick, ['help', 'stop', 'no', 'more', 'all done', 'yes']);
   // Hiding "help" on its page keeps it as a quick word (the child's quick way to ask for help).
   await enterParentMode(page, false);
-  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.getByRole('tab', { name: 'Manage words' }).click();
   await page.locator('[data-wob="core-help"]').click();
+  await page.getByTestId('wob-toggle').click(); // Manage words: select, then Show / Hide
   const warn = page.getByRole('alertdialog');
   if (await warn.count()) await warn.getByRole('button', { name: 'Hide' }).click();
   await page.getByRole('tab', { name: 'Quick words' }).click();
@@ -533,21 +539,30 @@ async function openScheduleEditor(page: Page, button: RegExp | string, firstTime
 }
 const editor = (page: Page) => page.getByTestId('schedule-editor');
 const preview = (page: Page) => page.getByTestId('schedule-preview');
-async function pickArasaac(page: Page, card: string, query: string, n = 0) {
-  await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).click();
-  const chooser = page.getByTestId('picture-chooser');
-  await chooser.getByTestId('symbol-search').fill(query);
-  await chooser.getByTestId('symbol-group-arasaac').locator(`[data-symbol="arasaac:${pictoId(query) + n}"]`).click();
-  await chooser.waitFor({ state: 'detached' });
+/** In the picture picker: search, tap a result, then "Use picture". */
+async function usePictureFromSearch(page: Page, query: string, symbol: string) {
+  const picker = page.getByTestId('picture-picker').last();
+  await picker.getByTestId('picture-search').fill(query);
+  await picker.getByTestId('picture-results').locator(`[data-symbol="${symbol}"]`).first().click();
+  await picker.getByTestId('use-picture').click();
 }
-async function pickPhoto(page: Page, card: string) {
-  await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).click();
-  const chooser = page.getByTestId('picture-chooser');
-  await chooser.getByRole('tab', { name: /Photo/ }).click();
-  await chooser.getByTestId('schedule-photo-input').setInputFiles(PHOTO);
+async function usePhotoFromPicker(page: Page) {
+  const picker = page.getByTestId('picture-picker').last();
+  await picker.getByTestId('use-photo').click();
+  await picker.getByTestId('picker-photo-input').setInputFiles(PHOTO);
   await page.getByTestId('crop-viewport').waitFor();
   await page.getByRole('button', { name: 'Use photo' }).click();
-  await chooser.waitFor({ state: 'detached' });
+  await picker.getByTestId('use-picture').click();
+}
+async function pickArasaac(page: Page, card: string, query: string, n = 0) {
+  await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).first().click();
+  await usePictureFromSearch(page, query, `arasaac:${pictoId(query) + n}`);
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
+}
+async function pickPhoto(page: Page, card: string) {
+  await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).first().click();
+  await usePhotoFromPicker(page);
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
 }
 async function saveSchedule(page: Page) {
   await editor(page).getByTestId('save-schedule').click();
@@ -655,6 +670,7 @@ test('I’m Working For: reward name, photo and symbol, goal, 1–10 tokens, tok
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).locator('[data-template="Working for bubbles"]').getByRole('button', { name: 'Use' }).click();
   await editor(page).locator('[data-template="Working for swing"]').getByRole('button', { name: 'Use' }).click();
   assert.equal(await editor(page).getByLabel('Reward words').inputValue(), 'Swing');
@@ -706,6 +722,7 @@ test('routine builder: 1 to 5 steps, reorder, three views, saved routines restor
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).getByTestId('layout-oneAtATime').check();
   await saveSchedule(page);
   await page.getByRole('tab', { name: 'My Steps' }).click();
@@ -716,6 +733,7 @@ test('routine builder: 1 to 5 steps, reorder, three views, saved routines restor
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).locator('[data-template="Bedtime"]').getByRole('button', { name: 'Use' }).click();
   assert.equal(await editor(page).getByLabel('Step 1 words').inputValue(), 'Bath');
   await editor(page).locator('[data-template="Park trip"]').getByRole('button', { name: 'Use' }).click();
@@ -743,6 +761,7 @@ test('schedule editing is protected: My Day "Edit schedule" needs the PIN; unsav
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).getByLabel('FIRST words').fill('Changed');
   await editor(page).getByTestId('cancel-schedule').click();
   await page.getByRole('alertdialog').getByText('Discard your changes?').waitFor();
@@ -802,6 +821,7 @@ for (const [name, viewport] of [
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await typePin(page, PIN);
     await page.getByRole('button', { name: 'Unlock' }).click();
+    await page.getByTestId('quick-more').click(); // quick editor → full editor
     await editor(page).waitFor();
     const fits = await page.evaluate(() => {
       const p = document.querySelector('[data-testid="schedule-preview"]')!.getBoundingClientRect();
@@ -842,9 +862,10 @@ test('Food & Drinks: foods stay hidden until a grown-up picks them; private note
   await page.locator('.board-grid [data-tile-id="core-folder-food"]').click();
   assert.equal(await page.locator('.board-grid [data-tile-id="food-banana"]').count(), 0, 'library foods start hidden');
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.getByRole('tab', { name: 'Manage words' }).click();
   await page.getByRole('tab', { name: 'Food & Drinks', exact: true }).click();
   await page.locator('[data-wob="food-banana"]').click();
+  await page.getByTestId('wob-toggle').click(); // Manage words: select, then Show / Hide
   await page.getByRole('tab', { name: 'Edit AAC board' }).click();
   await page.getByRole('tab', { name: 'Food & Drinks', exact: true }).click();
   await page.getByRole('button', { name: '+ Add picture' }).click();
@@ -852,7 +873,7 @@ test('Food & Drinks: foods stay hidden until a grown-up picks them; private note
   await page.getByLabel(/Private note/).fill('only cut in half');
   await page.getByText(/Mimzi never suggests foods/).waitFor();
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit Blueberries"]').waitFor();
+  await page.locator('.edit-word[aria-label="Edit Blueberries"]').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await openFolder(page, 'food');
   await page.locator('.board-grid [data-tile-id="food-banana"]').waitFor();
@@ -1027,10 +1048,10 @@ test('Google: sign in, then a second device signs in and gets everything (photos
   // Delete on the phone, sync, then sync the iPad
   await galaxy.page.getByRole('tab', { name: 'Edit AAC board' }).click();
   await galaxy.page.getByRole('tab', { name: 'People', exact: true }).click();
-  await galaxy.page.locator('.edit-tile[aria-label="Edit Rex"]').click();
+  await galaxy.page.locator('.edit-word[aria-label="Edit Rex"]').click();
   await galaxy.page.getByRole('button', { name: 'Delete', exact: true }).click();
   await galaxy.page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
-  await galaxy.page.locator('.edit-tile[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
+  await galaxy.page.locator('.edit-word[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
   await galaxy.page.getByRole('tab', { name: 'Google & sync' }).click();
   await galaxy.page.getByRole('button', { name: /Sync now/ }).click();
   await galaxy.page.getByRole('button', { name: /Sync now/ }).waitFor();
@@ -1039,7 +1060,7 @@ test('Google: sign in, then a second device signs in and gets everything (photos
   await ipad.page.getByRole('button', { name: /Sync now/ }).waitFor();
   await ipad.page.getByRole('tab', { name: 'Edit AAC board' }).click();
   await ipad.page.getByRole('tab', { name: 'People', exact: true }).click();
-  await ipad.page.locator('.edit-tile[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
+  await ipad.page.locator('.edit-word[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
   await ipad.page.getByRole('tab', { name: /Recently deleted/ }).click();
   await ipad.page.getByText('Rex').waitFor();
 
@@ -1061,24 +1082,20 @@ test('Google Photos: pick a photo in Google’s picker and use it on a tile', as
   await page.getByRole('button', { name: 'Use photo' }).click();
   await page.locator('.tile-preview img.tile-photo').waitFor();
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit Blue ball"] img.tile-photo').waitFor();
+  await page.locator('.edit-item:has(.edit-word[aria-label="Edit Blue ball"]) img.tile-photo').waitFor();
   await ctx.close();
 });
 
 /* ---------------- V3 acceptance tests ---------------- */
 
-test('V3-1/2/9: More speaks with the built-in voice; full sentence; Help speaks and shows its ASL sign separately', async () => {
+test('V3-1/2/9: More speaks with the built-in voice; full sentence; Help speaks', async () => {
   const { ctx, page } = await openApp();
   await page.locator('.board-grid [data-tile-id="core-more"]').click();
   assert.equal((await spoken(page)).at(-1), 'more');
-  assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] img.tile-symbol').count(), 1, 'button shows an AAC symbol');
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] .tile-media svg, .board-grid [data-tile-id="core-more"] img.tile-symbol').count(), 1, 'button shows an AAC picture');
   await page.locator('.board-grid [data-tile-id="core-help"]').click();
   assert.equal((await spoken(page)).at(-1), 'help');
-  const before = (await spoken(page)).length;
-  await page.locator('.board-grid').getByRole('button', { name: 'See sign for help' }).click();
-  await page.getByTestId('sign-drawing').waitFor();
-  assert.equal((await spoken(page)).length, before, 'See sign never speaks over the AAC voice');
-  await page.getByRole('button', { name: /Close/ }).click();
+  assert.equal(await page.locator('.board-grid').getByRole('button', { name: /See sign/ }).count(), 0, 'ASL was removed');
   await ctx.close();
 });
 
@@ -1088,14 +1105,14 @@ test('V3-3: a brand-new word speaks automatically — no recording', async () =>
   await page.getByRole('tab', { name: 'Toys & Play', exact: true }).click();
   await page.getByRole('button', { name: '+ Add picture' }).click();
   await page.getByLabel('Word on the tile').fill('Trampoline');
-  await page.getByTestId('symbol-search').fill('trampoline');
-  await page.locator('[data-symbol="trampoline"]').click();
+  await page.getByTestId('choose-picture').click();
+  await usePictureFromSearch(page, 'trampoline', 'mul:trampoline');
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit Trampoline"]').waitFor();
+  await page.locator('.edit-word[aria-label="Edit Trampoline"]').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
-  await page.getByRole('button', { name: 'Next page' }).click();
-  await page.locator('.board-grid .tile[aria-label="Trampoline"]').click();
+  await (await findTile(page, '.tile[aria-label="Trampoline"]')).click();
   assert.equal((await spoken(page)).at(-1), 'Trampoline');
   await ctx.close();
 });
@@ -1138,18 +1155,22 @@ test('pronunciation override changes only what is spoken', async () => {
   await ctx.close();
 });
 
-test('V3-5: Words on My Board — six words, in their own places', async () => {
+test('V3-5: Manage words — hide words one by one; the count updates and nothing else moves', async () => {
   const { ctx, page } = await openApp();
+  const before = await slots(page);
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Words on My Board' }).click();
-  await page.getByRole('button', { name: '6', exact: true }).click();
-  await page.getByRole('button', { name: /Show the first 6 by position/ }).click();
-  await page.getByRole('alertdialog').getByRole('button', { name: 'Hide' }).click(); // "no" and "break" are important words
-  await page.getByTestId('wob-count').getByText(/Showing 6 of/).waitFor();
+  await page.getByRole('tab', { name: 'Manage words' }).click();
+  const count = page.getByTestId('wob-count');
+  const n = Number(((await count.textContent()) ?? '').match(/(\d+) words? visible/)![1]);
+  for (const id of ['core-look', 'core-go']) {
+    await page.locator(`[data-wob="${id}"]`).click();
+    await page.getByTestId('wob-toggle').click();
+  }
+  await count.getByText(new RegExp(`^${n - 2} words visible`)).waitFor();
+  await count.getByText(/2 hidden/).waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  const cells = await page.locator('.board-grid > *').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id') ?? e.querySelector('[data-tile-id]')?.getAttribute('data-tile-id') ?? null));
-  assert.deepEqual(cells.slice(0, 6), ['core-i', 'core-want', 'core-more', 'core-help', 'core-stop', 'core-all-done']);
-  assert.ok(cells.slice(6).every((c) => c === null), 'other slots are empty, nothing moved up');
+  const after = await slots(page);
+  assert.deepEqual(after, before.map((id) => (id === 'core-look' || id === 'core-go' ? null : id)), 'only those two spots are now empty');
   await ctx.close();
 });
 
@@ -1158,14 +1179,17 @@ test('V3-7: hide and restore a word — same spot, picture and speech', async ()
   const slotOf = () => page.locator('.board-grid > *').evaluateAll((els) => els.findIndex((e) => (e.getAttribute('data-tile-id') ?? e.querySelector('[data-tile-id]')?.getAttribute('data-tile-id')) === 'core-look'));
   const before = await slotOf();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.getByRole('tab', { name: 'Manage words' }).click();
   await page.locator('[data-wob="core-look"]').click();
+  await page.getByTestId('wob-toggle').click(); // Manage words: select, then Show / Hide
   await page.getByRole('button', { name: /back to Talk/ }).click();
   assert.equal(await slotOf(), -1);
-  assert.equal(await page.locator('.board-grid > *').count(), 24, 'its slot is kept empty');
+  const g = await page.locator('.board-grid').evaluate((el) => ({ n: el.children.length, cells: Number(el.getAttribute('data-rows')) * Number(el.getAttribute('data-cols')) }));
+  assert.equal(g.n, g.cells, 'its slot is kept empty');
   await enterParentMode(page, false);
-  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.getByRole('tab', { name: 'Manage words' }).click();
   await page.locator('[data-wob="core-look"]').click();
+  await page.getByTestId('wob-toggle').click(); // Manage words: select, then Show / Hide
   await page.getByRole('tab', { name: 'Grow My Words' }).click();
   await page.getByTestId('vocab-history').getByText('hidden').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
@@ -1218,11 +1242,11 @@ test('V3-6: two new words every Monday — scheduled, then waiting for approval 
 test('V3-8: a real photo replaces the picture on "drink" — it still says "drink"', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.locator('.edit-tile[aria-label="Edit drink"]').click();
+  await page.locator('.edit-word[aria-label="Edit drink"]').click();
   await page.getByTestId('photo-input').setInputFiles(PHOTO);
   await page.getByRole('button', { name: 'Use photo' }).click();
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit drink"] img.tile-photo').waitFor();
+  await page.locator('.edit-item:has(.edit-word[aria-label="Edit drink"]) img.tile-photo').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await page.locator('.board-grid [data-tile-id="core-drink"] img.tile-photo').waitFor();
   await page.locator('.board-grid [data-tile-id="core-drink"]').click();
@@ -1282,7 +1306,7 @@ test('voice: a chosen voice is saved, survives a reload and is used for words, s
   await page.getByRole('button', { name: '+ Add picture' }).click();
   await page.getByLabel('Word on the tile').fill('Slide');
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit Slide"]').waitFor();
+  await page.locator('.edit-word[aria-label="Edit Slide"]').waitFor();
   await page.reload();
   await page.waitForSelector('.board-grid .tile');
   const SAM = 'com.apple.voice.compact.en-US.Samantha';
@@ -1343,8 +1367,11 @@ test('symbols: every starter word gets an ARASAAC picture automatically; nothing
   const before = await slots(page);
   await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
   await page.locator('.board-grid [data-tile-id="core-all-done"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
-  assert.equal(await pictureOf(page, 'core-more'), `https://api.arasaac.org/v1/pictograms/${pictoId('more')}`);
-  assert.equal(await pictureOf(page, 'core-all-done'), `https://api.arasaac.org/v1/pictograms/${pictoId('finished')}`, 'curated search term');
+  // "More" keeps Mimzi's bubble drawing (ARASAAC's is abstract); "all done" is pinned to the open hands.
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] img.tile-symbol').count(), 0);
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] .tile-media svg').count(), 1);
+  assert.equal(await pictureOf(page, 'core-all-done'), 'https://api.arasaac.org/v1/pictograms/28429', 'open-hands "all done"');
+  assert.equal(await pictureOf(page, 'core-no'), 'https://api.arasaac.org/v1/pictograms/5526', 'red X "no"');
   assert.deepEqual(await slots(page), before, 'positions unchanged');
   assert.equal(await page.locator('.board-grid .tile-emoji').count(), 0, 'no emoji artwork');
   await page.locator('.board-grid [data-tile-id="core-more"]').click();
@@ -1357,30 +1384,37 @@ test('symbols: every starter word gets an ARASAAC picture automatically; nothing
   await ctx.close();
 });
 
-test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) — label, speech, sign and place stay', async () => {
+test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) — label, speech and place stay', async () => {
   osMode = 'on';
   const { ctx, page } = await openApp();
   await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
   const before = await slots(page);
   await enterParentMode(page);
-  await page.locator('.edit-tile[aria-label="Edit help"]').click();
-  const search = page.getByTestId('symbol-search');
-  assert.equal(await search.inputValue(), 'help', 'searches the word by default');
-  await page.getByTestId('symbol-group-arasaac').locator(`[data-symbol="arasaac:${pictoId('help') + 1}"]`).click();
-  await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit help"]').waitFor();
-  // Another word from OpenSymbols (non-commercial licence shown), another from Mulberry.
-  await page.locator('.edit-tile[aria-label="Edit play"]').click();
-  await page.getByTestId('symbol-search').fill('swing');
-  await page.getByTestId('symbol-group-opensymbols').getByText('non-commercial').first().waitFor();
-  await page.getByTestId('symbol-group-opensymbols').locator('[data-symbol="os:tawasol:8"]').click();
-  await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit play"]').waitFor();
-  await page.locator('.edit-tile[aria-label="Edit go"]').click();
-  await page.getByTestId('symbol-lib-mulberry').click();
-  await page.getByTestId('symbol-search').fill('go');
-  await page.getByTestId('symbol-group-mulberry').locator('[data-symbol="go_,_to"]').click();
-  await page.getByRole('button', { name: 'Save' }).click();
+  // Tap the picture → picker (Recent, Saved, then one search across every library).
+  await page.locator('[data-change-picture="core-help"]').click();
+  await usePictureFromSearch(page, 'help', `arasaac:${pictoId('help') + 1}`);
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
+  // Another word from OpenSymbols (non-commercial licence in the picture details), another from Mulberry,
+  // using the optional library filter.
+  await page.locator('[data-change-picture="core-play"]').click();
+  let picker = page.getByTestId('picture-picker');
+  await picker.getByTestId('library-filter').locator('summary').click();
+  for (const l of ['arasaac', 'mulberry', 'mimzi']) await picker.getByTestId(`lib-${l}`).uncheck();
+  await picker.getByTestId('picture-search').fill('swing');
+  await picker.getByTestId('picture-results').locator('[data-symbol^="os:"]').first().click();
+  await picker.getByTestId('picture-credit').getByText(/sclera.*non-commercial/i).waitFor(); // credit + licence in the details
+  await picker.getByRole('button', { name: /tawasol/ }).click();
+  await picker.getByTestId('picture-credit').getByText(/tawasol/).waitFor();
+  await picker.getByTestId('use-picture').click();
+  await picker.waitFor({ state: 'detached' });
+  await page.locator('[data-change-picture="core-go"]').click();
+  picker = page.getByTestId('picture-picker');
+  await picker.getByTestId('library-filter').locator('summary').click();
+  for (const l of ['arasaac', 'mimzi', 'opensymbols']) await picker.getByTestId(`lib-${l}`).uncheck();
+  await picker.getByTestId('picture-search').fill('go');
+  await picker.getByTestId('picture-results').locator('[data-symbol="mul:go_,_to"]').click();
+  await picker.getByTestId('use-picture').click();
+  await picker.waitFor({ state: 'detached' });
   await page.getByRole('tab', { name: 'Symbol Library' }).click();
   await page.getByTestId('symbol-credits').getByText(/tawasol \(via OpenSymbols\)/).waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
@@ -1391,16 +1425,13 @@ test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) �
   await page.locator('.board-grid [data-tile-id="core-help"]').click();
   assert.equal((await spoken(page)).at(-1), 'help');
   assert.equal(await page.locator('.board-grid [data-tile-id="core-help"] .tile-label').textContent(), 'help');
-  await page.locator('.board-grid').getByRole('button', { name: 'See sign for help' }).click();
-  await page.getByTestId('sign-drawing').waitFor();
-  await page.getByRole('button', { name: /Close/ }).click();
   // Switching the default style never touches a picture a grown-up chose.
   await enterParentMode(page, false);
   await page.getByRole('tab', { name: 'Symbol Library' }).click();
   await page.getByTestId('style-mulberry').click();
   await page.locator('[data-testid="style-mulberry"]:checked').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  assert.match((await pictureOf(page, 'core-more')) ?? '', /mulberry\/more\.svg$/, 'automatic pictures follow the style');
+  assert.match((await pictureOf(page, 'core-want')) ?? '', /mulberry\/want_%2C_to\.svg$/, 'automatic pictures follow the style');
   assert.equal(await pictureOf(page, 'core-play'), 'https://cdn.opensymbols.test/swing2.png', 'chosen picture kept');
   assert.deepEqual(await slots(page), before);
   osMode = 'off';
@@ -1411,14 +1442,14 @@ test('symbols: a photo can replace any symbol, and removing it brings the symbol
   const { ctx, page } = await openApp();
   await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
   await enterParentMode(page);
-  await page.locator('.edit-tile[aria-label="Edit eat"]').click();
+  await page.locator('.edit-word[aria-label="Edit eat"]').click();
   await page.getByTestId('photo-input').setInputFiles(PHOTO);
   await page.getByRole('button', { name: 'Use photo' }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   await page.locator('.board-grid [data-tile-id="core-eat"] img.tile-photo').waitFor();
   await enterParentMode(page, false);
-  await page.locator('.edit-tile[aria-label="Edit eat"]').click();
+  await page.locator('.edit-word[aria-label="Edit eat"]').click();
   await page.getByRole('button', { name: /Remove photo/ }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: /back to Talk/ }).click();
@@ -1463,7 +1494,7 @@ for (const [name, viewport] of [
   ['onn tablet portrait', { width: 600, height: 960 }],
   ['ipad', IPAD],
 ] as const) {
-  test(`board looks professional on ${name}: no emoji, "ASL" tag outside the AAC picture`, async () => {
+  test(`board looks professional on ${name}: no emoji, no ASL tags, every tile has a picture and label`, async () => {
     const { ctx, page } = await openApp(viewport);
     await page.locator('.board-grid [data-tile-id="core-want"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
     const emoji = await page.evaluate(() => {
@@ -1471,15 +1502,10 @@ for (const [name, viewport] of [
       return [...text.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]);
     });
     assert.deepEqual(emoji, [], 'no emoji anywhere on the child screen');
-    const overlaps = await page.evaluate(() =>
-      [...document.querySelectorAll('.tile-wrap-sign')].filter((w) => {
-        const tag = w.querySelector('.sign-tag')!.getBoundingClientRect();
-        const pic = w.querySelector('.tile-media')!.getBoundingClientRect();
-        return tag.top < pic.bottom - 1 && tag.bottom > pic.top && tag.left < pic.right && tag.right > pic.left;
-      }).length,
-    );
-    assert.equal(overlaps, 0, 'the ASL tag sits in the label strip, not on the picture');
-    assert.ok((await page.locator('.board-grid .sign-tag').count()) > 0);
+    assert.equal(await page.locator('.sign-tag, .sign-btn').count(), 0, 'no ASL tags (ASL was removed)');
+    // Every tile has a picture and a readable label.
+    const bare = await page.locator('.board-grid .tile').evaluateAll((els) => els.filter((e) => !e.querySelector('img, svg') || !e.querySelector('.tile-label')?.textContent?.trim()).length);
+    assert.equal(bare, 0);
     await ctx.close();
   });
 }
@@ -1510,6 +1536,7 @@ for (const [name, size, keyboard] of [
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await typePin(page, PIN);
     await page.getByRole('button', { name: 'Unlock' }).click();
+    await page.getByTestId('quick-more').click(); // quick editor → full editor
     await editor(page).waitFor();
     // Keyboard opens (Chrome on Android resizes the page to the space above it).
     await page.setViewportSize(keyboard);
@@ -1533,9 +1560,9 @@ for (const [name, size, keyboard] of [
     // Keyboard closes; picture selection works and its Cancel is reachable.
     await page.setViewportSize(size);
     await editor(page).getByTestId('step-1').getByRole('button', { name: /Change picture/ }).click();
-    await page.getByTestId('picture-chooser').getByTestId('symbol-search').waitFor();
-    assert.equal(await reachable(page, '[data-testid="picture-chooser"] .modal-actions .btn'), 'ok', 'chooser Cancel reachable');
-    await page.getByTestId('picture-chooser').getByRole('button', { name: 'Cancel' }).click();
+    await page.getByTestId('picture-picker').getByTestId('picture-search').waitFor();
+    assert.equal(await reachable(page, '[data-testid="picture-picker"] .modal-actions .btn'), 'ok', 'chooser Cancel reachable');
+    await page.getByTestId('picture-picker').getByRole('button', { name: 'Cancel' }).click();
     await page.screenshot({ path: `${SHOTS}editor-${name.replace(' ', '-')}.png` });
     await ctx.close();
   });
@@ -1622,6 +1649,7 @@ test('switching saved boards resets progress as intended; earned tokens never di
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).getByLabel('Goal').fill('Tidy toys');
   await editor(page).getByTestId('token-count').fill('4');
   await saveSchedule(page);
@@ -1631,6 +1659,7 @@ test('switching saved boards resets progress as intended; earned tokens never di
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).locator('[data-template="Working for music"]').getByRole('button', { name: 'Use' }).click();
   await saveSchedule(page);
   assert.equal(await page.locator('.token-on').count(), 0);
@@ -1657,6 +1686,7 @@ test('layouts with completed steps: numbered, Now / Next / Later and one step at
       await typePin(page, PIN);
     }
     await page.getByRole('button', { name: 'Unlock' }).click();
+    await page.getByTestId('quick-more').click(); // quick editor → full editor
     await editor(page).getByRole('tab', { name: 'Routine' }).click();
     await editor(page).getByTestId(layout).check();
     await saveSchedule(page);
@@ -1781,6 +1811,7 @@ test('caregiver progress without a sustained hold: tap explains, editor Progress
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).getByTestId('progress-firstThen').getByRole('button', { name: /Mark FIRST done/ }).click();
   await editor(page).getByRole('tab', { name: 'I’m Working For' }).click();
   await editor(page).getByTestId('progress-reward').getByRole('button', { name: /Add token/ }).click();
@@ -1797,6 +1828,7 @@ test('caregiver progress without a sustained hold: tap explains, editor Progress
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).getByRole('tab', { name: 'I’m Working For' }).click();
   await editor(page).getByTestId('progress-reward').getByRole('button', { name: /Reset tokens/ }).click();
   await saveSchedule(page);
@@ -1808,10 +1840,13 @@ test('caregiver progress without a sustained hold: tap explains, editor Progress
 
 test('speech: a silent engine is reported (with retry), an interruption is not', async () => {
   const { ctx, page } = await openApp();
+  // One word first, so the engine counts as warmed up (the very first word may wait longer).
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  await page.waitForFunction(() => ((window as unknown as { __said?: string[] }).__said ?? []).length > 0);
   await speechMode(page, 'silent');
   await page.locator('.board-grid [data-tile-id="core-more"]').click();
   const fail = page.getByTestId('speech-fail');
-  await fail.waitFor({ timeout: 9000 });
+  await fail.waitFor({ timeout: 14000 });
   assert.match((await fail.textContent()) ?? '', /couldn’t say “more”.*shown at the top/, 'honest failure; the word is in the message bar');
   await page.waitForTimeout(4000);
   assert.equal(await fail.count(), 1, 'the message stays until handled');
@@ -1841,7 +1876,7 @@ test('"Say it again" replays the same recording, pronunciation and language; a b
   await page.getByTestId('pron-text').fill('Mah-mah');
   await page.getByTestId('pron-save').click();
   await page.getByRole('tab', { name: 'Edit AAC board' }).click();
-  await page.locator('.edit-tile[aria-label="Edit go"]').click();
+  await page.locator('.edit-word[aria-label="Edit go"]').click();
   await page.getByLabel('Voice language (optional)').fill('es-US');
   await page.getByRole('button', { name: /Record your voice/ }).click();
   await page.getByRole('button', { name: /Stop/ }).waitFor();
@@ -1902,16 +1937,17 @@ test('dialog focus: Edit schedule → PIN → editor → picture chooser / confi
   assert.ok(await inDialog('.pin-modal'), 'Tab stays inside the PIN dialog');
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).waitFor();
   assert.ok(await inDialog('[data-testid="schedule-editor"]'), 'focus moves into the editor');
   for (let i = 0; i < 40; i++) await page.keyboard.press('Shift+Tab');
   assert.ok(await inDialog('[data-testid="schedule-editor"]'), 'Shift+Tab stays inside the editor');
   // Picture chooser on top: Escape closes just the chooser.
   await editor(page).getByTestId('ft-first').getByRole('button', { name: /Change picture/ }).click();
-  await page.getByTestId('picture-chooser').waitFor();
-  assert.ok(await inDialog('[data-testid="picture-chooser"]'));
+  await page.getByTestId('picture-picker').waitFor();
+  assert.ok(await inDialog('[data-testid="picture-picker"]'));
   await page.keyboard.press('Escape');
-  await page.getByTestId('picture-chooser').waitFor({ state: 'detached' });
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
   assert.equal(await editor(page).count(), 1, 'editor still open');
   // Unsaved change → Escape asks first; Escape on the question closes only the question.
   await editor(page).getByLabel('FIRST words').fill('Shoes');
@@ -2016,6 +2052,7 @@ test('saved boards switch only on "Use board"; active board shown; routine templ
   await page.getByTestId('edit-schedule').click();
   await typePin(page, PIN);
   await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-more').click(); // quick editor → full editor
   await editor(page).getByText('Show small pictures of the next steps').click(); // on
   await editor(page).getByTestId('template-name').fill('Busy');
   await editor(page).getByTestId('save-template').click();
@@ -2130,8 +2167,8 @@ for (const [name, vp] of SWEEP) {
     await page.setViewportSize(vp);
     await editor(page).getByTestId('ft-then').getByRole('button', { name: /Change picture/ }).click();
     const chooserOk = await page.evaluate(() => {
-      const c = document.querySelector('[data-testid="picture-chooser"]')!.getBoundingClientRect();
-      const cancel = document.querySelector('[data-testid="picture-chooser"] .modal-actions .btn') as HTMLElement;
+      const c = document.querySelector('[data-testid="picture-picker"]')!.getBoundingClientRect();
+      const cancel = document.querySelector('[data-testid="picture-picker"] .modal-actions .btn') as HTMLElement;
       cancel.scrollIntoView({ block: 'nearest' });
       const b = cancel.getBoundingClientRect();
       return c.left >= 0 && c.right <= window.innerWidth + 1 && b.bottom <= window.innerHeight + 1;
@@ -2178,5 +2215,461 @@ test('Android app: speech uses the tablet engine when the web view has no browse
   const sw = await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length);
   assert.equal(sw, 0);
   assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+/* ---------- First-tap speech (Android app and Chrome on Android) ---------- */
+
+/** A Capacitor web view whose speech engine needs `readyAfterMs` to start, like the onn after launch. */
+function nativeStub(readyAfterMs: number, failText = false) {
+  return `
+    delete window.speechSynthesis; delete window.SpeechSynthesisUtterance;
+    Object.defineProperty(window, 'speechSynthesis', { value: undefined, configurable: true });
+    window.__native = []; window.__nativeSaid = []; window.__nativeStops = 0; window.__failText = ${failText};
+    window.__notReadyUntil = Date.now() + ${readyAfterMs};
+    window.Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => 'android',
+      Plugins: { TextToSpeech: {
+        speak: (o) => {
+          window.__native.push(o.text);
+          if (Date.now() < window.__notReadyUntil) return Promise.reject(Object.assign(new Error('Not yet initialized or not available on this device.'), { code: 'UNAVAILABLE' }));
+          if (window.__failText) return Promise.reject(new Error('Failed to read text.'));
+          return new Promise((res) => setTimeout(() => { window.__nativeSaid.push(o.text); res(); }, 30));
+        },
+        stop: () => { window.__nativeStops++; return Promise.resolve(); },
+      } },
+    };
+  `;
+}
+
+async function openNative(readyAfterMs: number, opts: { failText?: boolean; viewport?: { width: number; height: number } } = {}) {
+  const ctx = await browser.newContext({ viewport: opts.viewport ?? { width: 1280, height: 800 }, hasTouch: true });
+  await ctx.addInitScript({ content: nativeStub(readyAfterMs, opts.failText) });
+  await mockSymbolServices(ctx);
+  const page = await ctx.newPage();
+  await page.goto(BASE);
+  await page.waitForSelector('.board-grid .tile');
+  return { ctx, page };
+}
+const nativeSaid = (page: Page) => page.evaluate(() => (window as unknown as { __nativeSaid: string[] }).__nativeSaid);
+
+test('Android app: a tap while the speech engine is still starting is spoken once, when it is ready', async () => {
+  const { ctx, page } = await openNative(2500); // engine ready 2.5 s after launch
+  await page.locator('.board-grid [data-tile-id="core-all-done"]').click();
+  await page.waitForFunction(() => (window as unknown as { __nativeSaid: string[] }).__nativeSaid.length > 0, null, { timeout: 8000 });
+  await page.waitForTimeout(600);
+  assert.deepEqual(await nativeSaid(page), ['all done'], 'spoken exactly once');
+  assert.equal(await page.getByTestId('speech-fail').count(), 0, 'no failure message for a slow start');
+  assert.equal(await page.evaluate(() => (window as unknown as { __nativeStops: number }).__nativeStops), 0, 'no stop() before speaking');
+  await ctx.close();
+});
+
+test('Android app: rapid taps during start-up say only the newest word (interrupt setting)', async () => {
+  const { ctx, page } = await openNative(2000);
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  await page.locator('.board-grid [data-tile-id="core-more"]').click();
+  await page.locator('.board-grid [data-tile-id="core-stop"]').click();
+  await page.waitForFunction(() => (window as unknown as { __nativeSaid: string[] }).__nativeSaid.length > 0, null, { timeout: 8000 });
+  await page.waitForTimeout(900);
+  assert.deepEqual(await nativeSaid(page), ['stop'], 'older words waiting for the engine are dropped, not played late');
+  await ctx.close();
+});
+
+test('Android app: with “let it finish first”, words waiting for the engine play in order', async () => {
+  const { ctx, page } = await openNative(1500);
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.locator('select', { has: page.locator('option[value="finish"]') }).selectOption('finish');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  // Simulate the engine still starting (as right after launch).
+  await page.evaluate(() => ((window as unknown as { __notReadyUntil: number }).__notReadyUntil = Date.now() + 1500));
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  await page.locator('.board-grid [data-tile-id="core-more"]').click();
+  await page.waitForFunction(() => (window as unknown as { __nativeSaid: string[] }).__nativeSaid.length >= 2, null, { timeout: 8000 });
+  assert.deepEqual(await nativeSaid(page), ['want', 'more']);
+  await ctx.close();
+});
+
+test('Android app: a real failure shows the words and “Try again”, which then speaks', async () => {
+  const { ctx, page } = await openNative(0, { failText: true });
+  await page.locator('.board-grid [data-tile-id="core-help"]').click();
+  const fail = page.getByTestId('speech-fail');
+  await fail.waitFor({ timeout: 5000 });
+  assert.match((await fail.textContent()) ?? '', /couldn’t say “help”/);
+  await page.evaluate(() => ((window as unknown as { __failText: boolean }).__failText = false));
+  await fail.getByRole('button', { name: 'Try again' }).click();
+  await page.waitForFunction(() => (window as unknown as { __nativeSaid: string[] }).__nativeSaid.length > 0);
+  assert.deepEqual(await nativeSaid(page), ['help']);
+  await page.waitForTimeout(200);
+  assert.equal(await fail.count(), 0, 'message cleared once it spoke');
+  await ctx.close();
+});
+
+test('Chrome on Android: no needless cancel before a word, and a word dropped after a cancel is recovered', async () => {
+  const { ctx, page } = await openApp();
+  await speechMode(page, 'android-chrome');
+  // Engine idle: tapping must not cancel first (that is what dropped "All done").
+  await page.locator('.board-grid [data-tile-id="core-all-done"]').click();
+  await page.waitForFunction(() => ((window as unknown as { __said?: string[] }).__said ?? []).includes('all done'));
+  assert.equal(await page.evaluate(() => (window as unknown as { __cancels?: number }).__cancels ?? 0), 0, 'no cancel when nothing is playing');
+  // Now force a cancel right before a word: Mimzi waits for Chrome to settle, so nothing is dropped.
+  await page.evaluate(() => {
+    const w = window as unknown as { speechSynthesis: { speaking: boolean } };
+    w.speechSynthesis.speaking = true; // pretend a word is still playing
+  });
+  await page.locator('.board-grid [data-tile-id="core-stop"]').click();
+  await page.evaluate(() => ((window as unknown as { speechSynthesis: { speaking: boolean } }).speechSynthesis.speaking = false));
+  await page.waitForFunction(() => ((window as unknown as { __said?: string[] }).__said ?? []).includes('stop'), null, { timeout: 5000 });
+  assert.equal(await page.evaluate(() => (window as unknown as { __dropped?: number }).__dropped ?? 0), 0, 'the word after a cancel is not dropped');
+  assert.equal(await page.getByTestId('speech-fail').count(), 0);
+  await ctx.close();
+});
+
+test('speech: if the chosen voice fails, the engine’s own voice says the word (no error)', async () => {
+  const { ctx, page } = await openApp();
+  await speechMode(page, 'voice-fail');
+  await page.locator('.board-grid [data-tile-id="core-no"]').click();
+  await page.waitForFunction(() => ((window as unknown as { __said?: string[] }).__said ?? []).includes('no'), null, { timeout: 5000 });
+  const v = await voicesUsed(page);
+  assert.ok(v.at(-2) !== null && v.at(-1) === null, 'first the chosen voice, then the default voice');
+  await page.waitForTimeout(300);
+  assert.equal(await page.getByTestId('speech-fail').count(), 0);
+  await ctx.close();
+});
+
+test('speech: a cold engine that takes 6 s to start the first word is not reported as failed', async () => {
+  const { ctx, page } = await openApp();
+  await speechMode(page, 'slowstart');
+  await page.locator('.board-grid [data-tile-id="core-help"]').click();
+  await page.waitForFunction(() => ((window as unknown as { __said?: string[] }).__said ?? []).includes('help'), null, { timeout: 10000 });
+  await page.waitForTimeout(400);
+  assert.equal(await page.getByTestId('speech-fail').count(), 0);
+  assert.equal((await spoken(page)).filter((w) => w === 'help').length, 1, 'asked once, said once');
+  await ctx.close();
+});
+
+/* ---------- Compact tablet: everyday tasks with tap counts (portrait and landscape) ---------- */
+
+const COMPACT = [
+  { name: 'portrait', viewport: { width: 600, height: 960 } },
+  { name: 'landscape', viewport: { width: 960, height: 600 } },
+] as const;
+
+/** Opens My Day's editor for the tab on screen: "Edit schedule" → PIN (first-time setup). */
+async function unlockQuickEditor(page: Page) {
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByTestId('quick-editor').waitFor();
+}
+const messageText = (page: Page) => page.getByTestId('message-text').textContent();
+
+for (const c of COMPACT) {
+  test(`compact tablet ${c.name}: Stop / All done from My Day speak once and stay in place; core words in every My Day tool`, async () => {
+    const { ctx, page } = await openApp(c.viewport);
+    await openMyDay(page);
+    for (const tab of ['First / Then', 'I’m working for', 'My Steps']) {
+      await page.getByRole('tab', { name: tab }).click();
+      for (const id of ['core-help', 'core-stop', 'core-no', 'core-more', 'core-all-done']) {
+        const t = page.locator(`.quick-bar [data-tile-id="${id}"]`);
+        assert.ok(await t.isVisible(), `${id} visible during ${tab}`);
+        const b = (await t.boundingBox())!;
+        assert.ok(b.width >= 44 && b.height >= 44, `${id} is easy to tap (${Math.round(b.width)}×${Math.round(b.height)})`);
+      }
+      assert.ok(await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Talk' }).isVisible(), 'Talk is one tap away');
+    }
+    const before = await page.locator('.quick-bar [data-tile-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id')));
+    for (const id of ['core-stop', 'core-all-done']) {
+      const n = (await spoken(page)).length;
+      await page.locator(`.quick-bar [data-tile-id="${id}"]`).click();
+      await page.waitForTimeout(400);
+      const said = (await spoken(page)).slice(n);
+      assert.deepEqual(said, [id === 'core-stop' ? 'stop' : 'all done'], 'one tap → spoken once');
+    }
+    assert.deepEqual(await page.locator('.quick-bar [data-tile-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id'))), before, 'Quick Words stay in place');
+    await ctx.close();
+  });
+
+  test(`compact tablet ${c.name}: change only Then to Bubbles (≤ 3 taps after the PIN); First, its progress and Hugo’s message stay`, async () => {
+    const { ctx, page } = await openApp(c.viewport);
+    // Hugo is building a message, and FIRST is already done.
+    await page.locator('.board-grid [data-tile-id="core-want"]').click();
+    await page.locator('.quick-bar [data-tile-id="core-more"]').click();
+    const msg = await messageText(page);
+    await openMyDay(page);
+    await holdGrownup(page, 'Hold to mark FIRST done');
+    await page.locator('.first-then .sched-done').first().waitFor();
+    await unlockQuickEditor(page);
+    let taps = 0;
+    const tap = async (l: ReturnType<Page['locator']>) => {
+      await l.click();
+      taps++;
+    };
+    await tap(page.locator('[data-quick-card="then"]'));
+    await tap(page.getByTestId('quick-choices').locator('[data-quick-choice="Bubbles"]'));
+    await tap(page.getByTestId('show-on-board'));
+    await page.getByTestId('quick-editor').waitFor({ state: 'detached' });
+    assert.ok(taps <= 3, `${taps} taps`);
+    console.log(`  [tap count] ${c.name} — Then → Bubbles: ${taps} taps after the PIN`);
+    // Back on First / Then (same tab), with Bubbles as THEN, FIRST unchanged and still done.
+    await page.locator('.first-then').getByText('Bubbles').waitFor();
+    assert.ok(await page.getByRole('tab', { name: 'First / Then' }).getAttribute('aria-selected'));
+    assert.match((await page.locator('.first-then').textContent()) ?? '', /Brush teeth/);
+    assert.equal(await page.locator('.first-then .sched-done').count(), 1, 'FIRST progress kept');
+    assert.equal(await messageText(page), msg, 'Hugo’s message is intact');
+    await page.screenshot({ path: `${SHOTS}quick-then-${c.name}.png` });
+    await ctx.close();
+  });
+
+  test(`compact tablet ${c.name}: switch to a saved reward — the token change is shown before confirming (≤ 3 taps)`, async () => {
+    const { ctx, page } = await openApp(c.viewport);
+    await openMyDay(page);
+    await page.getByRole('tab', { name: /working for/ }).click();
+    await holdGrownup(page, 'Hold to add a token');
+    await holdGrownup(page, 'Hold to add a token');
+    await page.waitForFunction(() => document.querySelectorAll('.token-on').length === 2);
+    await unlockQuickEditor(page);
+    let taps = 0;
+    const tap = async (l: ReturnType<Page['locator']>) => {
+      await l.click();
+      taps++;
+    };
+    await tap(page.locator('[data-quick-board="Working for outdoor play"]'));
+    const note = page.getByTestId('switch-note');
+    await note.waitFor();
+    assert.match((await note.textContent()) ?? '', /2 tokens earned now will be cleared.*0 of 3/, 'says what happens to the tokens');
+    assert.equal(await page.locator('.token-on').count(), 2, 'nothing changes before confirming');
+    await page.screenshot({ path: `${SHOTS}quick-reward-${c.name}.png` });
+    await tap(page.getByTestId('confirm-switch'));
+    await page.getByTestId('quick-editor').waitFor({ state: 'detached' });
+    assert.ok(taps <= 3, `${taps} taps`);
+    console.log(`  [tap count] ${c.name} — switch to saved reward: ${taps} taps after the PIN`);
+    await page.locator('.reward-goal').getByText('Outside').waitFor();
+    assert.equal(await page.locator('.token').count(), 3);
+    assert.equal(await page.locator('.token-on').count(), 0);
+    await ctx.close();
+  });
+
+  test(`compact tablet ${c.name}: open the saved Bedtime routine without typing or More options (≤ 3 taps)`, async () => {
+    const { ctx, page } = await openApp(c.viewport);
+    await openMyDay(page);
+    await page.getByRole('tab', { name: 'My Steps' }).click();
+    await unlockQuickEditor(page);
+    let taps = 0;
+    const tap = async (l: ReturnType<Page['locator']>) => {
+      await l.click();
+      taps++;
+    };
+    await tap(page.locator('[data-quick-routine="Bedtime"]'));
+    await tap(page.getByTestId('show-on-board'));
+    await page.getByTestId('quick-editor').waitFor({ state: 'detached' });
+    assert.ok(taps <= 3, `${taps} taps`);
+    console.log(`  [tap count] ${c.name} — open Bedtime routine: ${taps} taps after the PIN`);
+    await page.locator('.steps, [data-testid="one-step"], .nnl').first().getByText('Bath').waitFor();
+    assert.equal(await page.getByRole('tab', { name: 'My Steps' }).getAttribute('aria-selected'), 'true', 'back on My Steps');
+    await ctx.close();
+  });
+}
+
+test('quick editor: Cancel returns to the same tab with the message intact; Bubbles can be found by searching without choosing a library', async () => {
+  const { ctx, page } = await openApp({ width: 960, height: 600 });
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  const msg = await messageText(page);
+  await openMyDay(page);
+  await page.getByRole('tab', { name: 'My Steps' }).click();
+  await unlockQuickEditor(page);
+  await page.getByTestId('quick-cancel').click();
+  await page.getByTestId('quick-editor').waitFor({ state: 'detached' });
+  assert.equal(await page.getByRole('tab', { name: 'My Steps' }).getAttribute('aria-selected'), 'true');
+  assert.equal(await messageText(page), msg);
+  // Search inside the quick editor (no library choice needed).
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.locator('[data-quick-card="1"]').click();
+  await page.getByTestId('quick-search').click();
+  const picker = page.getByTestId('quick-editor').getByTestId('picture-picker');
+  assert.equal(await picker.getByTestId('library-filter').getAttribute('open'), null, 'library filter tucked away');
+  await picker.getByTestId('picture-search').fill('bubbles');
+  await picker.getByTestId('picture-results').locator('[data-symbol="arasaac:6945"]').click();
+  await picker.getByTestId('use-picture').click();
+  await page.getByTestId('show-on-board').click();
+  await page.locator('.steps .sched-card, [data-testid="one-step"]').getByText('Bubbles').first().waitFor();
+  // Bubbles is now a Recent picture in every picker.
+  await enterParentMode(page, false);
+  await page.locator('[data-change-picture="core-play"]').click();
+  await page.getByTestId('picker-recent').locator('[data-symbol="arasaac:6945"]').waitFor();
+  await ctx.close();
+});
+
+/* ---------- Auto layout, Manage words, Arrange words, picture edits ---------- */
+
+const boardInfo = (page: Page) =>
+  page.locator('.board-grid').first().evaluate((g) => {
+    const tiles = [...g.querySelectorAll('.tile')].map((t) => t.getBoundingClientRect());
+    return {
+      rows: Number(g.getAttribute('data-rows')),
+      cols: Number(g.getAttribute('data-cols')),
+      page: Number(g.getAttribute('data-page')),
+      ids: [...g.children].map((c) => c.getAttribute('data-tile-id')),
+      minSide: Math.min(...tiles.map((r) => Math.min(r.width, r.height))),
+    };
+  });
+
+test('auto layout: fits the compact tablet in both orientations with large tiles; rotating keeps the page, order, Quick Words and message', async () => {
+  const { ctx, page } = await openApp({ width: 960, height: 600 });
+  const land = await boardInfo(page);
+  assert.ok(land.minSide >= 88, `landscape tiles ≥ 88 px (${Math.round(land.minSide)})`);
+  // Go to page 2 of Home and start a message.
+  await page.getByRole('button', { name: 'Next page' }).click();
+  const p2 = await boardInfo(page);
+  const firstOnScreen = p2.ids.find(Boolean)!;
+  await page.locator(`.board-grid [data-tile-id="${firstOnScreen}"]`).click();
+  const msg = await messageText(page);
+  const quick = await page.locator('.quick-bar [data-tile-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id')));
+  // Rotate.
+  await page.setViewportSize({ width: 600, height: 960 });
+  await page.waitForFunction((r) => Number(document.querySelector('.board-grid')?.getAttribute('data-rows')) !== r || true, land.rows);
+  await page.waitForTimeout(300);
+  const port = await boardInfo(page);
+  assert.ok(port.minSide >= 88, `portrait tiles ≥ 88 px (${Math.round(port.minSide)})`);
+  assert.ok(port.ids.includes(firstOnScreen), 'the same words are on screen after rotating');
+  assert.equal(await messageText(page), msg, 'message kept');
+  assert.deepEqual(await page.locator('.quick-bar [data-tile-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id'))), quick, 'Quick Words unchanged');
+  // Relative order is the same in both layouts: read Home in order across all pages.
+  const order = async () => {
+    await page.getByRole('button', { name: 'Home' }).click().catch(() => undefined);
+    const all: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      all.push(...((await boardInfo(page)).ids.filter(Boolean) as string[]));
+      const next = page.getByRole('button', { name: 'Next page' });
+      if (!(await next.count()) || (await next.isDisabled())) break;
+      await next.click();
+    }
+    return all;
+  };
+  const portOrder = await order();
+  await page.setViewportSize({ width: 960, height: 600 });
+  await page.waitForTimeout(300);
+  assert.deepEqual(await order(), portOrder, 'same relative order in both orientations');
+  console.log(`  [auto layout] 960×600 → ${land.rows}×${land.cols} (${Math.round(land.minSide)} px); 600×960 → ${port.rows}×${port.cols} (${Math.round(port.minSide)} px)`);
+  await ctx.close();
+});
+
+test('Manage words: visible count; swap a practice word into the selected slot — nothing else moves; hidden word keeps its picture and recording; Quick Words stay', async () => {
+  const { ctx, page } = await openApp({ width: 960, height: 600 });
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Talk' }).click();
+  await openFolder(page, 'play');
+  const playBefore = await slots(page);
+  const quick = await page.locator('.quick-bar [data-tile-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id')));
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Manage words' }).click();
+  await page.getByRole('tab', { name: 'Toys & Play', exact: true }).click();
+  const count = page.getByTestId('wob-count');
+  const visibleBefore = Number(((await count.textContent()) ?? '').match(/(\d+) words? visible/)![1]);
+  // Swap "blocks" for the hidden "trampoline".
+  const blocks = page.locator('[data-wob="play-blocks"]');
+  const slot = await blocks.getAttribute('data-slot');
+  await blocks.click();
+  await page.getByTestId('wob-swap').click();
+  await page.getByTestId('wob-swap-list').locator('[data-cand="play-trampoline"]').click();
+  await page.getByTestId('wob-status').getByText(/“trampoline” is now in “blocks”’s spot/).waitFor();
+  assert.equal(await page.locator('[data-wob="play-trampoline"]').getAttribute('data-slot'), slot, 'new word is in the selected slot');
+  assert.match((await page.locator('[data-wob="play-blocks"]').getAttribute('aria-label')) ?? '', /hidden/, 'old word hidden, not deleted');
+  assert.match((await count.textContent()) ?? '', new RegExp(`${visibleBefore} words? visible`), 'same number visible');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openFolder(page, 'play');
+  const playAfter = await slots(page);
+  const changed = playBefore.map((id, i) => (id !== playAfter[i] ? i : -1)).filter((i) => i >= 0);
+  assert.equal(changed.length, 1, 'only the selected spot changed');
+  assert.equal(playAfter[changed[0]], 'play-trampoline');
+  assert.deepEqual(await page.locator('.quick-bar [data-tile-id]').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id'))), quick, 'Quick Words in their positions');
+  await ctx.close();
+});
+
+for (const c of COMPACT) test(`pictures and Arrange words on a compact tablet (${c.name}): replace a picture (recording kept), swap two words, undo, save a move; survives rotation and reopening`, async () => {
+  const { ctx, page } = await openApp(c.viewport);
+  await enterParentMode(page);
+  // Give "go" a recording first.
+  await page.locator('.edit-word[aria-label="Edit go"]').click();
+  await page.getByRole('button', { name: /Record your voice/ }).click();
+  await page.getByRole('button', { name: /Stop/ }).waitFor();
+  await page.waitForTimeout(1200);
+  await page.getByRole('button', { name: /Stop/ }).click();
+  await page.locator('.recorder audio').waitFor();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-word[aria-label="Edit go"]').waitFor();
+  // Tap the picture → picker → Use picture.
+  await page.locator('[data-change-picture="core-go"]').click();
+  await usePictureFromSearch(page, 'car', 'arasaac:2339');
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
+  // Arrange words: swap two words by dragging, undo, then move "go" into an empty spot and save.
+  await page.getByTestId('arrange-words-btn').click();
+  const aw = page.getByTestId('arrange-words');
+  await aw.waitFor();
+  const dragTo = async (from: string, toSel: string) => {
+    const a = (await aw.locator(from).boundingBox())!;
+    const b = (await aw.locator(toSel).boundingBox())!;
+    await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(a.x + a.width / 2 + 20, a.y + a.height / 2 + 20, { steps: 4 });
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 8 });
+    assert.equal(await aw.locator(`${toSel}.arrange-target`).count(), 1, 'destination highlighted before dropping');
+    await page.mouse.up();
+  };
+  const slotOf = (id: string) => aw.locator(`[data-arrange-tile="${id}"]`).getAttribute('data-arrange-slot');
+  const goSlot = await slotOf('core-go');
+  const nextSlot = String(Number(goSlot) + 1); // the word right after "go"
+  const neighbour = await aw.locator(`[data-arrange-slot="${nextSlot}"]`).getAttribute('data-arrange-tile');
+  assert.ok(neighbour, 'a word sits next to "go"');
+  await dragTo('[data-arrange-tile="core-go"]', `[data-arrange-tile="${neighbour}"]`);
+  assert.equal(await slotOf('core-go'), nextSlot, 'swapped');
+  assert.equal(await slotOf(neighbour!), goSlot);
+  await aw.getByTestId('arrange-undo').click();
+  assert.equal(await slotOf('core-go'), goSlot, 'undo puts them back');
+  // Tap-then-tap: "go" to an empty spot (moves only "go").
+  const empty = aw.locator('.arrange-empty').first();
+  const emptySlot = await empty.getAttribute('data-arrange-slot');
+  await aw.locator('[data-arrange-tile="core-go"]').click();
+  await empty.click();
+  assert.equal(await slotOf('core-go'), emptySlot);
+  await aw.getByTestId('arrange-save').click();
+  await aw.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  // On Talk: tapping still speaks — the recording, not text-to-speech.
+  const findGo = async () => {
+    await page.getByRole('button', { name: 'Home' }).click().catch(() => undefined);
+    for (let i = 0; i < 5 && !(await page.locator('.board-grid [data-tile-id="core-go"]').count()); i++) await page.getByRole('button', { name: 'Next page' }).click();
+    return page.locator('.board-grid [data-tile-id="core-go"]');
+  };
+  const goTile = await findGo();
+  assert.equal(await goTile.locator('img.tile-symbol').getAttribute('src'), 'https://api.arasaac.org/v1/pictograms/2339', 'new picture');
+  const played = (await playedAudio(page)).length;
+  await goTile.click();
+  await page.waitForTimeout(300);
+  assert.equal((await playedAudio(page)).length, played + 1, 'original recording still plays');
+  assert.equal(await goTile.locator('.tile-label').textContent(), 'go', 'word unchanged');
+  // Saved arrangement: same order after rotating and after reopening Mimzi.
+  const homeOrder = async () => {
+    await page.getByRole('button', { name: 'Home' }).click().catch(() => undefined);
+    const all: (string | null)[] = [];
+    for (let i = 0; i < 6; i++) {
+      all.push(...(await boardInfo(page)).ids);
+      const next = page.getByRole('button', { name: 'Next page' });
+      if (!(await next.count()) || (await next.isDisabled())) break;
+      await next.click();
+    }
+    return all.filter(Boolean);
+  };
+  const saved = await homeOrder();
+  await page.setViewportSize({ width: c.viewport.height, height: c.viewport.width }); // rotate
+  await page.waitForTimeout(300);
+  assert.deepEqual(await homeOrder(), saved, 'same order after rotating');
+  await page.reload();
+  await page.waitForSelector('.board-grid .tile');
+  assert.deepEqual(await homeOrder(), saved, 'same order after reopening');
   await ctx.close();
 });

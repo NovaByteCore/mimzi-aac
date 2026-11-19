@@ -81,13 +81,13 @@ export interface Tile {
   autoArasaac?: { id: number; name: string };
   /** Bundled picture (Mulberry / Mimzi) shown until a downloaded symbol is available offline. */
   fallbackSymbol?: string;
-  /** Key of a Mimzi ASL sign drawing (src/data/aslSigns.tsx), shown when ASL drawings are on. */
+  /** Legacy (ASL was removed): kept so older boards and backups load unchanged. Never shown. */
   aslSign?: string;
   /** IndexedDB media id of a caregiver photo. Shown instead of the symbol when present. */
   photoId?: string;
   /** IndexedDB media id of a caregiver recording. Played instead of text-to-speech. */
   audioId?: string;
-  /** IndexedDB media id of a caregiver-provided ASL video/GIF (Phase 2 UI). */
+  /** Legacy (ASL was removed): a sign video from an older version, kept but never shown. */
   signId?: string;
   color: TileColor;
   favorite: boolean;
@@ -145,7 +145,10 @@ export interface GridSize {
 }
 
 export interface Settings {
+  /** Fixed grid, used when `layoutMode` is 'fixed' (and as the first guess for auto). */
   grid: GridSize;
+  /** 'auto' (default) = fit tile size and spacing to the screen; 'fixed' = always `grid`. */
+  layoutMode?: 'auto' | 'fixed';
   showSentenceBar: boolean;
   /** 0.5 – 1.5, 1 = normal. */
   speechRate: number;
@@ -172,13 +175,6 @@ export interface Settings {
   quickTileIds: string[];
   /** Page list next to the board: automatic (hidden on phones and small tablets, where folders + Home/Back do the job) or hidden. */
   pageList?: 'auto' | 'hide';
-  /** Show the small "See sign" button on tiles that have a sign video. */
-  showSignButtons: boolean;
-  signLoop: boolean;
-  /** Sign video playback speed (0.5 – 1). */
-  signSpeed: number;
-  /** Offer ASL sign drawings under "See sign" for words that have one. */
-  showAslDrawings: boolean;
   /** 'wordType' = AAC colour coding; 'custom' = each tile's own colour. */
   colorMode: 'wordType' | 'custom';
   /** Voice pitch 0.5–1.5 and volume 0–1 (where the device supports them). */

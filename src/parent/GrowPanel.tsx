@@ -144,7 +144,7 @@ export function GrowPanel() {
         </button>
       </div>
       {candidates.length === 0 ? (
-        <p className="muted">No hidden words to schedule. Hide words in “Words on My Board” or add new words first.</p>
+        <p className="muted">No hidden words to schedule. Hide words in “Manage words” or add new words first.</p>
       ) : (
         <div className="grow-candidates">
           {candidates.slice(0, 120).map((t) => (

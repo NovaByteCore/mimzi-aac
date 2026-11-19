@@ -12,7 +12,7 @@ import { GoogleSyncPanel } from './GoogleSyncPanel';
 import { WordsOnBoardPanel } from './WordsOnBoardPanel';
 import { GrowPanel } from './GrowPanel';
 import { VoicePanel } from './VoicePanel';
-import { AslLibraryPanel, PhotoLibraryPanel, SymbolLibraryPanel } from './LibraryPanels';
+import { PhotoLibraryPanel, SymbolLibraryPanel } from './LibraryPanels';
 import { pendingItems } from '../lib/grow';
 import { useEffect, useState } from 'react';
 
@@ -25,7 +25,6 @@ type Tab =
   | 'symbols'
   | 'photos'
   | 'voice'
-  | 'asl'
   | 'myday'
   | 'mywords'
   | 'settings'
@@ -38,7 +37,7 @@ const SECTIONS: { title: string; tabs: { id: Tab; label: string }[] }[] = [
     title: 'Talk board',
     tabs: [
       { id: 'words', label: 'Edit AAC board' },
-      { id: 'wob', label: 'Words on My Board' },
+      { id: 'wob', label: 'Manage words' },
       { id: 'grow', label: 'Grow My Words' },
       { id: 'groups', label: 'Pages' },
       { id: 'quick', label: 'Quick words' },
@@ -51,7 +50,6 @@ const SECTIONS: { title: string; tabs: { id: Tab; label: string }[] }[] = [
       { id: 'voice', label: 'Mimzi Voice' },
       { id: 'symbols', label: 'Symbol Library' },
       { id: 'photos', label: 'Photo Library' },
-      { id: 'asl', label: 'ASL Library' },
     ],
   },
   { title: 'Progress', tabs: [{ id: 'mywords', label: 'My Words' }] },
@@ -137,7 +135,6 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
         {tab === 'voice' && <VoicePanel />}
         {tab === 'symbols' && <SymbolLibraryPanel />}
         {tab === 'photos' && <PhotoLibraryPanel />}
-        {tab === 'asl' && <AslLibraryPanel />}
         {tab === 'myday' && <VisualSchedulesPanel />}
         {tab === 'mywords' && <MyWordsPanel />}
         {tab === 'settings' && <SettingsPanel />}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SymbolSvg } from '../data/symbols';
-import { AslSignSvg, ASL_SIGNS } from '../data/aslSigns';
+import { everydayFallback } from '../lib/pictureSets';
 import { shownSymbol, type Shown } from '../lib/symbols';
 import { useOptionalMimzi } from '../state/MimziStore';
 import type { SymbolInfo, Tile } from '../types';
@@ -14,11 +14,7 @@ interface Props {
   /** The word's tile: its picture follows the default symbol style and licence rules. */
   tile?: TilePicture;
   photoUrl?: string;
-  /** ASL sign drawing key — only drawn on the tile itself when `forceAsl` (e.g. picker previews). */
-  asl?: string;
   label: string;
-  /** Force the ASL drawing even when the setting is off (e.g. in the editor picker). */
-  forceAsl?: boolean;
 }
 
 /** A bundled picture (Mulberry / Mimzi original). With none, the word's first letter — never emoji. */
@@ -58,15 +54,14 @@ function Remote({ shown, label }: { shown: Shown; label: string }) {
  * The picture part of a tile: caregiver photo > AAC symbol (ARASAAC by default; Mulberry or
  * Mimzi originals when ARASAAC isn't available; or one a grown-up chose from OpenSymbols)
  * > the word's first letter. Emoji are never used as vocabulary pictures.
- * ASL drawings live under "See sign"; changing the picture never changes the word, its
- * speech, its sign or its place on the board.
+ * Changing the picture never changes the word, its speech, its recording or its place.
  */
-export function TileFace({ symbol, symbolInfo, tile, photoUrl, asl, label, forceAsl }: Props) {
+export function TileFace({ symbol, symbolInfo, tile, photoUrl, label }: Props) {
   const store = useOptionalMimzi();
   const settings = store?.settings ?? {};
   if (photoUrl) return <img className="tile-photo" src={photoUrl} alt="" draggable={false} />;
-  if (forceAsl && asl && ASL_SIGNS[asl]) return <AslSignSvg name={asl} />;
-  const shown = shownSymbol(tile ?? { symbol, symbolInfo }, settings);
+  // Everyday schedule pictures carry a bundled backup, so they show even before ARASAAC is saved offline.
+  const shown = shownSymbol(tile ?? { symbol, symbolInfo, fallbackSymbol: everydayFallback(symbol) }, settings);
   if (shown.url) return <Remote shown={shown} label={label} />;
   return <Bundled symbol={shown.symbol} label={label} />;
 }
