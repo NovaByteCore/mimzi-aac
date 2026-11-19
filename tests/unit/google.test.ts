@@ -226,3 +226,25 @@ test('Google Photos picker: session → poll → list → download via pass-thro
   assert.equal(photos[0].filename, 'dog.jpg');
   assert.ok(calls.includes('DELETE https://photospicker.googleapis.com/v1/sessions/s1'), 'session cleaned up');
 });
+
+test('photo proxy: other websites are refused; redirects never carry the token off Google', async () => {
+  const req = (url: string, auth: string) =>
+    new Request('https://mimzi.app/api/photo?url=' + encodeURIComponent(url), { headers: { Authorization: auth } });
+  const cross = new Request('https://mimzi.app/api/photo?url=' + encodeURIComponent('https://lh3.googleusercontent.com/x'), {
+    headers: { Authorization: 'Bearer t', 'Sec-Fetch-Site': 'cross-site', Origin: 'https://evil.example' },
+  });
+  assert.equal((await handlePhotoProxy(cross, (async () => new Response('x')) as typeof fetch)).status, 403);
+  const seen: string[] = [];
+  const redirecting = (async (u: string | URL) => {
+    seen.push(String(u));
+    return String(u).includes('lh3') ? new Response(null, { status: 302, headers: { Location: 'https://evil.example/steal' } }) : new Response('x');
+  }) as typeof fetch;
+  const r = await handlePhotoProxy(req('https://lh3.googleusercontent.com/x', 'Bearer t'), redirecting);
+  assert.equal(r.status, 502);
+  assert.deepEqual(seen, ['https://lh3.googleusercontent.com/x'], 'token never sent to the other host');
+  const okRedirect = (async (u: string | URL) =>
+    String(u).includes('lh3')
+      ? new Response(null, { status: 302, headers: { Location: 'https://lh4.googleusercontent.com/y' } })
+      : new Response(new Uint8Array([1, 2]), { headers: { 'Content-Type': 'image/png' } })) as typeof fetch;
+  assert.equal((await handlePhotoProxy(req('https://lh3.googleusercontent.com/x', 'Bearer t'), okRedirect)).status, 200);
+});

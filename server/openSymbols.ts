@@ -6,9 +6,12 @@
  *  - reads the secret from the OPENSYMBOLS_SECRET environment variable (set in the host's
  *    dashboard — never committed), swaps it for a short-lived token, and searches,
  *  - returns only results with a licence and an https image, flagged safe for children,
+ *  - only answers Mimzi's own pages (same-origin check), so other sites can't spend the key,
  *  - stores and logs nothing.
  * Without a secret it answers 503 { error: "not-configured" } and Mimzi hides OpenSymbols.
  */
+import { fromSameSite } from './sameOrigin';
+
 const API = 'https://www.opensymbols.org/api/v2';
 
 export interface OpenSymbol {
@@ -66,6 +69,7 @@ export function normalizeOpenSymbols(raw: unknown): OpenSymbol[] {
 
 export async function handleSymbolSearch(req: Request, secret: string | undefined, fetchImpl: typeof fetch = fetch): Promise<Response> {
   if (req.method !== 'GET') return json(405, { error: 'method' });
+  if (!fromSameSite(req)) return json(403, { error: 'forbidden' });
   if (!secret) return json(503, { error: 'not-configured' });
   const params = new URL(req.url).searchParams;
   const q = (params.get('q') ?? '').trim();

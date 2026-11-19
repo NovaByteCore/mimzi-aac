@@ -193,5 +193,7 @@ test('OpenSymbols function: secret stays server-side; token reused, refreshed on
   assert.equal(calls.filter((c) => c.includes('/token')).length, 2, 'new token after 401');
   assert.ok(!JSON.stringify(body).includes('shh'), 'secret never returned');
   assert.equal((await handleSymbolSearch(new Request('https://m.app/api/symbols?q='), 'shh', f)).status, 400);
+  const other = new Request('https://m.app/api/symbols?q=cup', { headers: { 'Sec-Fetch-Site': 'cross-site', Origin: 'https://evil.example' } });
+  assert.equal((await handleSymbolSearch(other, 'shh', f)).status, 403, 'other websites cannot spend the key');
   assert.equal((await handleSymbolSearch(new Request('https://m.app/api/symbols?q=cup&locale=en-US'), 'shh', f)).status, 400);
 });
