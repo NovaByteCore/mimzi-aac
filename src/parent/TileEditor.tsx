@@ -38,7 +38,7 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
     setSymbolInfo(info);
     setSymbolAuto(false);
   };
-  const picture = { symbol: symbol || undefined, symbolInfo, symbolAuto, autoArasaac: tile?.autoArasaac, fallbackSymbol: tile?.fallbackSymbol };
+  const picture = { id: tile?.id, symbol: symbol || undefined, symbolInfo, symbolAuto, autoArasaac: tile?.autoArasaac, fallbackSymbol: tile?.fallbackSymbol };
   const [pronunciation, setPronunciation] = useState(tile?.pronunciation ?? '');
   const [lang, setLang] = useState(tile?.lang ?? '');
   const [wordType, setWordType] = useState<WordType | ''>(tile?.wordType ?? (isNewTypeGuess(defaultCategoryId)));

@@ -10,6 +10,7 @@
  * Anything else (older text/emoji pictures) is not drawn: the bundled symbol or the word's
  * first letter is shown instead. Emoji are never used as vocabulary pictures.
  */
+import defaultPictures from '../../public/symbols/defaultPictures.json';
 import { config } from '../config';
 import { mulberryUrl } from './colors';
 
@@ -103,6 +104,14 @@ export const ARASAAC_STATIC = 'https://static.arasaac.org/pictograms';
  * (static.arasaac.org doesn't), so the service worker can save a normal — not opaque —
  * copy for offline use, which keeps storage use small. Verified against the live service.
  */
+const bundledIds = new Set(defaultPictures.ids);
+const starterPictures: Readonly<Record<string, Tile['autoArasaac']>> = defaultPictures.tiles;
+const base = ((import.meta.env ?? {}) as { BASE_URL?: string }).BASE_URL ?? '/';
+
+export function bundledArasaacUrl(id: number | string): string | undefined {
+  return bundledIds.has(Number(id)) ? `${base}symbols/arasaac/${id}.webp` : undefined;
+}
+
 export function arasaacUrl(id: number | string): string {
   return `${ARASAAC_API}/pictograms/${id}`;
 }
@@ -163,25 +172,27 @@ export interface Shown {
  *  - anything whose licence this deployment can't use falls back to the bundled picture.
  */
 export function shownSymbol(
-  tile: Pick<Tile, 'symbol' | 'symbolAuto' | 'autoArasaac' | 'symbolInfo' | 'fallbackSymbol'>,
+  tile: Pick<Tile, 'symbol' | 'symbolAuto' | 'autoArasaac' | 'symbolInfo' | 'fallbackSymbol'> & Partial<Pick<Tile, 'id'>>,
   settings: Pick<Settings, 'symbolStyle'>,
   commercialUse = config.commercialUse,
 ): Shown {
   const bundled = tile.fallbackSymbol ?? (tile.symbol && /^(mul|svg):/.test(tile.symbol) ? tile.symbol : undefined);
-  if (tile.symbolAuto && tile.autoArasaac && effectiveStyle(settings, commercialUse) === 'arasaac') {
-    return { url: arasaacUrl(tile.autoArasaac.id), fallback: bundled, info: arasaacInfo(tile.autoArasaac.id, tile.autoArasaac.name) };
+  if (tile.symbolAuto && effectiveStyle(settings, commercialUse) === 'arasaac') {
+    const pictogram = tile.id ? starterPictures[tile.id] : tile.autoArasaac;
+    const url = pictogram && bundledArasaacUrl(pictogram.id);
+    if (pictogram && url) return { url, fallback: bundled, info: arasaacInfo(pictogram.id, pictogram.name) };
   }
   const s = tile.symbol;
   if (!s) return {};
   if (s.startsWith('arasaac:')) {
     const info = tile.symbolInfo ?? arasaacInfo(s.slice(8), '');
-    return licenseAllowed(info, commercialUse) ? { url: arasaacUrl(s.slice(8)), fallback: bundled, info } : { symbol: bundled, info: bundled ? bundledInfo(bundled) : undefined };
+    return licenseAllowed(info, commercialUse) ? { url: localSymbolData(info.localImage) ?? bundledArasaacUrl(s.slice(8)) ?? arasaacUrl(s.slice(8)), fallback: bundled, info } : { symbol: bundled, info: bundled ? bundledInfo(bundled) : undefined };
   }
   if (s.startsWith('os:')) {
     const info = tile.symbolInfo;
-    return info?.url && licenseAllowed(info, commercialUse) ? { url: info.url, fallback: bundled, info } : { symbol: bundled, info: bundled ? bundledInfo(bundled) : undefined };
+    return info?.url && licenseAllowed(info, commercialUse) ? { url: localSymbolData(info.localImage) ?? info.url, fallback: bundled, info } : { symbol: bundled, info: bundled ? bundledInfo(bundled) : undefined };
   }
-  if (s.startsWith('mul:')) return { url: mulberryUrl(s.slice(4)), info: bundledInfo(s) };
+  if (s.startsWith('mul:')) return { url: localSymbolData(tile.symbolInfo?.localImage) ?? mulberryUrl(s.slice(4)), info: tile.symbolInfo ?? bundledInfo(s) };
   if (s.startsWith('svg:')) return { symbol: s, info: bundledInfo(s) };
   // Older text/emoji pictures are no longer drawn: use the bundled symbol, else the first letter.
   if (bundled?.startsWith('mul:')) return { url: mulberryUrl(bundled.slice(4)), info: bundledInfo(bundled) };
@@ -194,7 +205,7 @@ export function remoteSymbolUrls(tiles: Tile[], settings: Pick<Settings, 'symbol
   for (const t of tiles) {
     if (t.deletedAt) continue;
     const s = shownSymbol(t, settings);
-    if (s.url) urls.add(s.url);
+    if (s.url && !s.url.startsWith('data:')) urls.add(s.url);
   }
   return [...urls];
 }
@@ -212,4 +223,11 @@ export function librariesInUse(tiles: Tile[], settings: Pick<Settings, 'symbolSt
     else map.set(key, { info, count: 1 });
   }
   return [...map.values()].sort((a, b) => b.count - a.count);
+}
+
+// Validate embedded copies from backups as well as newly downloaded images.
+export function localSymbolData(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length <= 1_400_000 &&
+    /^data:image\/(?:png|jpeg|webp|gif|svg\+xml|avif);base64,[A-Za-z0-9+/=]+$/.test(value)
+    ? value : undefined;
 }

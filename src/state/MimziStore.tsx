@@ -8,8 +8,7 @@ import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
 import { applyNewDefaultsV5, fixArasaacPicksV2, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
-import { findStarterPictures, needsArasaac } from '../lib/arasaac';
-import { effectiveStyle } from '../lib/symbols';
+import defaultPictures from '../../public/symbols/defaultPictures.json';
 import { mergeMyDay, mergeSettings } from '../lib/defaults';
 import { moveTile as computeMove, nextOrder, slotMap } from '../lib/grid';
 import { createBackup, type BackupFile, type RestoredData } from '../lib/backup';
@@ -95,7 +94,6 @@ export interface MimziActions {
    */
   setTilePicture(id: string, picked: { kind: 'symbol'; symbol: string; info: SymbolInfo } | { kind: 'photo'; photoId: string; media?: MediaRecord }): Promise<void>;
   /** Look for ARASAAC pictures for starter words now (e.g. after coming online). */
-  findSymbols(): void;
 }
 
 /** A first-run grid that suits the screen: 4 × 6 on tablets, 4 × 4 on phones. */
@@ -232,7 +230,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
             mediaUrls,
             mediaMime,
             sync: account ? { phase: 'idle', account, lastSyncedAt } : { phase: 'off' },
-            symbols: { phase: 'idle', pending: 0, missing: Object.keys((await db.getKv<Record<string, string>>('symbols:missing')) ?? {}) },
+            symbols: { phase: 'idle', pending: 0, missing: defaultPictures.missing },
           });
         }
       } catch (e) {
@@ -641,84 +639,11 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  /* Automatic ARASAAC pictures for starter words: found in the background, a few at a time,
-     only changing each word's picture (never its place, label, speech or sign). */
-  const finding = useRef<{ cancelled: boolean } | null>(null);
-  const findSymbols = useCallback(() => {
-    const d = dataRef.current;
-    if (d.status !== 'ready' || finding.current) return;
-    if (effectiveStyle(d.settings) !== 'arasaac') {
-      setData((x) => ({ ...x, symbols: { ...x.symbols, phase: 'off', pending: 0 } }));
-      return;
-    }
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      setData((x) => ({ ...x, symbols: { ...x.symbols, phase: 'offline', pending: needsArasaac(x.tiles).length } }));
-      return;
-    }
-    void (async () => {
-      const missingMap = (await db.getKv<Record<string, string>>('symbols:missing')) ?? {};
-      const todo = needsArasaac(dataRef.current.tiles, missingMap);
-      if (!todo.length) {
-        setData((x) => ({ ...x, symbols: { phase: 'idle', pending: 0, missing: Object.keys(missingMap) } }));
-        return;
-      }
-      const signal = { cancelled: false };
-      finding.current = signal;
-      let pending = todo.length;
-      setData((x) => ({ ...x, symbols: { ...x.symbols, phase: 'finding', pending } }));
-      let batch: Record<string, { id: number; name: string }> = {};
-      const flush = async () => {
-        const found = batch;
-        batch = {};
-        const ids = Object.keys(found);
-        if (!ids.length) return;
-        const changed = dataRef.current.tiles
-          .filter((t) => found[t.id] && t.symbolAuto && !t.autoArasaac)
-          .map((t) => ({ ...t, autoArasaac: found[t.id], updatedAt: Date.now() }));
-        if (changed.length) await db.putMany('tiles', changed);
-        const byId = new Map(changed.map((t) => [t.id, t]));
-        setData((x) => ({ ...x, tiles: x.tiles.map((t) => byId.get(t.id) ?? t), symbols: { ...x.symbols, pending } }));
-      };
-      const result = await findStarterPictures(
-        todo,
-        async (tileId, found) => {
-          batch[tileId] = found;
-          pending--;
-          if (Object.keys(batch).length >= 12) await flush();
-        },
-        {
-          signal,
-          onMissing: (tileId) => {
-            pending--;
-            const t = todo.find((x) => x.id === tileId);
-            if (t) missingMap[tileId] = t.label;
-          },
-        },
-      );
-      await flush();
-      await db.setKv('symbols:missing', missingMap);
-      finding.current = null;
-      setData((x) => ({
-        ...x,
-        symbols: { phase: result.failed ? 'offline' : 'idle', pending: needsArasaac(x.tiles, missingMap).length, missing: Object.keys(missingMap) },
-      }));
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (data.status !== 'ready') return;
-    findSymbols();
-    const on = () => findSymbols();
-    window.addEventListener('online', on);
-    return () => window.removeEventListener('online', on);
-  }, [data.status, data.settings.symbolStyle, findSymbols]);
-
   const value = useMemo(
     () => ({
       ...data,
       setTileSymbol,
       setTilePicture,
-      findSymbols,
       saveTile,
       softDeleteTile,
       restoreTile,
@@ -746,7 +671,6 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       data,
       setTileSymbol,
       setTilePicture,
-      findSymbols,
       saveTile,
       softDeleteTile,
       restoreTile,

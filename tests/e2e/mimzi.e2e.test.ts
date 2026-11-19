@@ -80,7 +80,7 @@ const defaultStub = speechStubTemplate.replace('__FAKE_VOICES__', JSON.stringify
 /* ARASAAC and OpenSymbols are simulated so tests never depend on outside services.
    bestsearch: every word has a pictogram except those in ARASAAC_NONE; images are a test PNG. */
 const ARASAAC_NONE = new Set(['zzz']);
-const pictoId = (w: string) => 1000 + [...w].reduce((a, c) => a + c.charCodeAt(0), 0);
+const pictoId = (w: string) => 500000 + [...w].reduce((a, c) => a + c.charCodeAt(0), 0);
 let osMode: 'off' | 'on' = 'off';
 async function mockSymbolServices(ctx: BrowserContext) {
   const png = await readFile(PHOTO);
@@ -580,7 +580,7 @@ test('First / Then: edit FIRST and THEN (words, speech, ARASAAC symbol, photo, c
   await pickPhoto(page, 'ft-then');
   // Live preview shows exactly what the child will see.
   await preview(page).getByText('Put on shoes').waitFor();
-  await preview(page).locator(`img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('shoes')}"]`).waitFor();
+  await preview(page).locator(`img.tile-symbol[src^="data:image/png;base64,"]`).waitFor();
   await preview(page).locator('.sched-card.tile-green').waitFor();
   await preview(page).locator('img.tile-photo').waitFor();
   await saveSchedule(page);
@@ -594,7 +594,7 @@ test('First / Then: edit FIRST and THEN (words, speech, ARASAAC symbol, photo, c
   await openMyDay(page);
   await page.locator('.first-then').getByText('Go outside').waitFor();
   await page.locator('.first-then img.tile-photo').waitFor();
-  await page.locator(`.first-then img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('shoes')}"]`).waitFor();
+  await page.locator(`.first-then img.tile-symbol[src^="data:image/png;base64,"]`).waitFor();
   // The AAC board itself is untouched.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Talk' }).click();
   assert.deepEqual(await slots(page), before, 'no vocabulary moved');
@@ -777,13 +777,16 @@ test('schedule pictures (ARASAAC symbol and photo) still show offline', async ()
   await pickArasaac(page, 'ft-first', 'teeth');
   await pickPhoto(page, 'ft-then');
   await saveSchedule(page);
-  const url = `https://api.arasaac.org/v1/pictograms/${pictoId('teeth')}`;
-  await page.waitForFunction(async (u) => !!(await (await caches.open('mimzi-symbols-v1')).match(u)), url, { timeout: 20000 });
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  const symbol = '.first-then img.tile-symbol[src^="data:image/png;base64,"]';
+  const original = await page.locator(symbol).getAttribute('src');
   await ctx.unrouteAll({ behavior: 'ignoreErrors' });
   await ctx.setOffline(true);
   await page.reload();
   await openMyDay(page);
-  for (const sel of [`.first-then img.tile-symbol[src="${url}"]`, '.first-then img.tile-photo']) {
+  assert.equal(await page.locator(symbol).getAttribute('src'), original);
+  for (const sel of [symbol, '.first-then img.tile-photo']) {
     await page.waitForFunction((s) => {
       const el = document.querySelector(s) as HTMLImageElement | null;
       return !!el && el.complete && el.naturalWidth > 0;
@@ -1369,15 +1372,15 @@ test('symbols: every starter word gets an ARASAAC picture automatically; nothing
   // "More" keeps Mimzi's bubble drawing (ARASAAC's is abstract); "all done" is pinned to the open hands.
   assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] img.tile-symbol').count(), 0);
   assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] .tile-media svg').count(), 1);
-  assert.equal(await pictureOf(page, 'core-all-done'), 'https://api.arasaac.org/v1/pictograms/28429', 'open-hands "all done"');
-  assert.equal(await pictureOf(page, 'core-no'), 'https://api.arasaac.org/v1/pictograms/5526', 'red X "no"');
+  assert.equal(await pictureOf(page, 'core-all-done'), '/symbols/arasaac/28429.webp', 'open-hands "all done"');
+  assert.equal(await pictureOf(page, 'core-no'), '/symbols/arasaac/5526.webp', 'red X "no"');
   assert.deepEqual(await slots(page), before, 'positions unchanged');
   assert.equal(await page.locator('.board-grid .tile-emoji').count(), 0, 'no emoji artwork');
   await page.locator('.board-grid [data-tile-id="core-more"]').click();
   assert.equal((await spoken(page)).at(-1), 'more', 'speech unchanged');
   await enterParentMode(page);
   await page.getByRole('tab', { name: 'Symbol Library' }).click();
-  await page.getByTestId('symbol-status').getByText(/starter words have their ARASAAC picture/).waitFor({ timeout: 20000 });
+  await page.getByTestId('symbol-status').getByText(/Starter pictures are included/).waitFor({ timeout: 20000 });
   await page.getByTestId('symbol-credits').getByText(/Sergio Palao/).waitFor();
   await page.getByTestId('symbol-credits').getByText(/CC \(BY-NC-SA\)/).waitFor();
   await ctx.close();
@@ -1417,9 +1420,10 @@ test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) â
   await page.getByRole('tab', { name: 'Symbol Library' }).click();
   await page.getByTestId('symbol-credits').getByText(/tawasol \(via OpenSymbols\)/).waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  assert.equal(await pictureOf(page, 'core-help'), `https://api.arasaac.org/v1/pictograms/${pictoId('help') + 1}`);
-  assert.equal(await pictureOf(page, 'core-play'), 'https://cdn.opensymbols.test/swing2.png');
-  assert.match((await pictureOf(page, 'core-go')) ?? '', /mulberry\/go_%2C_to\.svg$/);
+  assert.match((await pictureOf(page, 'core-help')) ?? '', /^data:image\/png;base64,/);
+  const chosenPlay = await pictureOf(page, 'core-play');
+  assert.match(chosenPlay ?? '', /^data:image\/png;base64,/);
+  assert.match((await pictureOf(page, 'core-go')) ?? '', /^data:image\/svg\+xml;base64,/);
   assert.deepEqual(await slots(page), before, 'no word moved');
   await page.locator('.board-grid [data-tile-id="core-help"]').click();
   assert.equal((await spoken(page)).at(-1), 'help');
@@ -1431,7 +1435,7 @@ test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) â
   await page.locator('[data-testid="style-mulberry"]:checked').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   assert.match((await pictureOf(page, 'core-want')) ?? '', /mulberry\/want_%2C_to\.svg$/, 'automatic pictures follow the style');
-  assert.equal(await pictureOf(page, 'core-play'), 'https://cdn.opensymbols.test/swing2.png', 'chosen picture kept');
+  assert.equal(await pictureOf(page, 'core-play'), chosenPlay, 'chosen picture kept');
   assert.deepEqual(await slots(page), before);
   osMode = 'off';
   await ctx.close();
@@ -1452,7 +1456,7 @@ test('symbols: a photo can replace any symbol, and removing it brings the symbol
   await page.getByRole('button', { name: /Remove photo/ }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  await page.locator(`.board-grid [data-tile-id="core-eat"] img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('eat')}"]`).waitFor();
+  await page.locator(`.board-grid [data-tile-id="core-eat"] img.tile-symbol[src="/symbols/arasaac/2349.webp"]`).waitFor();
   await ctx.close();
 });
 
@@ -1476,12 +1480,33 @@ test('symbols: downloaded ARASAAC pictures work offline', async () => {
   await ctx.close();
 });
 
-test('symbols: words ARASAAC has no picture for keep their built-in picture', async () => {
-  ARASAAC_NONE.add('i');
+test('symbols: failed download leaves the picture untouched and can be retried', async () => {
   const { ctx, page } = await openApp();
-  await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 17, null, { timeout: 20000 });
-  assert.match((await pictureOf(page, 'core-i')) ?? '', /mulberry\/I\.svg$/);
-  ARASAAC_NONE.delete('i');
+  const before = await pictureOf(page, 'core-help');
+  const url = `https://api.arasaac.org/v1/pictograms/${pictoId('help') + 1}`;
+  let fail = true;
+  await ctx.route(url, async (route) => {
+    if (fail) return route.abort();
+    return route.fallback();
+  });
+  await enterParentMode(page);
+  await page.locator('[data-change-picture="core-help"]').click();
+  await choosePictureFromSearch(page, 'help', `arasaac:${pictoId('help') + 1}`);
+  const picker = page.getByTestId('picture-picker');
+  await picker.getByRole('alert').getByText(/current picture is still in place/).waitFor();
+  assert.equal(before, '/symbols/arasaac/4570.webp');
+  fail = false;
+  await picker.getByRole('button', { name: 'Retry', exact: true }).click();
+  await picker.waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  const saved = await pictureOf(page, 'core-help');
+  assert.match(saved ?? '', /^data:image\/png;base64,/);
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller), null, { timeout: 30000 });
+  await ctx.setOffline(true);
+  await page.close();
+  const reopened = await ctx.newPage();
+  await reopened.goto(BASE);
+  assert.equal(await pictureOf(reopened, 'core-help'), saved);
   await ctx.close();
 });
 
@@ -1588,7 +1613,7 @@ for (const k of KINDS) {
     await card.locator('.card-picture img.tile-photo').waitFor(); // card editor shows the new photo before Save
     await preview(page).locator('img.tile-photo').first().waitFor(); // and so does the live preview
     await pickArasaac(page, k.card, 'swing');
-    await card.locator(`.card-picture img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('swing')}"]`).waitFor();
+    await card.locator(`.card-picture img.tile-symbol[src^="data:image/png;base64,"]`).waitFor();
     // Save as template, duplicate, rename the copy.
     await editor(page).getByTestId('template-name').fill('Plan A');
     await editor(page).getByTestId('save-template').click();
@@ -1600,7 +1625,7 @@ for (const k of KINDS) {
     await editor(page).locator('[data-template="Plan B"]').getByRole('button', { name: 'Use' }).click();
     assert.equal(await editor(page).getByLabel(k.words).inputValue(), 'Blue swing');
     assert.equal(await editor(page).getByLabel(k.speak).inputValue(), 'Swing time');
-    await card.locator(`.card-picture.tile-blue img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('swing')}"]`).waitFor();
+    await card.locator(`.card-picture.tile-blue img.tile-symbol[src^="data:image/png;base64,"]`).waitFor();
     // Delete Plan A and save everything.
     await editor(page).getByRole('button', { name: 'Delete Plan A' }).click();
     await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
@@ -1629,7 +1654,7 @@ for (const k of KINDS) {
     const first = page.locator(k.childCard).first();
     await first.click();
     assert.equal((await spoken(page)).at(-1), `${k.spokenPrefix}Swing time`);
-    await first.locator(`img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('swing')}"]`).waitFor();
+    await first.locator(`img.tile-symbol[src^="data:image/png;base64,"]`).waitFor();
     if (k.kind !== 'reward') assert.match((await first.getAttribute('class')) ?? '', /tile-blue/);
     await ctx.close();
   });
@@ -2645,7 +2670,7 @@ for (const c of COMPACT) test(`pictures and Arrange words on a compact tablet ($
     return page.locator('.board-grid [data-tile-id="core-go"]');
   };
   const goTile = await findGo();
-  assert.equal(await goTile.locator('img.tile-symbol').getAttribute('src'), 'https://api.arasaac.org/v1/pictograms/2339', 'new picture');
+  assert.equal(await goTile.locator('img.tile-symbol').getAttribute('src'), '/symbols/arasaac/2339.webp', 'new picture');
   const played = (await playedAudio(page)).length;
   await goTile.click();
   await page.waitForTimeout(300);

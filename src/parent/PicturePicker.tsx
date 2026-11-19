@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode 
 import { config } from '../config';
 import { SYMBOL_KEYS } from '../data/symbols';
 import { searchArasaac } from '../lib/arasaac';
-import { bundledInfo, libraryAllowed, LIBRARIES, licenseFlags, type LibraryId } from '../lib/symbols';
+import { bundledArasaacUrl, arasaacUrl, localSymbolData, bundledInfo, libraryAllowed, LIBRARIES, licenseFlags, type LibraryId } from '../lib/symbols';
 import { addRecentPicture, getRecentPictures, onRecentPictures, type RecentPicture } from '../lib/recentPictures';
 import { everydayPictures } from '../lib/pictureSets';
 import { useDialogFocus } from '../lib/useDialogFocus';
@@ -186,12 +186,53 @@ export function PicturePicker({
     return { photos, symbols: [...symbols].map(([symbol, info]) => ({ symbol, info, name: info.name })) };
   }, [mediaUrls, mediaMime, myDay]);
 
-  const use = () => {
-    if (!chosen) return;
-    if (chosen.photoId) onUse({ kind: 'photo', photoId: chosen.photoId, media: chosen.media });
-    else {
-      void addRecentPicture(chosen.symbol, chosen.info);
-      onUse({ kind: 'symbol', symbol: chosen.symbol, info: chosen.info });
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), [chosen]);
+
+  const use = async () => {
+    if (!chosen || request.current) return;
+    if (chosen.photoId) {
+      onUse({ kind: 'photo', photoId: chosen.photoId, media: chosen.media });
+      return;
+    }
+    const controller = new AbortController();
+    request.current = controller;
+    setSaveFailed(false);
+    setSaving(true);
+    let info = chosen.info;
+    try {
+      const isArasaac = chosen.symbol.startsWith('arasaac:');
+      if (isArasaac && bundledArasaacUrl(chosen.symbol.slice(8))) {
+        // The same copy ships in the APK and is precached by the web app.
+      } else if (!chosen.symbol.startsWith('svg:') && !localSymbolData(info.localImage)) {
+        const url = isArasaac ? arasaacUrl(chosen.symbol.slice(8)) : info.url;
+        if (!url) throw new Error('Missing picture URL');
+        const response = await fetch(url, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (!response.ok) throw new Error('Picture download failed');
+        const blob = await response.blob();
+        if (!blob.size || blob.size > 1024 * 1024) throw new Error('Invalid picture size');
+        const data = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(reader.error);
+          reader.onload = () => resolve(String(reader.result));
+          reader.readAsDataURL(blob);
+        });
+        if (!localSymbolData(data)) throw new Error('Unsupported picture format');
+        const picture = new Image();
+        picture.src = data;
+        await picture.decode();
+        info = { ...info, localImage: data };
+      }
+      if (controller.signal.aborted) return;
+      await addRecentPicture(chosen.symbol, info);
+      if (!controller.signal.aborted) onUse({ kind: 'symbol', symbol: chosen.symbol, info });
+    } catch {
+      if (!controller.signal.aborted) setSaveFailed(true);
+    } finally {
+      request.current = null;
+      setSaving(false);
     }
   };
 
@@ -201,7 +242,7 @@ export function PicturePicker({
     if (f && f.type.startsWith('image/')) setCropFile(f);
   };
 
-  const pick = (c: Candidate) => setChosen(c);
+  const pick = (c: Candidate) => { setSaveFailed(false); setChosen(c); };
   // A newly taken photo is previewed from its blob (released when it changes).
   const previewUrl = useMemo(() => (chosen?.media ? URL.createObjectURL(chosen.media.blob) : undefined), [chosen?.media]);
   useEffect(
@@ -256,8 +297,9 @@ export function PicturePicker({
         ) : (
           <p className="muted">Tap a picture to see it here.</p>
         )}
-        <button type="button" className="btn btn-primary picker-use" disabled={!chosen} onClick={use} data-testid="use-picture">
-          <Icon name="check" /> Use picture
+        {saveFailed && <p role="alert">This picture couldn’t be saved offline. Your current picture is still in place.</p>}
+        <button type="button" className="btn btn-primary picker-use" disabled={!chosen || saving} onClick={() => void use()} data-testid="use-picture">
+          <Icon name="check" /> {saving ? 'Saving…' : saveFailed ? 'Retry' : 'Use picture'}
         </button>
       </div>
 

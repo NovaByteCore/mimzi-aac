@@ -16,15 +16,13 @@ function useEditor() {
 
 /** Symbol Library — default picture style, every library, and full credits. */
 export function SymbolLibraryPanel() {
-  const { tiles, settings, updateSettings, setTileSymbol, symbols, findSymbols } = useMimzi();
+  const { tiles, settings, updateSettings, setTileSymbol } = useMimzi();
   const [picked, setPicked] = useState<{ symbol: string; info: SymbolInfo } | null>(null);
   const [target, setTarget] = useState('');
   const [status, setStatus] = useState('');
   const words = tiles.filter((t) => !t.deletedAt).sort((a, b) => a.label.localeCompare(b.label));
   const style = effectiveStyle(settings);
   const arasaacOn = libraryAllowed('arasaac');
-  const starters = tiles.filter((t) => t.symbolAuto && !t.deletedAt);
-  const ready = starters.filter((t) => t.autoArasaac).length;
   const credits = librariesInUse(tiles, settings);
   return (
     <section className="panel">
@@ -53,22 +51,7 @@ export function SymbolLibraryPanel() {
         </label>
       </div>
       {!arasaacOn && <p className="muted small">ARASAAC is off because this copy of Mimzi is set up for commercial use; its licence is non-commercial only.</p>}
-      {style === 'arasaac' && (
-        <p className="muted small" data-testid="symbol-status">
-          {symbols.phase === 'finding'
-            ? `Finding ARASAAC pictures… ${ready} of ${starters.length} ready.`
-            : symbols.phase === 'offline'
-              ? `${ready} of ${starters.length} ARASAAC pictures ready. The rest download next time this device is online — until then they show the built-in picture.`
-              : `${ready} of ${starters.length} starter words have their ARASAAC picture, saved for offline use.`}
-          {symbols.missing.length > 0 && ` ARASAAC has no match for ${symbols.missing.length} (they keep the built-in picture).`}{' '}
-          {symbols.phase !== 'finding' && ready < starters.length && (
-            <button type="button" className="btn btn-quiet small" onClick={() => findSymbols()}>
-              Try again
-            </button>
-          )}
-        </p>
-      )}
-
+      {style === 'arasaac' && <p className="muted small" data-testid="symbol-status">Starter pictures are included for offline use.</p>}
       <h3>Find a symbol</h3>
       <PicturePicker inline showBack={false} allowPhoto={false} onCancel={() => setPicked(null)} onUse={(p) => p.kind === 'symbol' && setPicked({ symbol: p.symbol, info: p.info })} />
       {picked && (

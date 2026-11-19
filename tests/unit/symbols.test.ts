@@ -43,17 +43,15 @@ test('every starter word has a picture, chosen automatically, and none uses emoj
   }
 });
 
-test('ARASAAC is shown once found; bundled picture until then; the style can switch back', () => {
-  const more = seed.find((t) => t.id === 'core-want')!; // a word whose bundled picture is Mulberry
-  assert.equal(shownSymbol(more, {}, false).info?.library, 'mulberry', 'before download');
-  const found = { ...more, autoArasaac: { id: 2340, name: 'more' } };
-  const shown = shownSymbol(found, {}, false);
-  assert.equal(shown.url, arasaacUrl(2340));
-  assert.equal(shown.fallback, more.fallbackSymbol, 'falls back offline');
+test('default pictures resolve to bundled files even with old automatic choices', () => {
+  const want = seed.find((t) => t.id === 'core-want')!;
+  const previous = { ...want, autoArasaac: { id: 2340, name: 'more' } };
+  const shown = shownSymbol(want, {}, false);
+  assert.equal(shown.url, '/symbols/arasaac/5441.webp');
+  assert.equal(shownSymbol(previous, {}, false).url, shown.url);
   assert.equal(shown.info?.author, 'Sergio Palao');
-  assert.equal(shown.info?.license, 'CC BY-NC-SA 4.0');
-  assert.equal(shownSymbol(found, { symbolStyle: 'mulberry' }, false).info?.library, 'mulberry');
-  assert.equal(shownSymbol(found, {}, true).info?.library, 'mulberry', 'commercial use never shows ARASAAC');
+  assert.equal(shownSymbol(want, { symbolStyle: 'mulberry' }, false).info?.library, 'mulberry');
+  assert.equal(shownSymbol(want, {}, true).info?.library, 'mulberry');
 });
 
 test('a grown-up’s choice wins over the default style; disallowed licences fall back', () => {
@@ -64,12 +62,12 @@ test('a grown-up’s choice wins over the default style; disallowed licences fal
   assert.match(shownSymbol(mul, {}, false).url ?? '', /mulberry\/cup\.svg$/);
 });
 
-test('remote symbol URLs are listed for offline download; credits count each library', () => {
-  const tiles = [{ ...more, autoArasaac: { id: 1, name: 'more' } }, { ...seed[0], autoArasaac: { id: 2, name: 'I' } }, seed[2]];
+test('bundled symbol URLs and credits describe the pictures shown', () => {
+  const tiles = [more, seed[0], seed.find((tile) => tile.id === 'core-want')!];
   const urls = remoteSymbolUrls(tiles, {});
-  assert.ok(urls.includes(arasaacUrl(1)) && urls.includes(arasaacUrl(2)));
-  const credits = librariesInUse(tiles, {});
-  assert.equal(credits.find((c) => c.info.library === 'arasaac')?.count, 2);
+  assert.ok(urls.includes('/symbols/arasaac/2617.webp'));
+  assert.ok(urls.includes('/symbols/arasaac/5441.webp'));
+  assert.equal(librariesInUse(tiles, {}).find((c) => c.info.library === 'arasaac')?.count, 2);
 });
 
 /* ---------- ARASAAC client ---------- */

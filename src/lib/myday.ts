@@ -170,7 +170,7 @@ export function scheduleSymbolUrls(day: MyDay): string[] {
   for (const i of allScheduleItems(day)) {
     if (!i.symbol) continue;
     const s = shownSymbol({ symbol: i.symbol, symbolInfo: i.symbolInfo }, {});
-    if (s.url) urls.add(s.url);
+    if (s.url && !s.url.startsWith('data:')) urls.add(s.url);
   }
   return [...urls];
 }

@@ -1,3 +1,4 @@
+import { localSymbolData } from './symbols';
 /*
  * Backup export / import. A backup is one JSON file that includes photos and recordings
  * (base64). It is created on the device and never uploaded anywhere by Mimzi.
@@ -119,6 +120,7 @@ function cleanSymbolInfo(v: unknown): Tile['symbolInfo'] {
     id: v.id,
     name: str(v.name) ?? '',
     url: url && /^https:\/\//.test(url) ? url : url?.startsWith('/') ? url : undefined,
+    localImage: localSymbolData(v.localImage),
     author: str(v.author) ?? '',
     authorUrl: str(v.authorUrl),
     license: v.license,

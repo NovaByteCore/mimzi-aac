@@ -109,6 +109,8 @@ export interface SymbolInfo {
   id: string;
   name: string;
   url?: string;
+  /** Durable image copy saved with the picture metadata. */
+  localImage?: string;
   author: string;
   authorUrl?: string;
   license: string;

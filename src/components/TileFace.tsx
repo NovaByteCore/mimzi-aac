@@ -5,7 +5,7 @@ import { shownSymbol, type Shown } from '../lib/symbols';
 import { useOptionalMimzi } from '../state/MimziStore';
 import type { SymbolInfo, Tile } from '../types';
 
-type TilePicture = Pick<Tile, 'symbol' | 'symbolAuto' | 'autoArasaac' | 'symbolInfo' | 'fallbackSymbol'>;
+type TilePicture = Pick<Tile, 'symbol' | 'symbolAuto' | 'autoArasaac' | 'symbolInfo' | 'fallbackSymbol'> & Partial<Pick<Tile, 'id'>>;
 
 interface Props {
   /** A raw symbol reference (used when there's no tile, e.g. picker previews and page icons). */

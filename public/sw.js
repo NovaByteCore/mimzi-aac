@@ -14,7 +14,7 @@
  * symbol a grown-up picks from another library) are kept in their own cache, so once the
  * app has asked for them they work without internet.
  */
-const CACHE = 'mimzi-shell-v3';
+const CACHE = 'mimzi-shell-v4';
 const SYMBOLS = 'mimzi-symbols-v1';
 // Hosts often send `Vary: Origin` / `Vary: Accept-Encoding`; the page's module script
 // request carries an Origin header the precache request didn't, so match by URL only.
@@ -65,6 +65,14 @@ self.addEventListener('install', (event) => {
     (async () => {
       const cache = await caches.open(CACHE);
       await cache.addAll(STATIC_FILES);
+      const response = await fetch(new URL('symbols/defaultPictures.json', SCOPE));
+      if (!response.ok) throw new Error('Could not load the offline picture list');
+      const pictures = await response.json();
+      const symbols = await caches.open(SYMBOLS);
+      await symbols.addAll([
+        ...pictures.ids.map((id) => `symbols/arasaac/${id}.webp`),
+        ...pictures.mulberry.map((name) => `symbols/mulberry/${encodeURIComponent(name)}.svg`),
+      ].map((path) => new URL(path, SCOPE).href));
       await cacheShell();
       await self.skipWaiting();
     })(),
