@@ -123,6 +123,13 @@ export interface Settings {
   speechRate: number;
   /** Preferred voice (SpeechSynthesisVoice.voiceURI) on this device, if chosen. */
   voiceURI?: string;
+  /**
+   * The last voice a grown-up picked on any device (by name). It syncs, so a second
+   * device uses the same voice when it has it, and explains the difference when it doesn't.
+   */
+  sharedVoiceName?: string;
+  /** Version of the voice defaults applied (2 = gentle 1.1 pitch, 0.9× speed). */
+  voiceDefaults?: number;
   speechLang: string;
   /** Multiplier for label text size. */
   textScale: number;

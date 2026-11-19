@@ -179,6 +179,11 @@ export function parseBackup(raw: unknown, currentPin?: Settings['pin']): Restore
   const merged = mergeSettings(isObj(settings) ? (settings as Partial<Settings>) : undefined);
   delete merged.pin;
   if (currentPin) merged.pin = currentPin;
+  // Voices are per device: the backed-up choice becomes the shared preference, used
+  // here if this device has the same voice and explained in Mimzi Voice if it doesn't.
+  if (merged.voiceName && !merged.sharedVoiceName) merged.sharedVoiceName = merged.voiceName;
+  delete merged.voiceURI;
+  delete merged.voiceName;
   const rawObs = Array.isArray(raw.observations) ? raw.observations : [];
   const observations: Observation[] = rawObs.map((o, i) => {
     if (!isObj(o) || typeof o.id !== 'string' || typeof o.target !== 'string') {

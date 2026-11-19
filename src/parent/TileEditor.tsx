@@ -187,6 +187,8 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                     rate: settings.speechRate,
                     lang: lang.trim() || settings.speechLang,
                     voiceURI: settings.voiceURI,
+                    voiceName: settings.voiceName,
+                    sharedVoiceName: settings.sharedVoiceName,
                     pitch: settings.speechPitch,
                     volume: settings.speechVolume,
                   })

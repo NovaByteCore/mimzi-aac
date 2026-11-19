@@ -32,28 +32,33 @@ after(async () => {
 });
 
 // Plain string so the test runner's transpiler can't inject helpers into browser code.
-const speechStub = `
+const DEFAULT_VOICES = [
+  { name: 'Test Voice A', voiceURI: 'voice-a', lang: 'en-US', localService: true, default: true },
+  { name: 'Test Voice B', voiceURI: 'voice-b', lang: 'en-US', localService: false, default: false },
+];
+const speechStubTemplate = `
   window.__spoken = [];
   window.__voices = [];
   window.__rates = [];
-  const fakeVoices = [
-    { name: 'Test Voice A', voiceURI: 'voice-a', lang: 'en-US', localService: true, default: true },
-    { name: 'Test Voice B', voiceURI: 'voice-b', lang: 'en-US', localService: false, default: false },
-  ];
+  window.__pitches = [];
+  const fakeVoices = __FAKE_VOICES__;
   const synth = {
     speaking: false, paused: false, pending: false,
     getVoices: () => fakeVoices,
-    speak(u) { window.__spoken.push(u.text); window.__voices.push(u.voice ? u.voice.voiceURI : null); window.__rates.push(u.rate); setTimeout(() => u.onend && u.onend(new Event('end')), 5); },
+    speak(u) { window.__spoken.push(u.text); window.__voices.push(u.voice ? u.voice.voiceURI : null); window.__rates.push(u.rate); window.__pitches.push(u.pitch); setTimeout(() => u.onend && u.onend(new Event('end')), 5); },
     cancel() {}, resume() {}, addEventListener() {}, removeEventListener() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
   // The real utterance only accepts real SpeechSynthesisVoice objects; the fake voices need a plain one.
   window.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; this.voice = null; this.rate = 1; this.pitch = 1; this.volume = 1; this.lang = ''; } };
 `;
+const stubWith = (voices: object[]) => speechStubTemplate.replace('__FAKE_VOICES__', JSON.stringify(voices));
+const defaultStub = speechStubTemplate.replace('__FAKE_VOICES__', JSON.stringify(DEFAULT_VOICES));
 
-async function openApp(viewport = IPAD): Promise<{ ctx: BrowserContext; page: Page }> {
+
+async function openApp(viewport = IPAD, voices: object[] = DEFAULT_VOICES): Promise<{ ctx: BrowserContext; page: Page }> {
   const ctx = await browser.newContext({ viewport, hasTouch: true, acceptDownloads: true, permissions: ['microphone'] });
-  await ctx.addInitScript({ content: speechStub });
+  await ctx.addInitScript({ content: stubWith(voices) });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => {
     throw e;
@@ -79,6 +84,7 @@ async function findTile(page: Page, selector: string) {
 
 const spoken = (page: Page) => page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken);
 const voicesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __voices: (string | null)[] }).__voices);
+const pitchesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __pitches: number[] }).__pitches);
 const ratesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __rates: number[] }).__rates);
 
 async function hold(page: Page, selector: string | ReturnType<Page['locator']>, ms: number) {
@@ -838,7 +844,7 @@ test('V3-7: hide and restore a word — same spot, picture and speech', async ()
 
 test('V3-6: two new words every Monday — scheduled, then waiting for approval on the day, then added', async () => {
   const ctx = await browser.newContext({ viewport: IPAD, hasTouch: true });
-  await ctx.addInitScript({ content: speechStub });
+  await ctx.addInitScript({ content: defaultStub });
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date('2026-11-18T10:00:00') }); // a Wednesday
   await page.goto(BASE);
@@ -902,4 +908,92 @@ test('folders, Back and Home keep the message', async () => {
   await page.getByRole('button', { name: 'Speak message' }).click();
   assert.equal((await spoken(page)).at(-1), 'I happy');
   await ctx.close();
+});
+
+/* ---------------- Natural voice ---------------- */
+
+const IPAD_VOICES = [
+  { name: 'Fred', voiceURI: 'com.apple.speech.synthesis.voice.Fred', lang: 'en-US', localService: true, default: true },
+  { name: 'Samantha', voiceURI: 'com.apple.voice.compact.en-US.Samantha', lang: 'en-US', localService: true, default: false },
+  { name: 'Ava (Enhanced)', voiceURI: 'com.apple.voice.enhanced.en-US.Ava', lang: 'en-US', localService: true, default: false },
+  { name: 'Bubbles', voiceURI: 'com.apple.speech.synthesis.voice.Bubbles', lang: 'en-US', localService: true, default: false },
+];
+
+test('voice: the most natural voice is used automatically at 0.9× with a gentle pitch', async () => {
+  const { ctx, page } = await openApp(IPAD, IPAD_VOICES);
+  await page.locator('.board-grid [data-tile-id="core-go"]').click();
+  assert.equal((await voicesUsed(page)).at(-1), 'com.apple.voice.enhanced.en-US.Ava', 'Enhanced voice beats the robotic device default');
+  assert.equal((await ratesUsed(page)).at(-1), 0.9);
+  assert.equal((await pitchesUsed(page)).at(-1), 1.1);
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.getByTestId('current-voice').getByText('Ava (Enhanced)').waitFor();
+  const order = await page.locator('[data-voice]').evaluateAll((els) => els.map((e) => e.getAttribute('data-voice')));
+  assert.equal(order[0], 'com.apple.voice.enhanced.en-US.Ava', 'most natural listed first');
+  assert.ok(order.indexOf('com.apple.speech.synthesis.voice.Fred') > order.indexOf('com.apple.voice.compact.en-US.Samantha'), 'robotic voices last');
+  await page.locator('[data-voice="com.apple.voice.enhanced.en-US.Ava"]').getByText('★ Most natural').waitFor();
+  await ctx.close();
+});
+
+test('voice: a chosen voice is saved, survives a reload and is used for words, sentences and new words', async () => {
+  const { ctx, page } = await openApp(IPAD, IPAD_VOICES);
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.locator('[data-voice="com.apple.voice.compact.en-US.Samantha"]').getByRole('button', { name: 'Preview Samantha' }).click();
+  assert.equal((await voicesUsed(page)).at(-1), 'com.apple.voice.compact.en-US.Samantha', 'preview uses that voice');
+  await page.locator('[data-voice="com.apple.voice.compact.en-US.Samantha"]').getByText('Samantha', { exact: true }).click();
+  await page.locator('.voice-row.voice-on[data-voice="com.apple.voice.compact.en-US.Samantha"]').waitFor();
+  await page.getByTestId('speech-pitch').fill('1.2');
+  await page.getByRole('tab', { name: 'Edit AAC board' }).click();
+  await page.getByRole('button', { name: '+ Add picture' }).click();
+  await page.getByLabel('Word on the tile').fill('Slide');
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-tile[aria-label="Edit Slide"]').waitFor();
+  await page.reload();
+  await page.waitForSelector('.board-grid .tile');
+  const SAM = 'com.apple.voice.compact.en-US.Samantha';
+  await page.locator('.board-grid [data-tile-id="core-i"]').click();
+  await page.locator('.board-grid [data-tile-id="core-want"]').click();
+  assert.equal((await voicesUsed(page)).at(-1), SAM, 'still Samantha after reload');
+  assert.equal((await pitchesUsed(page)).at(-1), 1.2, 'pitch saved');
+  await page.getByRole('button', { name: 'Speak message' }).click();
+  assert.equal((await spoken(page)).at(-1), 'I want');
+  assert.equal((await voicesUsed(page)).at(-1), SAM, 'sentence uses the same voice');
+  await (await findTile(page, '.tile[aria-label="Slide"]')).click();
+  assert.equal((await spoken(page)).at(-1), 'Slide');
+  assert.equal((await voicesUsed(page)).at(-1), SAM, 'a brand-new word uses the same voice, no recording');
+  await ctx.close();
+});
+
+test('voice: on a device without the chosen voice, Mimzi explains and a replacement can be picked', async () => {
+  const ipad = await openApp(IPAD, IPAD_VOICES);
+  await enterParentMode(ipad.page);
+  await ipad.page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await ipad.page.locator('[data-voice="com.apple.voice.enhanced.en-US.Ava"]').getByText('Ava (Enhanced)', { exact: true }).click();
+  await ipad.page.locator('.voice-row.voice-on[data-voice="com.apple.voice.enhanced.en-US.Ava"]').waitFor();
+  await ipad.page.getByRole('tab', { name: 'Backup' }).click();
+  const [download] = await Promise.all([ipad.page.waitForEvent('download'), ipad.page.getByRole('button', { name: /Make a backup file/ }).click()]);
+  const file = SHOTS + 'voice-backup.json';
+  await download.saveAs(file);
+  await ipad.ctx.close();
+
+  const TABLET = [
+    { name: 'English United States', voiceURI: 'en-us-x-sfg-local', lang: 'en-US', localService: true, default: true },
+    { name: 'Google US English', voiceURI: 'Google US English', lang: 'en-US', localService: false, default: false },
+  ];
+  const tab = await openApp({ width: 960, height: 600 }, TABLET);
+  await enterParentMode(tab.page);
+  await tab.page.getByRole('tab', { name: 'Backup' }).click();
+  await tab.page.getByTestId('restore-input').setInputFiles(file);
+  await tab.page.getByRole('alertdialog').getByRole('button', { name: 'Restore backup' }).click();
+  await tab.page.getByText('Backup restored.').waitFor();
+  await tab.page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await tab.page.getByTestId('voice-other-device').getByText(/Ava \(Enhanced\)/).waitFor();
+  await tab.page.getByTestId('current-voice').getByText('Google US English').waitFor();
+  await tab.page.locator('[data-voice="en-us-x-sfg-local"]').getByText('English United States', { exact: true }).click();
+  await tab.page.getByTestId('voice-other-device').waitFor({ state: 'detached' });
+  await tab.page.getByRole('button', { name: /back to Talk/ }).click();
+  await tab.page.locator('.board-grid [data-tile-id="core-more"]').click();
+  assert.equal((await voicesUsed(tab.page)).at(-1), 'en-us-x-sfg-local');
+  await tab.ctx.close();
 });

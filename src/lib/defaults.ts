@@ -29,7 +29,7 @@ export function defaultSettings(): Settings {
     signSpeed: 1,
     showAslDrawings: true,
     colorMode: 'wordType',
-    speechPitch: 1,
+    speechPitch: 1.1,
     speechVolume: 1,
     speakOnTap: true,
     speakFolders: false,
@@ -37,6 +37,7 @@ export function defaultSettings(): Settings {
     repeatGuardMs: 0,
     celebrationVisual: true,
     celebrationSound: false,
+    voiceDefaults: 2,
   };
 }
 
@@ -44,7 +45,14 @@ export function defaultSettings(): Settings {
 export function mergeSettings(saved: Partial<Settings> | undefined): Settings {
   const base = defaultSettings();
   if (!saved) return base;
-  return { ...base, ...saved, grid: { ...base.grid, ...(saved.grid ?? {}) } };
+  const merged: Settings = { ...base, ...saved, grid: { ...base.grid, ...(saved.grid ?? {}) } };
+  if ((saved.voiceDefaults ?? 1) < 2) {
+    // New friendlier voice defaults — only where the grown-up never changed them.
+    if (saved.speechPitch === undefined || saved.speechPitch === 1) merged.speechPitch = base.speechPitch;
+    if (saved.speechRate === undefined || saved.speechRate === 1) merged.speechRate = base.speechRate;
+    merged.voiceDefaults = 2;
+  }
+  return merged;
 }
 
 const item = (label: string, tileId?: string): ScheduleItem => ({ label, tileId, done: false });

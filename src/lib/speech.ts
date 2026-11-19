@@ -5,7 +5,10 @@
  * Built-in voices differ between iPadOS Safari and Android Chrome, so this module:
  *  - speaks synchronously inside the tap (iOS only allows speech from a user gesture),
  *  - never waits forever for an `end` event that some engines don't send,
- *  - prefers voices that work without internet ("local" voices) when offline,
+ *  - ranks the device's voices so the most natural-sounding one is used automatically
+ *    (Enhanced / Premium / Natural / Neural voices first, novelty and robotic voices last),
+ *  - keeps one preferred voice for every word and sentence, and falls back to an
+ *    on-device voice when offline,
  *  - reports which voice was actually used, so Parent Mode can explain any fallback,
  *  - reports failures so the screen can still show the words.
  */
@@ -15,6 +18,10 @@ export interface SpeakOptions {
   rate: number;
   lang: string;
   voiceURI?: string;
+  /** Name of the voice chosen on this device (voice URIs can change after updates). */
+  voiceName?: string;
+  /** Voice chosen on another signed-in device; used here if this device has the same voice. */
+  sharedVoiceName?: string;
   pitch?: number;
   volume?: number;
   /** 'interrupt' cuts off whatever is being said; 'finish' lets it finish first. */
@@ -25,7 +32,11 @@ export interface VoiceUse {
   requested?: string;
   used?: string;
   usedName?: string;
-  reason?: 'missing' | 'offline' | 'none';
+  /**
+   * missing: the voice chosen on this device is gone; other-device: the voice chosen on
+   * another device isn't installed here; offline: the chosen voice needs internet.
+   */
+  reason?: 'missing' | 'offline' | 'other-device' | 'none';
   at: number;
 }
 
@@ -68,24 +79,74 @@ function isOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 
+/* ---------- voice quality ranking ---------- */
+
+/** Words engines use in the names of their best, most natural voices. */
+const NATURAL = /\b(enhanced|premium|natural|neural|wavenet|studio|journey|polyglot|online)\b/i;
+/** Apple's built-in fun/novelty voices and the older robotic "Eloquence" and eSpeak voices. */
+const ROBOTIC =
+  /\b(eloquence|espeak|e-speak|albert|bad news|bahh|bells|boing|bubbles|cellos|good news|jester|organ|superstar|trinoids|whisper|wobble|zarvox|deranged|hysterical|fred|ralph|junior|kathy|eddy|flo|grandma|grandpa|reed|rocko|sandy|shelley)\b/i;
+
+export type VoiceQuality = 'natural' | 'standard' | 'robotic';
+
+export function voiceQuality(v: Pick<SpeechSynthesisVoice, 'name' | 'voiceURI'>): VoiceQuality {
+  const id = `${v.name} ${v.voiceURI}`;
+  if (ROBOTIC.test(id)) return 'robotic';
+  // iPadOS reports enhanced/premium voices in the voiceURI (…voice.enhanced.… / …voice.premium.…);
+  // Chrome's "Google …" voices and Edge's "… Online (Natural)" voices are high quality.
+  if (NATURAL.test(id) || /\.(enhanced|premium)\./i.test(v.voiceURI) || /^google\b/i.test(v.name)) return 'natural';
+  return 'standard';
+}
+
+const sameLang = (v: SpeechSynthesisVoice, lang: string) => (v.lang || '').toLowerCase().replace('_', '-') === lang.toLowerCase();
+const sameBase = (v: SpeechSynthesisVoice, lang: string) => (v.lang || '').toLowerCase().startsWith(lang.slice(0, 2).toLowerCase());
+
+/** Higher is better: language match, then naturalness, then on-device, then the device default. */
+export function voiceScore(v: SpeechSynthesisVoice, lang: string, online = true): number {
+  let s = 0;
+  if (sameLang(v, lang)) s += 100;
+  else if (sameBase(v, lang)) s += 60;
+  const q = voiceQuality(v);
+  s += q === 'natural' ? 40 : q === 'standard' ? 20 : -40;
+  if (v.localService) s += online ? 5 : 50;
+  if (v.default) s += 3;
+  return s;
+}
+
+/** The device's voices, most natural first, for the language. */
+export function rankVoices(voices: SpeechSynthesisVoice[], lang: string, online = true): SpeechSynthesisVoice[] {
+  return [...voices].sort((a, b) => voiceScore(b, lang, online) - voiceScore(a, lang, online) || a.name.localeCompare(b.name));
+}
+
+/** The voice Mimzi would pick by itself: the most natural one that works right now. */
+export function bestVoice(voices: SpeechSynthesisVoice[], lang: string, online = isOnline()): SpeechSynthesisVoice | undefined {
+  const usable = online ? voices : voices.filter((v) => v.localService);
+  return rankVoices(usable.length ? usable : voices, lang, online).find((v) => online || v.localService);
+}
+
 /**
- * Choose a voice: the caregiver's choice if it exists (and, when offline, works offline);
- * otherwise the best voice for the language, preferring on-device voices.
+ * Choose a voice:
+ *  1. the voice chosen on this device (matched by URI, or by name if the URI changed),
+ *  2. otherwise the voice chosen on another signed-in device, if this device has it,
+ *  3. otherwise the most natural voice for the language.
+ * Offline, a voice that needs the internet is replaced by the best on-device voice.
  */
 export function chooseVoice(
   voices: SpeechSynthesisVoice[],
   voiceURI: string | undefined,
   lang: string,
   online = isOnline(),
+  names: { voiceName?: string; sharedVoiceName?: string } = {},
 ): { voice?: SpeechSynthesisVoice; reason?: VoiceUse['reason'] } {
-  const chosen = voiceURI ? voices.find((v) => v.voiceURI === voiceURI) : undefined;
+  const own = voiceURI || names.voiceName;
+  const chosen = own
+    ? (voiceURI ? voices.find((v) => v.voiceURI === voiceURI) : undefined) ?? (names.voiceName ? voices.find((v) => v.name === names.voiceName) : undefined)
+    : names.sharedVoiceName
+      ? voices.find((v) => v.name === names.sharedVoiceName)
+      : undefined;
   if (chosen && (online || chosen.localService)) return { voice: chosen };
-  const exact = voices.filter((v) => v.lang?.toLowerCase().replace('_', '-') === lang.toLowerCase());
-  const base = voices.filter((v) => v.lang?.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()));
-  const pool = exact.length ? exact : base.length ? base : voices;
-  const usable = online ? pool : pool.filter((v) => v.localService);
-  const voice = usable.find((v) => v.localService) ?? usable[0];
-  const reason = voiceURI ? (chosen ? 'offline' : 'missing') : undefined;
+  const voice = bestVoice(voices, lang, online);
+  const reason: VoiceUse['reason'] = chosen ? 'offline' : own ? 'missing' : names.sharedVoiceName ? 'other-device' : undefined;
   return { voice, reason: voice ? reason : 'none' };
 }
 
@@ -128,7 +189,7 @@ export function speakText(text: string, opts: SpeakOptions): Promise<SpeakResult
       u.pitch = clamp(opts.pitch ?? 1, 0.5, 1.5);
       u.volume = clamp(opts.volume ?? 1, 0, 1);
       u.lang = opts.lang;
-      const { voice, reason } = chooseVoice(getVoices(), opts.voiceURI, opts.lang);
+      const { voice, reason } = chooseVoice(getVoices(), opts.voiceURI, opts.lang, isOnline(), { voiceName: opts.voiceName, sharedVoiceName: opts.sharedVoiceName });
       if (voice) {
         u.voice = voice;
         u.lang = voice.lang || opts.lang;

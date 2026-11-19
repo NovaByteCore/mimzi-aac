@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
-import { chooseVoice, getVoices, lastVoiceUse, onVoiceUse, onVoicesChanged, speakText, speechSupported, type VoiceUse } from '../lib/speech';
+import { bestVoice, chooseVoice, getVoices, lastVoiceUse, onVoiceUse, onVoicesChanged, rankVoices, speakText, speechSupported, voiceQuality, type VoiceUse } from '../lib/speech';
+
+const QUALITY_LABEL = { natural: 'Natural quality', standard: 'Standard', robotic: 'Robotic / novelty' } as const;
 
 const SAMPLE = 'I want more bubbles, please.';
 
 /**
  * Mimzi Voice — every word speaks automatically with the device's built-in voices.
- * Only facts the device reports are shown (name, language, on-device or not); Mimzi
- * doesn't guess a voice's gender, age or accent.
+ * Voices are ranked by how natural they sound (from what the device reports: Enhanced,
+ * Premium, Natural… in the name). Mimzi doesn't guess a voice's gender, age or accent;
+ * a gentle pitch and a slightly slower speed make any voice friendlier for a toddler.
  */
 export function VoicePanel() {
   const { settings, updateSettings, tiles, saveTile } = useMimzi();
@@ -33,117 +36,161 @@ export function VoicePanel() {
     };
   }, []);
 
-  const opts = (voiceURI?: string) => ({
+  const names = { voiceName: settings.voiceName, sharedVoiceName: settings.sharedVoiceName };
+  const opts = (voiceURI?: string, voiceName?: string) => ({
     rate: settings.speechRate,
     lang: settings.speechLang,
     voiceURI,
+    voiceName,
+    sharedVoiceName: voiceURI ? undefined : settings.sharedVoiceName,
     pitch: settings.speechPitch,
     volume: settings.speechVolume,
   });
+  const current = () => opts(settings.voiceURI, settings.voiceName);
 
   const lang2 = settings.speechLang.slice(0, 2).toLowerCase();
-  const groups = useMemo(() => {
+  const ranked = useMemo(() => {
     const list = showAll ? voices : voices.filter((v) => v.lang?.toLowerCase().startsWith(lang2));
-    const map = new Map<string, SpeechSynthesisVoice[]>();
-    for (const v of [...list].sort((a, b) => (a.lang || '').localeCompare(b.lang || '') || a.name.localeCompare(b.name))) {
-      const key = v.lang || 'Unknown language';
-      map.set(key, [...(map.get(key) ?? []), v]);
-    }
-    return [...map.entries()];
-  }, [voices, showAll, lang2]);
+    return rankVoices(list, settings.speechLang, true);
+  }, [voices, showAll, lang2, settings.speechLang]);
 
-  const chosen = settings.voiceURI ? voices.find((v) => v.voiceURI === settings.voiceURI) : undefined;
-  const effective = chooseVoice(voices, settings.voiceURI, settings.speechLang, online);
+  const effective = chooseVoice(voices, settings.voiceURI, settings.speechLang, online, names);
+  const auto = bestVoice(voices, settings.speechLang, online);
+  const ownChoice = !!(settings.voiceURI || settings.voiceName);
+  const chosen = ownChoice && effective.reason !== 'missing' ? chooseVoice(voices, settings.voiceURI, settings.speechLang, true, names).voice : undefined;
+  const offlineVoice = chooseVoice(voices, settings.voiceURI, settings.speechLang, false, names).voice;
   const localCount = voices.filter((v) => v.localService && v.lang?.toLowerCase().startsWith(lang2)).length;
+  const naturalCount = voices.filter((v) => v.lang?.toLowerCase().startsWith(lang2) && voiceQuality(v) === 'natural').length;
   const withPron = tiles.filter((t) => t.pronunciation && !t.deletedAt);
   const pronTile = tiles.find((t) => t.id === pronWord);
+  const pick = (v: SpeechSynthesisVoice) =>
+    updateSettings({ voiceURI: v.voiceURI, voiceName: v.name, sharedVoiceName: v.name, speechLang: v.lang || settings.speechLang });
 
   return (
     <section className="panel settings">
       <h2>Mimzi Voice</h2>
       <p className="muted">
-        Every button speaks automatically — no recordings needed. Mimzi uses the voices built into this device, so the iPad and an Android tablet
-        will sound different. Voices marked <strong>on this device</strong> also work without internet.
+        Every button speaks automatically with the voice below — no recordings needed, and every new word uses it too. Mimzi uses the voices built
+        into this device, so an iPad and an Android tablet sound different. Voices marked <strong>on this device</strong> also work without internet.
       </p>
 
       {!speechSupported() && <p className="form-error">This browser has no built-in speech. Recorded words will still play, and words always show on screen.</p>}
 
       <div className="voice-status" data-testid="voice-status">
-        {settings.voiceURI && !chosen && voices.length > 0 && (
-          <p className="form-error">
-            Your chosen voice “{settings.voiceName ?? settings.voiceURI}” isn’t on this device. Mimzi is using “{effective.voice?.name ?? 'the device default'}” instead.
+        <p>
+          Mimzi is speaking with <strong data-testid="current-voice">{effective.voice?.name ?? 'the device’s default voice'}</strong>
+          {effective.voice && (
+            <span className="muted small">
+              {' '}
+              · {QUALITY_LABEL[voiceQuality(effective.voice)]} · {effective.voice.localService ? 'on this device' : 'needs internet'}
+              {ownChoice ? ' · your choice' : ' · picked automatically (most natural)'}
+            </span>
+          )}
+        </p>
+        {effective.reason === 'missing' && voices.length > 0 && (
+          <p className="form-error" data-testid="voice-missing">
+            Your chosen voice “{settings.voiceName ?? settings.voiceURI}” isn’t on this device any more. Mimzi is using “{effective.voice?.name ?? 'the device default'}”
+            instead — pick a replacement below.
+          </p>
+        )}
+        {effective.reason === 'other-device' && voices.length > 0 && (
+          <p className="notice-inline" data-testid="voice-other-device">
+            On your other device Mimzi uses “{settings.sharedVoiceName}”, but that voice isn’t installed on this one (each device has its own voices).
+            Here Mimzi is using the most natural voice it has, “{effective.voice?.name ?? 'the device default'}”. Pick a replacement below, or install
+            more voices (see the tips at the bottom).
           </p>
         )}
         {chosen && !chosen.localService && (
           <p className="notice-inline">
             “{chosen.name}” needs the internet. {online ? 'It works now, but offline' : 'You’re offline, so right now'} Mimzi uses “
-            {chooseVoice(voices, settings.voiceURI, settings.speechLang, false).voice?.name ?? 'an on-device voice'}” instead.
+            {offlineVoice?.name ?? 'an on-device voice'}” instead.
           </p>
         )}
         {use?.reason === 'offline' && <p className="notice-inline">Last word used the offline backup voice “{use.usedName}”.</p>}
         <p className="muted small">
-          {voices.length ? `${voices.length} voices found · ${localCount} work offline in this language.` : 'No voices reported yet (some browsers load them after the first word is spoken).'}
+          {voices.length
+            ? `${voices.length} voices found · ${naturalCount} natural-quality · ${localCount} work offline in this language.`
+            : 'No voices reported yet (some browsers load them after the first word is spoken).'}
           {localCount === 0 && voices.length > 0 && ' No on-device voice was found — install one in the device’s text-to-speech settings for offline speech.'}
         </p>
       </div>
 
       <div className="row">
-        <button type="button" className="btn btn-primary" onClick={() => void speakText(SAMPLE, opts(settings.voiceURI))}>
+        <button type="button" className="btn btn-primary" onClick={() => void speakText(SAMPLE, current())}>
           🔊 Hear Mimzi’s voice
         </button>
-        <button type="button" className="btn btn-quiet" onClick={() => updateSettings({ voiceURI: undefined, voiceName: undefined })} disabled={!settings.voiceURI}>
-          Use automatic voice
+        <button
+          type="button"
+          className="btn btn-quiet"
+          onClick={() => updateSettings({ voiceURI: undefined, voiceName: undefined, sharedVoiceName: undefined })}
+          disabled={!ownChoice && !settings.sharedVoiceName}
+        >
+          Use the most natural voice automatically
         </button>
       </div>
 
-      <h3>Choose a voice</h3>
+      <h3>Choose Mimzi’s voice</h3>
+      <p className="muted small">Most natural voices are listed first. Tap ▶ to hear one, then choose it — every word and sentence will use it.</p>
       <label className="check">
         <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show voices in all languages
       </label>
-      {groups.length === 0 ? (
+      {ranked.length === 0 ? (
         <p className="muted">No voices for this language were reported by this browser.</p>
       ) : (
-        groups.map(([lang, list]) => (
-          <div key={lang} className="voice-group">
-            <h4>{lang}</h4>
-            <ul className="voice-list">
-              {list.map((v) => (
-                <li key={v.voiceURI} className={`voice-row${v.voiceURI === settings.voiceURI ? ' voice-on' : ''}`}>
-                  <label className="check">
-                    <input
-                      type="radio"
-                      name="voice"
-                      checked={v.voiceURI === settings.voiceURI}
-                      onChange={() => updateSettings({ voiceURI: v.voiceURI, voiceName: v.name, speechLang: v.lang || settings.speechLang })}
-                    />
-                    <span>
-                      <strong>{v.name}</strong> <span className="muted small">{v.localService ? '· on this device' : '· needs internet'}</span>
-                      {v.default && <span className="muted small"> · device default</span>}
+        <ul className="voice-list" data-testid="voice-list">
+          {ranked.map((v) => {
+            const q = voiceQuality(v);
+            const on = effective.voice?.voiceURI === v.voiceURI && ownChoice;
+            return (
+              <li key={v.voiceURI} className={`voice-row${on ? ' voice-on' : ''}${q === 'robotic' ? ' voice-robotic' : ''}`} data-voice={v.voiceURI}>
+                <label className="check">
+                  <input type="radio" name="voice" checked={on} onChange={() => pick(v)} />
+                  <span>
+                    <strong>{v.name}</strong>
+                    {auto?.voiceURI === v.voiceURI && <span className="voice-badge"> ★ Most natural</span>}{' '}
+                    <span className="muted small">
+                      · {QUALITY_LABEL[q]} · {v.lang} · {v.localService ? 'on this device' : 'needs internet'}
+                      {v.default && ' · device default'}
                     </span>
-                  </label>
-                  <button type="button" className="btn small" onClick={() => void speakText(SAMPLE, { ...opts(v.voiceURI), lang: v.lang || settings.speechLang })} aria-label={`Preview ${v.name}`}>
-                    ▶ Preview
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  className="btn small"
+                  onClick={() => void speakText(SAMPLE, { ...opts(v.voiceURI, v.name), lang: v.lang || settings.speechLang })}
+                  aria-label={`Preview ${v.name}`}
+                >
+                  ▶ Preview
+                </button>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       <h3>Speech settings</h3>
       <label className="field">
-        <span>Speed ({settings.speechRate.toFixed(1)}×)</span>
-        <input type="range" min={0.5} max={1.5} step={0.1} value={settings.speechRate} onChange={(e) => updateSettings({ speechRate: Number(e.target.value) })} data-testid="speech-rate" />
+        <span>Speed ({settings.speechRate.toFixed(2)}×) — 0.9× is a little slower than normal, easier for toddlers to follow</span>
+        <input type="range" min={0.5} max={1.5} step={0.05} value={settings.speechRate} onChange={(e) => updateSettings({ speechRate: Number(e.target.value) })} data-testid="speech-rate" />
       </label>
       <label className="field">
-        <span>Pitch ({settings.speechPitch.toFixed(1)}) — not every device supports pitch</span>
-        <input type="range" min={0.5} max={1.5} step={0.1} value={settings.speechPitch} onChange={(e) => updateSettings({ speechPitch: Number(e.target.value) })} />
+        <span>Pitch ({settings.speechPitch.toFixed(2)}) — 1.1 is a gentle, friendly lift; much higher starts to sound unnatural</span>
+        <input type="range" min={0.8} max={1.4} step={0.05} value={settings.speechPitch} onChange={(e) => updateSettings({ speechPitch: Number(e.target.value) })} data-testid="speech-pitch" />
       </label>
       <label className="field">
         <span>Volume ({Math.round(settings.speechVolume * 100)}%) — the device volume buttons also apply</span>
         <input type="range" min={0.2} max={1} step={0.1} value={settings.speechVolume} onChange={(e) => updateSettings({ speechVolume: Number(e.target.value) })} />
       </label>
+      <div className="row">
+        <button
+          type="button"
+          className="btn btn-quiet"
+          data-testid="voice-friendly-defaults"
+          onClick={() => updateSettings({ speechRate: 0.9, speechPitch: 1.1, speechVolume: 1 })}
+        >
+          Reset to friendly toddler settings (0.9× speed, 1.1 pitch)
+        </button>
+      </div>
       <label className="check">
         <input type="checkbox" checked={settings.speakOnTap} onChange={(e) => updateSettings({ speakOnTap: e.target.checked })} data-testid="speak-on-tap" />
         Say each word when it’s tapped
@@ -201,7 +248,7 @@ export function VoicePanel() {
           <span>Say it like</span>
           <input value={pronText} onChange={(e) => setPronText(e.target.value)} placeholder="e.g. Ree-ah" data-testid="pron-text" />
         </label>
-        <button type="button" className="btn" disabled={!pronTile} onClick={() => pronTile && void speakText(pronText || pronTile.speak, opts(settings.voiceURI))}>
+        <button type="button" className="btn" disabled={!pronTile} onClick={() => pronTile && void speakText(pronText || pronTile.speak, current())}>
           🔊 Test
         </button>
         <button
@@ -225,7 +272,7 @@ export function VoicePanel() {
             <li key={t.id}>
               <strong>{t.label}</strong> → “{t.pronunciation}”
               <span className="spacer" />
-              <button type="button" className="btn small" onClick={() => void speakText(t.pronunciation!, opts(settings.voiceURI))}>
+              <button type="button" className="btn small" onClick={() => void speakText(t.pronunciation!, current())}>
                 🔊
               </button>
               <button type="button" className="btn btn-quiet small" onClick={() => saveTile({ ...t, pronunciation: undefined })}>
@@ -235,6 +282,22 @@ export function VoicePanel() {
           ))}
         </ul>
       )}
+
+      <h3>Getting a more natural voice</h3>
+      <p className="muted small">
+        Mimzi can only use voices installed on the device. Better voices are free to download, then they appear in the list above (most natural first):
+      </p>
+      <ul className="muted small">
+        <li>
+          <strong>onn tablet / Android:</strong> Settings → System → Languages → Text-to-speech output → choose <em>Speech Services by Google</em> → ⚙ →
+          Install voice data → English (United States) → pick a voice and download it. Then reopen Mimzi.
+        </li>
+        <li>
+          <strong>iPad:</strong> Settings → Accessibility → Spoken Content → Voices → English → download an <em>Enhanced</em> or <em>Premium</em> voice. Then
+          reopen Mimzi.
+        </li>
+      </ul>
+      <p className="muted small">Mimzi never copies voices or audio from other AAC apps; it uses only the device’s own voices and your optional recordings.</p>
     </section>
   );
 }

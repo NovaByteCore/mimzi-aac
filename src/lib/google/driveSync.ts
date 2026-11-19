@@ -6,7 +6,8 @@
  *    every device agrees). Deletions are kept as tombstones so they spread too.
  *  - Photos, recordings and sign videos are uploaded once each (by id) and downloaded on
  *    devices that don't have them yet.
- * The Parent PIN and the chosen voice stay on each device.
+ * The Parent PIN and each device's own voice choice stay on that device; the last voice picked
+ * (sharedVoiceName) syncs so another device can use the same voice when it has it.
  */
 import type { Category, GrowPlan, MediaKind, MediaRecord, MyDay, Observation, Settings, Tile, VocabEvent } from '../../types';
 import { mergeGrowPlan } from '../grow';
@@ -45,12 +46,12 @@ export interface SyncableState {
 }
 
 /** Settings that belong to one device and are never synced. */
-export function deviceOnlySettings(s: Settings): Pick<Settings, 'pin' | 'voiceURI'> {
-  return { pin: s.pin, voiceURI: s.voiceURI };
+export function deviceOnlySettings(s: Settings): Pick<Settings, 'pin' | 'voiceURI' | 'voiceName'> {
+  return { pin: s.pin, voiceURI: s.voiceURI, voiceName: s.voiceName };
 }
 
-export function sharedSettings(s: Settings): Omit<Settings, 'pin' | 'voiceURI'> {
-  const { pin: _pin, voiceURI: _voice, ...rest } = s;
+export function sharedSettings(s: Settings): Omit<Settings, 'pin' | 'voiceURI' | 'voiceName'> {
+  const { pin: _pin, voiceURI: _voice, voiceName: _voiceName, ...rest } = s;
   return rest;
 }
 
@@ -74,17 +75,21 @@ export function toRecords(state: SyncableState, deviceId: string): SyncRecord[] 
   ];
 }
 
-export function fromRecords(records: SyncRecord[], keep: Pick<Settings, 'pin' | 'voiceURI'>): SyncableState {
+export function fromRecords(records: SyncRecord[], keep: Pick<Settings, 'pin' | 'voiceURI' | 'voiceName'>): SyncableState {
   const live = (store: SyncRecord['store']) => records.filter((r) => r.store === store && !r.deleted);
   const settingsRec = records.find((r) => r.store === 'kv' && r.id === 'settings');
   const mydayRec = records.find((r) => r.store === 'kv' && r.id === 'myday');
   const growRec = records.find((r) => r.store === 'kv' && r.id === 'grow');
   const historyRec = records.find((r) => r.store === 'kv' && r.id === 'history');
   const settings = mergeSettings((settingsRec?.value as Partial<Settings>) ?? undefined);
+  // Older versions synced voiceName; treat it as the shared preference.
+  if (!settings.sharedVoiceName && settings.voiceName) settings.sharedVoiceName = settings.voiceName;
   delete settings.pin;
   delete settings.voiceURI;
+  delete settings.voiceName;
   if (keep.pin) settings.pin = keep.pin;
   if (keep.voiceURI) settings.voiceURI = keep.voiceURI;
+  if (keep.voiceName) settings.voiceName = keep.voiceName;
   return {
     tiles: live('tiles').map((r) => r.value as Tile),
     categories: live('categories').map((r) => r.value as Category),

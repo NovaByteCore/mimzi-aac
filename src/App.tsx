@@ -59,6 +59,8 @@ export function App() {
     rate: settings.speechRate,
     lang: settings.speechLang,
     voiceURI: settings.voiceURI,
+    voiceName: settings.voiceName,
+    sharedVoiceName: settings.sharedVoiceName,
     pitch: settings.speechPitch,
     volume: settings.speechVolume,
     interrupt: settings.interruptMode,
