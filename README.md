@@ -19,7 +19,9 @@ Mimzi is a personal Augmentative and Alternative Communication (AAC) app for a t
 - **Change any single picture** from ARASAAC, Mulberry (bundled), Mimzi originals, or other open libraries through OpenSymbols. A real photo can also replace any symbol. Changing a picture never moves the word or changes its label, speech or ASL sign.
 - **Licences are tracked and enforced.** Each picture records its source, author and licence. Unlicensed results are never offered. Non-commercial sets (ARASAAC) switch off automatically if `VITE_COMMERCIAL_USE=true`. No emoji are used. See `docs/SYMBOLS.md`.
 - **Fitzgerald-style colour coding** by word type: people/pronouns yellow, actions green, describing blue, things orange, social pink, questions purple, important red, little words white, folders grey. Custom colours are also available.
-- **ASL is separate from the picture.** The main button always shows the AAC picture. A small 🤟 **See sign** button opens a verified ASL drawing (17 signs, each with a how-to and source) or a parent-provided video. Mimzi never invents signs.
+- **ASL is separate from the picture.** The main button always shows the AAC picture. A small **ASL** tag in the label strip opens a verified ASL drawing (17 signs, each with a how-to and source) or a parent-provided video. Mimzi never invents signs.
+- **No emoji.** The board, navigation and controls use simple line icons and real AAC pictures.
+- **Navigation for small tablets:** on phones and 8" tablets the page list is hidden automatically, because folder buttons and Home/Back already cover it. You can also hide it everywhere.
 - **Stable positions:** words keep fixed slots. Hidden words leave a gap and nothing shifts. Grids from 2×2 to 5×6 are available.
 
 ### Words on My Board
@@ -32,9 +34,27 @@ Plan new words daily or weekly (for example, 2 every Monday) with a start date, 
 - Words that came due while the tablet was off wait for approval the next time Mimzi opens.
 
 ### My Day (visual supports)
-First/Then, I'm Working For (tokens are never taken away), My Three Steps and Now/Next/Later, with templates. Done, tokens and reset are press-and-hold grown-up actions.
+Big pictures, few words, nothing else on screen. Tapping a picture speaks it. Grown-ups press and hold to mark things done or to add tokens. **Edit schedule** (a small lock button) opens the editor after the Parent Mode PIN.
+
+- **First / Then:** both cards can be changed in full: the words, what Mimzi says, the picture and the colour. Mark activities done or reset them, and keep as many saved First / Then boards as you like, with rename, duplicate, delete and quick switching.
+- **I'm Working For:** set the reward's name, picture (photo or AAC symbol) and goal, from 1 to 10 tokens (3 by default), and the token style (stars, checkmarks, circles, hearts or progress dots).
+  - You can also set the token colour, board colour, completion message, celebration and sound, and keep saved reward boards.
+  - Tokens are never taken away. Rewards are never needed for communication, breaks, food, comfort or care.
+- **Routines:** 1 to 5 steps (3 by default). Add, remove and reorder steps, and save, rename, duplicate or delete routines.
+  - Three views: **Numbered steps**, **Now / Next / Later** and **One step at a time** (optionally with small previews of the next steps).
+  - Examples included: Morning Routine, Leaving Home and Bedtime.
+- **One editor for all three.** It works the same way everywhere and has a live preview, Save and Cancel, and a warning before unsaved changes are thrown away.
+- **Pictures come from one shared chooser:**
+  - an AAC symbol (ARASAAC, Mulberry, Mimzi originals, or OpenSymbols when set up), which doesn't need to be on the board
+  - a photo (upload, the tablet camera, or Google Photos)
+  - a word already on the board
+  - a picture already used in another schedule (reused, not copied)
+
+  Each symbol keeps its licence, and every picture is saved for offline use. With no picture, the card shows its words in large type.
 
 ### Parent Mode (press-and-hold 1.5 s + PIN)
+Parent Mode is grouped into **Talk board · Visual schedules · Pictures & voice · Progress · Settings & data**.
+
 | Tab | What it does |
 | --- | --- |
 | Edit AAC board | Add, edit, move, hide, delete and restore words. Each word has a symbol search, photo, pronunciation, word type, the page it opens, voice language, recording, sign and private note. |
@@ -44,9 +64,10 @@ First/Then, I'm Working For (tokens are never taken away), My Three Steps and No
 | Mimzi Voice | Voice, preview, speed, pitch, volume, pronunciations, offline fallback status. |
 | Symbol Library | Default picture style (ARASAAC or Mulberry), search every library, put a symbol on any word, see credits and licences. |
 | Photo / ASL Library | Browse every photo and sign. |
-| Visual schedules | My Day setup. |
+| Visual schedules | First / Then, reward and routine editors (one shared editor with a live preview), saved templates with quick switching, the picture library, and schedule settings. |
+| Quick words | The always-visible quick words (up to 6), set separately from the vocabulary pages. A word hidden on its page stays available here. |
 | My Words | Private notebook with CSV and therapist-summary export (no scores). |
-| Board & accessibility | Grid, colour coding, text size, spacing, contrast, motion, quick words, PIN. |
+| Board & accessibility | Grid, colour coding, text size, spacing, contrast, motion, the page list (automatic or hidden), PIN. |
 | Google & sync | Optional Google sign-in. Everything syncs through a hidden folder in your own Drive, and Google Photos can be used for pictures. |
 | Backup | One file with everything (v3; older backups still load). |
 | Recently deleted | Restore deleted words. |
@@ -169,6 +190,7 @@ docs/                   testing checklist, deployment, sync design & research
 | 4 Caregiver tools (My Words, food boards, sync) | ✅ Built and tested in Chromium |
 | V3 AAC system (voice, Mulberry, folders, colour coding, Words on My Board, Grow My Words) | ✅ Built and tested in Chromium |
 | Natural voice (ranking, friendly defaults, saved preference) | ✅ Built and tested in Chromium |
+| Visual schedules redesign (First / Then, reward boards, routine builder, one editor) | ✅ Built and tested in Chromium |
 | Multi-library AAC symbols (ARASAAC default, Mulberry, OpenSymbols, licence tracking) | ✅ Built and tested in Chromium against simulated ARASAAC and OpenSymbols. ⏳ OpenSymbols needs its free key, and the real ARASAAC pictures need checking on a device. |
 | Google sign-in, Drive sync, Google Photos | ✅ Built and tested in Chromium against a simulated Google. ⏳ Needs the one-time Google Cloud setup and a real-account test. |
 | 5 Testing & deployment | ✅ Automated tests, accessibility checks, offline test, deployment docs. ⏳ Physical iPad/Galaxy testing and hosting setup are still to do, and hosting needs the owner's permission. |

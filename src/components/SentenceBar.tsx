@@ -55,7 +55,7 @@ export function SpokenBar({ text, onReplay }: { text: string; onReplay: () => vo
       </div>
       <div className="sentence-actions">
         <button type="button" className="icon-btn speak-btn" onClick={onReplay} disabled={!text} aria-label="Say it again">
-          <span aria-hidden="true">🔁</span>
+          <Icon name="reset" size={26} />
         </button>
       </div>
     </div>

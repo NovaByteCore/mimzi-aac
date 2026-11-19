@@ -170,6 +170,8 @@ export interface Settings {
   haptics: boolean;
   /** Tile ids shown in the always-visible quick bar. */
   quickTileIds: string[];
+  /** Page list next to the board: automatic (hidden on phones and small tablets, where folders + Home/Back do the job) or hidden. */
+  pageList?: 'auto' | 'hide';
   /** Show the small "See sign" button on tiles that have a sign video. */
   showSignButtons: boolean;
   signLoop: boolean;
@@ -204,10 +206,16 @@ export interface ScheduleItem {
   label: string;
   /** What Mimzi says; defaults to the label. */
   speak?: string;
-  /** Use the picture of an existing word tile. */
+  /** Use the picture of an existing word tile (follows that word's picture). */
   tileId?: string;
-  /** Or a photo added just for this schedule. */
+  /** Or a photo (a schedule photo, or one reused from a word or another routine). */
   photoId?: string;
+  /** Or an AAC symbol picked directly — no board word needed ("arasaac:<id>", "mul:<file>"…). */
+  symbol?: string;
+  /** Source, author and licence of `symbol`. */
+  symbolInfo?: SymbolInfo;
+  /** Card colour. */
+  color?: TileColor;
   done: boolean;
 }
 
@@ -218,30 +226,60 @@ export interface FirstThenTemplate {
   then: ScheduleItem;
 }
 
-export interface RewardTemplate {
+export type TokenStyle = 'star' | 'check' | 'circle' | 'heart' | 'dot';
+
+export interface RewardBoard {
+  item: ScheduleItem;
+  /** 1–10 tokens (3 by default). */
+  tokens: number;
+  /** Earned tokens — only ever added, or cleared by a deliberate reset (never as punishment). */
+  earned: number;
+  /** e.g. "Sit for the story". */
+  goal?: string;
+  tokenStyle?: TokenStyle;
+  /** Token colour (CSS colour). */
+  tokenColor?: string;
+  /** Said and shown when the board is complete. */
+  completeMessage?: string;
+  /** Show the gentle celebration (defaults to the global setting). */
+  celebrate?: boolean;
+  /** Say the completion message out loud (defaults to the global setting). */
+  sound?: boolean;
+  /** Board background colour. */
+  boardColor?: TileColor;
+}
+
+export interface RewardTemplate extends Omit<RewardBoard, 'earned'> {
   id: string;
   name: string;
-  item: ScheduleItem;
-  tokens: number;
 }
+
+export type RoutineLayout = 'steps' | 'nowNextLater' | 'oneAtATime';
 
 export interface RoutineTemplate {
   id: string;
   name: string;
+  /** 1–5 steps. */
   steps: ScheduleItem[];
+  layout?: RoutineLayout;
 }
 
 export type MyDayTool = 'firstThen' | 'reward' | 'routine';
 
 export interface MyDay {
-  firstThen: { first: ScheduleItem; then: ScheduleItem };
+  firstThen: { first: ScheduleItem; then: ScheduleItem; name?: string };
   firstThenTemplates: FirstThenTemplate[];
-  reward: { item: ScheduleItem; tokens: number; earned: number };
+  reward: RewardBoard & { name?: string };
   rewardTemplates: RewardTemplate[];
-  routine: { steps: ScheduleItem[] };
+  /** The routine on screen now (1–5 steps). */
+  routine: { steps: ScheduleItem[]; name?: string };
   routineTemplates: RoutineTemplate[];
-  /** How the routine is shown: numbered steps, or Now / Next / Later. */
-  routineLayout: 'steps' | 'nowNextLater';
+  /** How the routine is shown: numbered steps, Now / Next / Later, or one step at a time. */
+  routineLayout: RoutineLayout;
+  /** One-at-a-time view: show small previews of the next steps. */
+  showUpcoming?: boolean;
+  /** Data version (2 = unified schedule editor). */
+  version?: number;
 }
 
 /* ---------- My Words (caregiver observations) ---------- */

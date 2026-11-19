@@ -3,6 +3,7 @@ import { useMimzi } from '../state/MimziStore';
 import { addDays, dayString, moveItem, parseDay, pendingItems, reschedule, scheduleWords } from '../lib/grow';
 import type { GrowItem, GrowPlan } from '../types';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from '../components/Icon';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const STATUS_LABEL: Record<GrowItem['status'], string> = {
@@ -166,10 +167,10 @@ export function GrowPanel() {
               <strong>{label(i.tileId)}</strong>
               <span className="spacer" />
               <button type="button" className="icon-btn small" disabled={idx === 0} onClick={() => save(moveItem(grow, i.id, -1, today))} aria-label={`Move ${label(i.tileId)} earlier`}>
-                ▲
+                <Icon name="up" />
               </button>
               <button type="button" className="icon-btn small" disabled={idx === planned.length - 1} onClick={() => save(moveItem(grow, i.id, 1, today))} aria-label={`Move ${label(i.tileId)} later`}>
-                ▼
+                <Icon name="down" />
               </button>
               <button type="button" className="btn small" onClick={() => resolveGrow([i.id], 'approve')}>
                 Add now
@@ -259,11 +260,11 @@ function Calendar({ month, setMonth, items, label }: { month: string; setMonth: 
     <div className="grow-cal" data-testid="grow-calendar">
       <div className="row">
         <button type="button" className="btn small" onClick={() => shift(-1)} aria-label="Previous month">
-          ◀
+          <Icon name="prev" />
         </button>
         <strong>{first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
         <button type="button" className="btn small" onClick={() => shift(1)} aria-label="Next month">
-          ▶
+          <Icon name="next" />
         </button>
       </div>
       <div className="cal-grid">

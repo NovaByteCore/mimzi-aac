@@ -4,6 +4,7 @@ import { orderedTiles } from '../lib/grid';
 import { TileFace } from '../components/TileFace';
 import { TileEditor } from './TileEditor';
 import type { Tile } from '../types';
+import { Icon } from '../components/Icon';
 
 export function WordsPanel() {
   const { tiles, categories, mediaUrls, moveTile, settings } = useMimzi();
@@ -55,16 +56,16 @@ export function WordsPanel() {
                 </span>
                 <span className="tile-label">
                   {t.label}
-                  {t.hidden ? ' 🙈' : ''}
-                  {t.favorite ? ' ⭐' : ''}
+                  {t.hidden ? ' (hidden)' : ''}
+                  {t.favorite ? ' (favorite)' : ''}
                 </span>
               </button>
               <div className="move-row">
                 <button type="button" className="icon-btn small" onClick={() => moveTile(t.id, -1)} disabled={i === 0} aria-label={`Move ${t.label} earlier`}>
-                  ◀
+                  <Icon name="prev" />
                 </button>
                 <button type="button" className="icon-btn small" onClick={() => moveTile(t.id, 1)} disabled={i === list.length - 1} aria-label={`Move ${t.label} later`}>
-                  ▶
+                  <Icon name="next" />
                 </button>
               </div>
             </li>

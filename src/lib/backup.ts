@@ -175,7 +175,7 @@ export function parseBackup(raw: unknown, currentPin?: Settings['pin']): Restore
     return {
       id: c.id,
       name: c.name,
-      symbol: typeof c.symbol === 'string' ? c.symbol : '⭐',
+      symbol: typeof c.symbol === 'string' ? c.symbol : 'mul:star',
       color: (typeof c.color === 'string' ? c.color : 'cream') as Category['color'],
       order: typeof c.order === 'number' ? c.order : i,
       hidden: Boolean(c.hidden),

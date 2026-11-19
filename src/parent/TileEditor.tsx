@@ -15,6 +15,7 @@ import { speakTile } from '../lib/speech';
 import { AudioRecorder } from './AudioRecorder';
 import { GooglePhotosButton } from './GooglePhotosButton';
 import { isSignFile, MAX_SIGN_BYTES, SIGN_ACCEPT } from '../lib/media';
+import { Icon } from '../components/Icon';
 
 interface Props {
   tile?: Tile;
@@ -205,7 +206,7 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 }
                 disabled={!label.trim()}
               >
-                🔊 Hear it
+                <Icon name="speak" /> Hear it
               </button>
             </div>
 
@@ -262,10 +263,10 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 <legend>Photo</legend>
                 <div className="row">
                   <button type="button" className="btn" onClick={() => cameraInput.current?.click()}>
-                    📷 Take photo
+                    <Icon name="camera" /> Take photo
                   </button>
                   <button type="button" className="btn" onClick={() => libraryInput.current?.click()}>
-                    🖼️ Choose photo
+                    <Icon name="image" /> Choose photo
                   </button>
                   <GooglePhotosButton onPicked={(blob) => setCropFile(blob)} />
                   {photoUrl && (

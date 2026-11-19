@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { bestVoice, chooseVoice, getVoices, lastVoiceUse, onVoiceUse, onVoicesChanged, rankVoices, speakText, speechSupported, voiceQuality, type VoiceUse } from '../lib/speech';
+import { Icon } from '../components/Icon';
 
 const QUALITY_LABEL = { natural: 'Natural quality', standard: 'Standard', robotic: 'Robotic / novelty' } as const;
 
@@ -117,7 +118,7 @@ export function VoicePanel() {
 
       <div className="row">
         <button type="button" className="btn btn-primary" onClick={() => void speakText(SAMPLE, current())}>
-          🔊 Hear Mimzi’s voice
+          <Icon name="speak" /> Hear Mimzi’s voice
         </button>
         <button
           type="button"
@@ -130,7 +131,7 @@ export function VoicePanel() {
       </div>
 
       <h3>Choose Mimzi’s voice</h3>
-      <p className="muted small">Most natural voices are listed first. Tap ▶ to hear one, then choose it — every word and sentence will use it.</p>
+      <p className="muted small">Most natural voices are listed first. Tap Preview to hear one, then choose it — every word and sentence will use it.</p>
       <label className="check">
         <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show voices in all languages
       </label>
@@ -147,7 +148,7 @@ export function VoicePanel() {
                   <input type="radio" name="voice" checked={on} onChange={() => pick(v)} />
                   <span>
                     <strong>{v.name}</strong>
-                    {auto?.voiceURI === v.voiceURI && <span className="voice-badge"> ★ Most natural</span>}{' '}
+                    {auto?.voiceURI === v.voiceURI && <span className="voice-badge"> · Most natural</span>}{' '}
                     <span className="muted small">
                       · {QUALITY_LABEL[q]} · {v.lang} · {v.localService ? 'on this device' : 'needs internet'}
                       {v.default && ' · device default'}
@@ -160,7 +161,7 @@ export function VoicePanel() {
                   onClick={() => void speakText(SAMPLE, { ...opts(v.voiceURI, v.name), lang: v.lang || settings.speechLang })}
                   aria-label={`Preview ${v.name}`}
                 >
-                  ▶ Preview
+                  <Icon name="play" /> Preview
                 </button>
               </li>
             );
@@ -197,7 +198,7 @@ export function VoicePanel() {
       </label>
       <label className="check">
         <input type="checkbox" checked={settings.showSentenceBar} onChange={(e) => updateSettings({ showSentenceBar: e.target.checked })} />
-        Message bar: collect words and say the whole message with 🔊
+        Message bar: collect words and say the whole message with the Speak button
       </label>
       <label className="check">
         <input type="checkbox" checked={settings.speakFolders} onChange={(e) => updateSettings({ speakFolders: e.target.checked })} />
@@ -249,7 +250,7 @@ export function VoicePanel() {
           <input value={pronText} onChange={(e) => setPronText(e.target.value)} placeholder="e.g. Ree-ah" data-testid="pron-text" />
         </label>
         <button type="button" className="btn" disabled={!pronTile} onClick={() => pronTile && void speakText(pronText || pronTile.speak, current())}>
-          🔊 Test
+          <Icon name="speak" /> Test
         </button>
         <button
           type="button"
@@ -273,7 +274,7 @@ export function VoicePanel() {
               <strong>{t.label}</strong> → “{t.pronunciation}”
               <span className="spacer" />
               <button type="button" className="btn small" onClick={() => void speakText(t.pronunciation!, current())}>
-                🔊
+                <Icon name="speak" />
               </button>
               <button type="button" className="btn btn-quiet small" onClick={() => saveTile({ ...t, pronunciation: undefined })}>
                 Remove

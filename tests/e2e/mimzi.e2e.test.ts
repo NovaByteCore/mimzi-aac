@@ -424,13 +424,26 @@ test('ASL sign video: only plays after tapping See sign', async () => {
 test('quick words can be changed by a caregiver', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  await page.getByRole('tab', { name: 'Quick words' }).click();
   await page.getByTestId('quick-add-select').selectOption('core-yes');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByTestId('quick-list').getByText('yes').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   const quick = await page.locator('.quick-bar .tile').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
   assert.deepEqual(quick, ['help', 'stop', 'no', 'more', 'all done', 'yes']);
+  // Hiding "help" on its page keeps it as a quick word (the child's quick way to ask for help).
+  await enterParentMode(page, false);
+  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.locator('[data-wob="core-help"]').click();
+  const warn = page.getByRole('alertdialog');
+  if (await warn.count()) await warn.getByRole('button', { name: 'Hide' }).click();
+  await page.getByRole('tab', { name: 'Quick words' }).click();
+  await page.getByTestId('quick-hidden-note').getByText(/help/).waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-help"]').count(), 0, 'hidden on its page');
+  assert.equal(await page.locator('.quick-bar [data-tile-id="core-help"]').count(), 1, 'still a quick word');
+  await page.locator('.quick-bar [data-tile-id="core-help"]').click();
+  assert.equal((await spoken(page)).at(-1), 'help');
   await ctx.close();
 });
 
@@ -481,45 +494,292 @@ test('I’m Working For: 3 tokens by default, hold to add, gentle celebration, n
   await ctx.close();
 });
 
-test('routine: parent edits steps and switches to Now / Next / Later (same data)', async () => {
+/* ---------------- Visual schedules: one editor for everything ---------------- */
+
+async function openScheduleEditor(page: Page, button: RegExp | string, firstTime = true) {
+  await enterParentMode(page, firstTime);
+  await page.getByRole('tab', { name: 'Visual schedules' }).click();
+  await page.getByRole('button', { name: button }).click();
+  await page.getByTestId('schedule-editor').waitFor();
+}
+const editor = (page: Page) => page.getByTestId('schedule-editor');
+const preview = (page: Page) => page.getByTestId('schedule-preview');
+async function pickArasaac(page: Page, card: string, query: string, n = 0) {
+  await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).click();
+  const chooser = page.getByTestId('picture-chooser');
+  await chooser.getByTestId('symbol-search').fill(query);
+  await chooser.getByTestId('symbol-group-arasaac').locator(`[data-symbol="arasaac:${pictoId(query) + n}"]`).click();
+  await chooser.waitFor({ state: 'detached' });
+}
+async function pickPhoto(page: Page, card: string) {
+  await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).click();
+  const chooser = page.getByTestId('picture-chooser');
+  await chooser.getByRole('tab', { name: /Photo/ }).click();
+  await chooser.getByTestId('schedule-photo-input').setInputFiles(PHOTO);
+  await page.getByTestId('crop-viewport').waitFor();
+  await page.getByRole('button', { name: 'Use photo' }).click();
+  await chooser.waitFor({ state: 'detached' });
+}
+async function saveSchedule(page: Page) {
+  await editor(page).getByTestId('save-schedule').click();
+  await editor(page).waitFor({ state: 'detached' });
+}
+
+test('First / Then: edit FIRST and THEN (words, speech, ARASAAC symbol, photo, colour) with live preview; survives reload', async () => {
+  const { ctx, page } = await openApp();
+  const before = await slots(page);
+  await openScheduleEditor(page, 'Edit First / Then');
+  await editor(page).getByLabel('FIRST words').fill('Put on shoes');
+  await editor(page).getByLabel('FIRST spoken words').fill('Shoes on, please');
+  await pickArasaac(page, 'ft-first', 'shoes');
+  await editor(page).getByTestId('ft-first').getByRole('button', { name: 'green card' }).click();
+  await editor(page).getByLabel('THEN words').fill('Go outside');
+  await pickPhoto(page, 'ft-then');
+  // Live preview shows exactly what the child will see.
+  await preview(page).getByText('Put on shoes').waitFor();
+  await preview(page).locator(`img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('shoes')}"]`).waitFor();
+  await preview(page).locator('.sched-card.tile-green').waitFor();
+  await preview(page).locator('img.tile-photo').waitFor();
+  await saveSchedule(page);
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  await page.locator('.first-then .sched-card').first().click();
+  assert.equal((await spoken(page)).at(-1), 'First Shoes on, please');
+  await page.getByRole('button', { name: 'Say it' }).click();
+  assert.equal((await spoken(page)).at(-1), 'First Shoes on, please, then Go outside');
+  await page.reload();
+  await openMyDay(page);
+  await page.locator('.first-then').getByText('Go outside').waitFor();
+  await page.locator('.first-then img.tile-photo').waitFor();
+  await page.locator(`.first-then img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('shoes')}"]`).waitFor();
+  // The AAC board itself is untouched.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'Talk' }).click();
+  assert.deepEqual(await slots(page), before, 'no vocabulary moved');
+  await page.locator('.board-grid [data-tile-id="core-more"]').click();
+  assert.equal((await spoken(page)).at(-1), 'more');
+  await ctx.close();
+});
+
+test('First / Then templates: save, rename, switch, delete — and quick switch from Parent Mode', async () => {
+  const { ctx, page } = await openApp();
+  await openScheduleEditor(page, 'Edit First / Then');
+  await editor(page).getByLabel('FIRST words').fill('Bath');
+  await editor(page).getByLabel('THEN words').fill('Story');
+  await editor(page).getByTestId('template-name').fill('Bath time');
+  await editor(page).getByTestId('save-template').click();
+  await editor(page).locator('[data-template="Bath time"]').waitFor();
+  await editor(page).getByLabel('Name of Bath time').fill('Evening');
+  await editor(page).getByLabel('Name of Evening').blur();
+  await editor(page).locator('[data-template="Evening"]').waitFor();
+  await editor(page).getByLabel('FIRST words').fill('Something else');
+  await editor(page).locator('[data-template="Evening"]').getByRole('button', { name: 'Use' }).click();
+  assert.equal(await editor(page).getByLabel('FIRST words').inputValue(), 'Bath');
+  await editor(page).getByRole('button', { name: 'Delete Shoes, then outside' }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  assert.equal(await editor(page).locator('[data-template="Shoes, then outside"]').count(), 0);
+  await saveSchedule(page);
+  // Quick switch without opening the editor.
+  await page.getByLabel('Choose saved First / Then').selectOption({ label: 'Evening' });
+  await page.getByText('My Day now shows “Evening”.').waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  await page.locator('.first-then').getByText('Story').waitFor();
+  await ctx.close();
+});
+
+test('I’m Working For: reward name, photo and symbol, goal, 1–10 tokens, token styles, message; templates; progress kept', async () => {
+  const { ctx, page } = await openApp();
+  await openScheduleEditor(page, 'Edit reward');
+  await editor(page).getByLabel('Reward words').fill('Swing');
+  await pickArasaac(page, 'reward-item', 'swing');
+  await editor(page).getByLabel('Goal').fill('Sit for the story');
+  const slider = editor(page).getByTestId('token-count');
+  await slider.fill('1');
+  assert.equal(await preview(page).locator('.token').count(), 1);
+  await slider.fill('10');
+  assert.equal(await preview(page).locator('.token').count(), 10);
+  await slider.fill('5');
+  for (const style of ['check', 'circle', 'dot', 'star', 'heart']) {
+    await editor(page).getByTestId(`token-style-${style}`).click();
+    await preview(page).locator(`[data-testid="tokens"][data-style="${style}"]`).waitFor();
+  }
+  await editor(page).getByLabel('Completion message').fill('Great sitting! Swing time!');
+  await editor(page).getByTestId('template-name').fill('Working for swing');
+  await editor(page).getByTestId('save-template').click();
+  await editor(page).locator('[data-template="Working for swing"]').waitFor();
+  await saveSchedule(page);
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  await page.getByRole('tab', { name: /working for/ }).click();
+  assert.equal(await page.locator('.token').count(), 5);
+  await page.locator('[data-testid="tokens"][data-style="heart"]').waitFor();
+  await page.getByText('Sit for the story').waitFor();
+  for (let i = 1; i <= 5; i++) {
+    await holdGrownup(page, 'Hold to add a token');
+    await page.waitForFunction((n) => document.querySelectorAll('.token-on').length === n, i);
+  }
+  await page.getByText('Great sitting! Swing time!').waitFor();
+  assert.equal(await page.getByRole('button', { name: /(remove|take away).*token/i }).count(), 0, 'tokens are never taken away');
+  // Switching to another saved reward starts that board fresh; the saved one comes back intact.
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).locator('[data-template="Working for bubbles"]').getByRole('button', { name: 'Use' }).click();
+  await editor(page).locator('[data-template="Working for swing"]').getByRole('button', { name: 'Use' }).click();
+  assert.equal(await editor(page).getByLabel('Reward words').inputValue(), 'Swing');
+  assert.equal(await preview(page).locator('.token').count(), 5);
+  await ctx.close();
+});
+
+test('routine builder: 1 to 5 steps, reorder, three views, saved routines restore', async () => {
   const { ctx, page } = await openApp();
   await openMyDay(page);
   await page.getByRole('tab', { name: /three steps/ }).click();
-  assert.equal(await page.locator('.steps .sched-card').count(), 3);
   await holdGrownup(page, 'Hold to mark this step done');
   await page.locator('.steps .sched-done').waitFor();
-
   await enterParentMode(page);
   await page.getByRole('tab', { name: 'Visual schedules' }).click();
-  await page.getByTestId('step-2').getByLabel('Step 2 words').fill('Shoes on');
-  await page.getByLabel(/Now \/ Next \/ Later/).check();
-  await page.getByRole('button', { name: 'Save My Day' }).click();
-  await page.getByText('Saved.').waitFor();
+  await page.getByRole('button', { name: 'Open routine builder' }).click();
+  // Down to one step…
+  await editor(page).getByRole('button', { name: 'Remove step 3' }).click();
+  await editor(page).getByRole('button', { name: 'Remove step 2' }).click();
+  assert.ok(await editor(page).getByRole('button', { name: 'Remove step 1' }).isDisabled(), 'at least one step');
+  // …up to five.
+  for (let i = 0; i < 4; i++) await editor(page).getByTestId('add-step').click();
+  assert.ok(await editor(page).getByTestId('add-step').isDisabled(), 'at most five steps');
+  await editor(page).getByLabel('Step 2 words').fill('Shoes on');
+  await editor(page).getByLabel('Step 3 words').fill('Jacket');
+  await editor(page).getByRole('button', { name: 'Move step 3 up' }).click();
+  assert.equal(await editor(page).getByLabel('Step 2 words').inputValue(), 'Jacket');
+  assert.equal(await editor(page).getByLabel('Step 3 words').inputValue(), 'Shoes on');
+  await pickArasaac(page, 'step-4', 'park');
+  await editor(page).getByLabel('Routine name').fill('Park trip');
+  await editor(page).getByTestId('layout-nowNextLater').check();
+  await preview(page).locator('.nnl-now').waitFor();
+  await editor(page).getByTestId('template-name').fill('Park trip');
+  await editor(page).getByTestId('save-template').click();
+  await editor(page).getByRole('button', { name: 'Duplicate Park trip' }).click();
+  await editor(page).locator('[data-template="Park trip copy"]').waitFor();
+  await saveSchedule(page);
   await page.getByRole('button', { name: /back to Talk/ }).click();
 
   await openMyDay(page);
   await page.getByRole('tab', { name: /Now \/ Next \/ Later/ }).click();
-  assert.match((await page.locator('.nnl-now').textContent()) ?? '', /Shoes on/, 'step 1 is done, so NOW is step 2');
-  assert.match((await page.locator('.nnl-next').textContent()) ?? '', /Go outside/);
+  assert.equal(await page.locator('.nnl .sched-card').count(), 3);
+  // Step 1 was already done before editing, so NOW is step 2; editing kept that progress.
+  assert.match((await page.locator('.nnl-now').textContent()) ?? '', /Jacket/);
   await holdGrownup(page, 'Hold to mark this step done');
-  await page.waitForFunction(() => /Go outside/.test(document.querySelector('.nnl-now')?.textContent ?? ''));
+  await page.waitForFunction(() => /Shoes on/.test(document.querySelector('.nnl-now')?.textContent ?? ''));
+
+  // One step at a time, with small previews of what's next.
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).getByTestId('layout-oneAtATime').check();
+  await saveSchedule(page);
+  await page.getByRole('tab', { name: /One step at a time/ }).click();
+  await page.getByTestId('one-step').getByText('STEP 3 OF 5').waitFor();
+  assert.equal(await page.locator('.one-step-next .sched-card').count(), 2);
+
+  // Load a different saved routine, then restore ours.
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).locator('[data-template="Bedtime"]').getByRole('button', { name: 'Use' }).click();
+  assert.equal(await editor(page).getByLabel('Step 1 words').inputValue(), 'Bath');
+  await editor(page).locator('[data-template="Park trip"]').getByRole('button', { name: 'Use' }).click();
+  assert.equal(await editor(page).getByLabel('Step 2 words').inputValue(), 'Jacket');
+  assert.equal(await editor(page).getByLabel('Step 4 words').inputValue(), 'Step 4');
+  await saveSchedule(page);
+  await page.reload();
+  await openMyDay(page);
+  await page.getByRole('tab', { name: /Now \/ Next \/ Later/ }).click();
+  await page.locator('.nnl-now').getByText('Get shoes').waitFor();
+  assert.match((await page.locator('.nnl-next').textContent()) ?? '', /Jacket/);
   await ctx.close();
 });
 
-test('My Day templates can be saved and reused', async () => {
+test('schedule editing is protected: My Day "Edit schedule" needs the PIN; unsaved changes need confirming', async () => {
   const { ctx, page } = await openApp();
-  await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Visual schedules' }).click();
-  await page.getByTestId('ft-first').getByLabel('FIRST words').fill('Bath');
-  await page.locator('.template-row').first().getByPlaceholder('e.g. Bedtime').fill('Bath time');
-  await page.getByRole('button', { name: 'Save for later' }).first().click();
-  await page.getByRole('button', { name: 'Use “Bath time”' }).waitFor();
-  await page.getByTestId('ft-first').getByLabel('FIRST words').fill('Something else');
-  await page.getByRole('button', { name: 'Use “Bath time”' }).click();
-  await page.getByText('Using “Bath time”.').waitFor();
-  assert.equal(await page.getByTestId('ft-first').getByLabel('FIRST words').inputValue(), 'Bath');
+  await enterParentMode(page); // sets the PIN
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openMyDay(page);
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, '0000');
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  assert.equal(await editor(page).count(), 0, 'wrong PIN does not open the editor');
+  await page.getByRole('dialog').getByRole('button', { name: /Cancel|Close/ }).first().click();
+  await page.getByTestId('edit-schedule').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await editor(page).getByLabel('FIRST words').fill('Changed');
+  await editor(page).getByTestId('cancel-schedule').click();
+  await page.getByRole('alertdialog').getByText('Discard your changes?').waitFor();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Discard' }).click();
+  await editor(page).waitFor({ state: 'detached' });
+  assert.equal(await page.locator('.first-then').getByText('Changed').count(), 0);
   await ctx.close();
 });
+
+test('schedule pictures (ARASAAC symbol and photo) still show offline', async () => {
+  const { ctx, page } = await openApp();
+  await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, null, { timeout: 15000 });
+  await openScheduleEditor(page, 'Edit First / Then');
+  await pickArasaac(page, 'ft-first', 'teeth');
+  await pickPhoto(page, 'ft-then');
+  await saveSchedule(page);
+  const url = `https://api.arasaac.org/v1/pictograms/${pictoId('teeth')}`;
+  await page.waitForFunction(async (u) => !!(await (await caches.open('mimzi-symbols-v1')).match(u)), url, { timeout: 20000 });
+  await ctx.unrouteAll({ behavior: 'ignoreErrors' });
+  await ctx.setOffline(true);
+  await page.reload();
+  await openMyDay(page);
+  for (const sel of [`.first-then img.tile-symbol[src="${url}"]`, '.first-then img.tile-photo']) {
+    await page.waitForFunction((s) => {
+      const el = document.querySelector(s) as HTMLImageElement | null;
+      return !!el && el.complete && el.naturalWidth > 0;
+    }, sel);
+  }
+  await ctx.setOffline(false);
+  await ctx.close();
+});
+
+for (const [name, viewport] of [
+  ['phone', { width: 383, height: 743 }],
+  ['onn tablet landscape', { width: 960, height: 600 }],
+  ['onn tablet portrait', { width: 600, height: 960 }],
+  ['ipad', IPAD],
+] as const) {
+  test(`My Day and the schedule editor fit on ${name}`, async () => {
+    const { ctx, page } = await openApp(viewport);
+    await openMyDay(page);
+    for (const tab of [/First \/ Then/, /working for/, /three steps/]) {
+      await page.getByRole('tab', { name: tab }).click();
+      const ok = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll('.myday .sched-card, .myday .reward-goal')] as HTMLElement[];
+        const media = [...document.querySelectorAll('.myday .sched-media')].map((m) => m.getBoundingClientRect());
+        return {
+          overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
+          pictures: media.every((r) => r.height >= 40 && r.width >= 40),
+          inView: cards.every((c) => c.getBoundingClientRect().bottom <= window.innerHeight + 1),
+        };
+      });
+      assert.deepEqual(ok, { overflowX: false, pictures: true, inView: true }, String(tab));
+    }
+    await page.getByTestId('edit-schedule').click();
+    await typePin(page, PIN);
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await typePin(page, PIN);
+    await page.getByRole('button', { name: 'Unlock' }).click();
+    await editor(page).waitFor();
+    const fits = await page.evaluate(() => {
+      const p = document.querySelector('[data-testid="schedule-preview"]')!.getBoundingClientRect();
+      return p.left >= 0 && p.right <= window.innerWidth + 1 && p.height > 150;
+    });
+    assert.ok(fits, 'live preview fits the screen');
+    await ctx.close();
+  });
+}
 
 /* ---------------- Phase 4 ---------------- */
 
@@ -974,7 +1234,7 @@ test('voice: the most natural voice is used automatically at 0.9× with a gentle
   const order = await page.locator('[data-voice]').evaluateAll((els) => els.map((e) => e.getAttribute('data-voice')));
   assert.equal(order[0], 'com.apple.voice.enhanced.en-US.Ava', 'most natural listed first');
   assert.ok(order.indexOf('com.apple.speech.synthesis.voice.Fred') > order.indexOf('com.apple.voice.compact.en-US.Samantha'), 'robotic voices last');
-  await page.locator('[data-voice="com.apple.voice.enhanced.en-US.Ava"]').getByText('★ Most natural').waitFor();
+  await page.locator('[data-voice="com.apple.voice.enhanced.en-US.Ava"]').getByText('· Most natural').waitFor();
   await ctx.close();
 });
 

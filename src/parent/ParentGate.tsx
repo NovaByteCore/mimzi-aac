@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { createPinRecord, isValidPin, verifyPin } from '../lib/pin';
+import { Icon } from '../components/Icon';
 
 interface Props {
   onUnlock: () => void;
@@ -81,7 +82,7 @@ export function ParentGate({ onUnlock, onCancel }: Props) {
           {KEYS.map((k, i) =>
             k ? (
               <button key={i} type="button" className="pin-key" onClick={() => press(k)} aria-label={k === '⌫' ? 'Delete digit' : k} disabled={busy}>
-                {k}
+                {k === '⌫' ? <Icon name="backspace" size={26} /> : k}
               </button>
             ) : (
               <span key={i} />

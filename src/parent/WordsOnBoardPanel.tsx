@@ -6,6 +6,7 @@ import { TileFace } from '../components/TileFace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { displayColor } from '../lib/colors';
 import type { Tile } from '../types';
+import { Icon } from '../components/Icon';
 
 const PRESETS: (number | 'all')[] = [4, 6, 8, 12, 16, 20, 24, 30, 40, 'all'];
 
@@ -85,7 +86,7 @@ export function WordsOnBoardPanel() {
             · goal <strong>{targetN}</strong>
             {visible.length > targetN && <span className="form-error"> — tap {visible.length - targetN} more to hide</span>}
             {visible.length < targetN && <span className="muted"> — tap {targetN - visible.length} more to show</span>}
-            {visible.length === targetN && <span> ✓</span>}
+            {visible.length === targetN && <Icon name="check" size={16} />}
           </>
         )}
       </div>
@@ -141,7 +142,7 @@ export function WordsOnBoardPanel() {
                     <TileFace tile={t} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
                   </span>
                   <span className="tile-label">
-                    {t.hidden ? '🙈 ' : ''}
+                    {t.hidden ? '(hidden) ' : ''}
                     {t.label}
                   </span>
                 </button>

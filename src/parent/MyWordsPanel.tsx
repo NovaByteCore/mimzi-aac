@@ -5,6 +5,7 @@ import { AudioRecorder } from './AudioRecorder';
 import { ConfirmDialog } from './ConfirmDialog';
 import { newId } from '../lib/id';
 import { downloadText, observationsToCsv, observationsToText, sortObservations } from '../lib/observations';
+import { Icon } from '../components/Icon';
 
 const today = () => {
   const d = new Date();
@@ -136,7 +137,7 @@ export function MyWordsPanel() {
             disabled={!observations.length}
             onClick={() => downloadText(observationsToCsv(observations), `mimzi-my-words-${today()}.csv`, 'text/csv')}
           >
-            ⬇️ Spreadsheet (CSV)
+            <Icon name="download" /> Spreadsheet (CSV)
           </button>
           <button
             type="button"
@@ -144,7 +145,7 @@ export function MyWordsPanel() {
             disabled={!observations.length}
             onClick={() => downloadText(observationsToText(observations), `mimzi-my-words-${today()}.txt`, 'text/plain')}
           >
-            ⬇️ Summary for therapist
+            <Icon name="download" /> Summary for therapist
           </button>
         </div>
       </div>

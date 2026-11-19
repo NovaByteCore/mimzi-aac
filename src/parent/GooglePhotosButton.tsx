@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { googleConfigured, requestToken, SCOPES } from '../lib/google/auth';
 import { pickFromGooglePhotos } from '../lib/google/photosPicker';
 import { useMimzi } from '../state/MimziStore';
+import { Icon } from '../components/Icon';
 
 interface Props {
   onPicked: (blob: Blob) => void;
@@ -50,11 +51,11 @@ export function GooglePhotosButton({ onPicked, className }: Props) {
     <span className="gphotos">
       {busy ? (
         <button type="button" className={`btn ${className ?? ''}`} onClick={() => abort.current?.abort()}>
-          ✕ Stop waiting for Google Photos
+          <Icon name="close" /> Stop waiting for Google Photos
         </button>
       ) : (
         <button type="button" className={`btn ${className ?? ''}`} onClick={start}>
-          <span aria-hidden="true">☁️</span> From Google Photos
+          <Icon name="cloud" /> From Google Photos
         </button>
       )}
       {link && (

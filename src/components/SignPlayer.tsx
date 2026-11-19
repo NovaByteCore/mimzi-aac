@@ -106,7 +106,7 @@ export function SignPlayer({ label, url, mime, aslSign, loop, speed, onClose }: 
                   void v.play();
                 }}
               >
-                🔁 Again
+                <Icon name="reset" /> Again
               </button>
             </>
           )}

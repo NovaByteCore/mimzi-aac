@@ -5,6 +5,7 @@ import { TileFace } from '../components/TileFace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { newId } from '../lib/id';
 import type { Category } from '../types';
+import { Icon } from '../components/Icon';
 
 export function CategoriesPanel() {
   const { categories, tiles, saveCategory, saveCategories, deleteCategory } = useMimzi();
@@ -68,10 +69,10 @@ export function CategoriesPanel() {
               <span className="muted small">{count} words</span>
               <span className="spacer" />
               <button type="button" className="icon-btn small" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${c.name} up`}>
-                ▲
+                <Icon name="up" />
               </button>
               <button type="button" className="icon-btn small" onClick={() => move(i, 1)} disabled={i === sorted.length - 1} aria-label={`Move ${c.name} down`}>
-                ▼
+                <Icon name="down" />
               </button>
               <button type="button" className="btn btn-quiet small" onClick={() => saveCategory({ ...c, hidden: !c.hidden })}>
                 {c.hidden ? 'Show' : 'Hide'}

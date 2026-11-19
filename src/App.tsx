@@ -12,10 +12,12 @@ import { speakText, speakTile, spokenFor, type SpeakOptions, type SpeakResult } 
 import { HOME_PAGE } from './data/vocabulary';
 import { mulberryUrl } from './lib/colors';
 import { remoteSymbolUrls } from './lib/symbols';
-import type { Tile } from './types';
+import { scheduleSymbolUrls } from './lib/myday';
+import type { MyDayTool, Tile } from './types';
 import { ParentGate } from './parent/ParentGate';
 import { ParentMode } from './parent/ParentMode';
 import { MyDayView } from './components/MyDayView';
+import { ScheduleEditor } from './parent/schedule/ScheduleEditor';
 import { SignPlayer } from './components/SignPlayer';
 
 type View = 'talk' | 'myday' | 'favorites' | 'people' | 'parent';
@@ -25,6 +27,9 @@ export function App() {
   const { tiles, categories, settings, mediaUrls, mediaMime } = store;
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
+  // "Edit schedule" on My Day: PIN first, then the schedule editor (grown-ups only).
+  const [scheduleGate, setScheduleGate] = useState<MyDayTool | null>(null);
+  const [scheduleEdit, setScheduleEdit] = useState<MyDayTool | null>(null);
   // Page navigation: a stack of page ids (Home at the bottom) for folders, Back and Home.
   const [stack, setStack] = useState<string[]>([HOME_PAGE]);
   const categoryId = stack[stack.length - 1];
@@ -51,7 +56,7 @@ export function App() {
   useEffect(() => {
     if (!('serviceWorker' in navigator) || store.status !== 'ready') return;
     const t = setTimeout(() => {
-      const urls = new Set<string>(remoteSymbolUrls(tiles, { symbolStyle: settings.symbolStyle }));
+      const urls = new Set<string>([...remoteSymbolUrls(tiles, { symbolStyle: settings.symbolStyle }), ...scheduleSymbolUrls(store.myDay)]);
       for (const x of [...tiles, ...categories]) {
         if (x.symbol?.startsWith('mul:')) urls.add(mulberryUrl(x.symbol.slice(4)));
         const fb = (x as Tile).fallbackSymbol;
@@ -60,7 +65,7 @@ export function App() {
       void navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage({ type: 'mimzi:cache-symbols', urls: [...urls] }));
     }, 1500);
     return () => clearTimeout(t);
-  }, [tiles, categories, store.status, settings.symbolStyle]);
+  }, [tiles, categories, store.status, settings.symbolStyle, store.myDay]);
   const speechOpts: SpeakOptions = {
     rate: settings.speechRate,
     lang: settings.speechLang,
@@ -147,9 +152,11 @@ export function App() {
     return <ParentMode onExit={() => setView('talk')} />;
   }
 
+  // Quick words are chosen on their own: hiding a word on its vocabulary page never removes
+  // the child's quick way to say it (only deleting the word does).
   const quickTiles = settings.quickTileIds
     .map((id) => tilesById.get(id))
-    .filter((t): t is Tile => Boolean(t && !t.deletedAt && !t.hidden));
+    .filter((t): t is Tile => Boolean(t && !t.deletedAt));
 
   let boardTiles: Tile[] = [];
   let boardLabel = '';
@@ -197,7 +204,7 @@ export function App() {
         )}
       </header>
 
-      {view === 'talk' && (
+      {view === 'talk' && settings.pageList !== 'hide' && (
         <nav className="category-bar" aria-label="Word groups">
           {visibleCategories.map((c) => (
             <button
@@ -218,7 +225,7 @@ export function App() {
 
       <main className="board-area">
         {view === 'myday' ? (
-          <MyDayView say={say} />
+          <MyDayView say={say} onEdit={(tool) => setScheduleGate(tool)} />
         ) : (
         <div className="board-wrap">
         {view === 'talk' && (
@@ -289,6 +296,17 @@ export function App() {
           onClose={() => setSignTile(null)}
         />
       )}
+
+      {scheduleGate && (
+        <ParentGate
+          onCancel={() => setScheduleGate(null)}
+          onUnlock={() => {
+            setScheduleEdit(scheduleGate);
+            setScheduleGate(null);
+          }}
+        />
+      )}
+      {scheduleEdit && <ScheduleEditor initial={scheduleEdit} onClose={() => setScheduleEdit(null)} />}
 
       {gateOpen && (
         <ParentGate
