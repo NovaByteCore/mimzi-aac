@@ -84,7 +84,7 @@ test('friendly defaults: 0.9× speed and a gentle 1.1 pitch; older untouched set
 });
 
 test('sync: each device keeps its own voice; the shared preference travels', () => {
-  const s = { ...defaultSettings(), voiceURI: 'uri:Zoe (Premium)', voiceName: 'Zoe (Premium)', sharedVoiceName: 'Zoe (Premium)', pin: 'x' };
+  const s = { ...defaultSettings(), voiceURI: 'uri:Zoe (Premium)', voiceName: 'Zoe (Premium)', sharedVoiceName: 'Zoe (Premium)', pin: { hash: 'h', salt: 's', algo: 'pbkdf2' as const } };
   const shared = sharedSettings(s) as Record<string, unknown>;
   assert.equal(shared.voiceURI, undefined);
   assert.equal(shared.voiceName, undefined);
