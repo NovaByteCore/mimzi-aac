@@ -1,0 +1,1125 @@
+{
+ "version": 1,
+ "source": "ARASAAC (Sergio Palao, Government of Aragón, CC BY-NC-SA 4.0)",
+ "size": 320,
+ "tiles": {
+  "core-i": {
+   "id": 2617,
+   "name": "I"
+  },
+  "core-want": {
+   "id": 5441,
+   "name": "want"
+  },
+  "core-help": {
+   "id": 4570,
+   "name": "help"
+  },
+  "core-stop": {
+   "id": 7195,
+   "name": "stop"
+  },
+  "core-all-done": {
+   "id": 28429,
+   "name": "finished"
+  },
+  "core-you": {
+   "id": 2608,
+   "name": "you"
+  },
+  "core-go": {
+   "id": 2432,
+   "name": "go"
+  },
+  "core-play": {
+   "id": 2439,
+   "name": "play"
+  },
+  "core-eat": {
+   "id": 2349,
+   "name": "eat"
+  },
+  "core-drink": {
+   "id": 2276,
+   "name": "drink"
+  },
+  "core-no": {
+   "id": 5526,
+   "name": "no"
+  },
+  "core-yes": {
+   "id": 5583,
+   "name": "yes"
+  },
+  "core-open": {
+   "id": 4549,
+   "name": "open"
+  },
+  "core-look": {
+   "id": 2474,
+   "name": "look"
+  },
+  "core-get": {
+   "id": 17044,
+   "name": "get"
+  },
+  "core-again": {
+   "id": 37163,
+   "name": "again"
+  },
+  "core-wait": {
+   "id": 8109,
+   "name": "wait"
+  },
+  "core-folder-food": {
+   "id": 4610,
+   "name": "food"
+  },
+  "core-folder-family": {
+   "id": 2392,
+   "name": "family"
+  },
+  "core-folder-play": {
+   "id": 9813,
+   "name": "toys"
+  },
+  "core-folder-feelings": {
+   "id": 12359,
+   "name": "emotions"
+  },
+  "core-folder-questions": {
+   "id": 7217,
+   "name": "question"
+  },
+  "core-me": {
+   "id": 2617,
+   "name": "me"
+  },
+  "core-mine": {
+   "id": 12264,
+   "name": "mine"
+  },
+  "core-this": {
+   "id": 7095,
+   "name": "this"
+  },
+  "core-that": {
+   "id": 6906,
+   "name": "that"
+  },
+  "core-come": {
+   "id": 11708,
+   "name": "come"
+  },
+  "core-give": {
+   "id": 17038,
+   "name": "give"
+  },
+  "core-put": {
+   "id": 5447,
+   "name": "put"
+  },
+  "core-close": {
+   "id": 2697,
+   "name": "close"
+  },
+  "core-up": {
+   "id": 5388,
+   "name": "up"
+  },
+  "core-down": {
+   "id": 5355,
+   "name": "down"
+  },
+  "core-in": {
+   "id": 7034,
+   "name": "in"
+  },
+  "core-out": {
+   "id": 2806,
+   "name": "go out"
+  },
+  "core-on": {
+   "id": 7814,
+   "name": "on"
+  },
+  "core-off": {
+   "id": 21365,
+   "name": "switch off"
+  },
+  "core-break": {
+   "id": 16643,
+   "name": "rest"
+  },
+  "core-folder-phrases": {
+   "id": 27768,
+   "name": "phrase"
+  },
+  "core-folder-actions": {
+   "id": 7297,
+   "name": "actions"
+  },
+  "core-folder-body": {
+   "id": 2728,
+   "name": "body"
+  },
+  "core-folder-places": {
+   "id": 32598,
+   "name": "places"
+  },
+  "core-folder-social": {
+   "id": 6009,
+   "name": "hello"
+  },
+  "core-folder-safety": {
+   "id": 4570,
+   "name": "help"
+  },
+  "core-folder-describe": {
+   "id": 32584,
+   "name": "adjectives"
+  },
+  "needs-eat": {
+   "id": 2349,
+   "name": "eat"
+  },
+  "needs-drink": {
+   "id": 2276,
+   "name": "drink"
+  },
+  "needs-hungry": {
+   "id": 4962,
+   "name": "hungry"
+  },
+  "needs-thirsty": {
+   "id": 4963,
+   "name": "thirsty"
+  },
+  "needs-milk": {
+   "id": 2445,
+   "name": "milk"
+  },
+  "needs-water": {
+   "id": 2248,
+   "name": "water"
+  },
+  "needs-snack": {
+   "id": 4694,
+   "name": "snack"
+  },
+  "needs-potty": {
+   "id": 2430,
+   "name": "toilet"
+  },
+  "needs-pee": {
+   "id": 3429,
+   "name": "pee"
+  },
+  "needs-poop": {
+   "id": 8050,
+   "name": "poop"
+  },
+  "needs-diaper": {
+   "id": 22017,
+   "name": "diaper"
+  },
+  "needs-sleep": {
+   "id": 2369,
+   "name": "sleep"
+  },
+  "needs-tired": {
+   "id": 2314,
+   "name": "tired"
+  },
+  "needs-hurt": {
+   "id": 30620,
+   "name": "hurt"
+  },
+  "needs-break": {
+   "id": 16643,
+   "name": "rest"
+  },
+  "needs-help": {
+   "id": 4570,
+   "name": "help"
+  },
+  "needs-all-done": {
+   "id": 28429,
+   "name": "finished"
+  },
+  "food-milk": {
+   "id": 2445,
+   "name": "milk"
+  },
+  "food-water": {
+   "id": 2248,
+   "name": "water"
+  },
+  "food-juice": {
+   "id": 11461,
+   "name": "juice"
+  },
+  "food-apple": {
+   "id": 2462,
+   "name": "apple"
+  },
+  "food-banana": {
+   "id": 2530,
+   "name": "banana"
+  },
+  "food-grapes": {
+   "id": 3247,
+   "name": "grapes"
+  },
+  "food-strawberry": {
+   "id": 2400,
+   "name": "strawberry"
+  },
+  "food-bread": {
+   "id": 2494,
+   "name": "bread"
+  },
+  "food-cheese": {
+   "id": 2541,
+   "name": "cheese"
+  },
+  "food-crackers": {
+   "id": 37883,
+   "name": "cracker"
+  },
+  "food-yogurt": {
+   "id": 2618,
+   "name": "yogurt"
+  },
+  "food-pasta": {
+   "id": 8652,
+   "name": "pasta"
+  },
+  "food-chicken": {
+   "id": 2404,
+   "name": "chicken"
+  },
+  "food-cookie": {
+   "id": 8312,
+   "name": "cookie"
+  },
+  "food-cup": {
+   "id": 2582,
+   "name": "cup"
+  },
+  "food-plate": {
+   "id": 2532,
+   "name": "plate"
+  },
+  "food-spoon": {
+   "id": 2362,
+   "name": "spoon"
+  },
+  "food-eat": {
+   "id": 2349,
+   "name": "eat"
+  },
+  "food-drink": {
+   "id": 2276,
+   "name": "drink"
+  },
+  "food-all-done": {
+   "id": 28429,
+   "name": "finished"
+  },
+  "food-yummy": {
+   "id": 32340,
+   "name": "delicious"
+  },
+  "food-yucky": {
+   "id": 32338,
+   "name": "disgusting"
+  },
+  "family-mama": {
+   "id": 2458,
+   "name": "mom"
+  },
+  "family-dada": {
+   "id": 31146,
+   "name": "dad"
+  },
+  "family-grandma": {
+   "id": 2243,
+   "name": "grandma"
+  },
+  "family-grandpa": {
+   "id": 2244,
+   "name": "grandpa"
+  },
+  "family-brother": {
+   "id": 2423,
+   "name": "brother"
+  },
+  "family-sister": {
+   "id": 2422,
+   "name": "sister"
+  },
+  "family-baby": {
+   "id": 2275,
+   "name": "baby"
+  },
+  "family-friend": {
+   "id": 8486,
+   "name": "friend"
+  },
+  "family-teacher": {
+   "id": 2457,
+   "name": "teacher"
+  },
+  "family-dog": {
+   "id": 2517,
+   "name": "dog"
+  },
+  "family-cat": {
+   "id": 2406,
+   "name": "cat"
+  },
+  "family-family": {
+   "id": 2392,
+   "name": "family"
+  },
+  "play-ball": {
+   "id": 2269,
+   "name": "ball"
+  },
+  "play-bubbles": {
+   "id": 6945,
+   "name": "bubbles"
+  },
+  "play-cars": {
+   "id": 2339,
+   "name": "car"
+  },
+  "play-blocks": {
+   "id": 4921,
+   "name": "blocks"
+  },
+  "play-books": {
+   "id": 2450,
+   "name": "book"
+  },
+  "play-music": {
+   "id": 24795,
+   "name": "music"
+  },
+  "play-dance": {
+   "id": 2652,
+   "name": "dance"
+  },
+  "play-outside": {
+   "id": 2806,
+   "name": "go out"
+  },
+  "play-slide": {
+   "id": 4759,
+   "name": "slide"
+  },
+  "play-swing": {
+   "id": 4608,
+   "name": "swing"
+  },
+  "play-jump": {
+   "id": 2804,
+   "name": "jump"
+  },
+  "play-run": {
+   "id": 2719,
+   "name": "run"
+  },
+  "play-my-turn": {
+   "id": 7158,
+   "name": "my turn"
+  },
+  "play-teddy": {
+   "id": 4945,
+   "name": "teddy bear"
+  },
+  "play-doll": {
+   "id": 2482,
+   "name": "doll"
+  },
+  "play-puzzle": {
+   "id": 2540,
+   "name": "puzzle"
+  },
+  "play-crayons": {
+   "id": 4951,
+   "name": "crayons"
+  },
+  "play-playdough": {
+   "id": 2529,
+   "name": "plasticine"
+  },
+  "play-trampoline": {
+   "id": 23891,
+   "name": "trampoline"
+  },
+  "play-again": {
+   "id": 37163,
+   "name": "again"
+  },
+  "play-all-done": {
+   "id": 28429,
+   "name": "finished"
+  },
+  "play-play": {
+   "id": 2439,
+   "name": "play"
+  },
+  "feelings-happy": {
+   "id": 3245,
+   "name": "happy"
+  },
+  "feelings-sad": {
+   "id": 2606,
+   "name": "sad"
+  },
+  "feelings-mad": {
+   "id": 2374,
+   "name": "angry"
+  },
+  "feelings-scared": {
+   "id": 2261,
+   "name": "scared"
+  },
+  "feelings-excited": {
+   "id": 39090,
+   "name": "excited"
+  },
+  "feelings-frustrated": {
+   "id": 2374,
+   "name": "angry"
+  },
+  "feelings-silly": {
+   "id": 8593,
+   "name": "funny"
+  },
+  "feelings-calm": {
+   "id": 31310,
+   "name": "calm"
+  },
+  "feelings-upset": {
+   "id": 26985,
+   "name": "worried"
+  },
+  "feelings-tired": {
+   "id": 2314,
+   "name": "tired"
+  },
+  "feelings-hurt": {
+   "id": 30620,
+   "name": "hurt"
+  },
+  "feelings-break": {
+   "id": 16643,
+   "name": "rest"
+  },
+  "questions-what": {
+   "id": 22620,
+   "name": "what"
+  },
+  "questions-where": {
+   "id": 7764,
+   "name": "where"
+  },
+  "questions-who": {
+   "id": 9853,
+   "name": "who"
+  },
+  "questions-why": {
+   "id": 24763,
+   "name": "why"
+  },
+  "questions-how": {
+   "id": 12313,
+   "name": "how"
+  },
+  "questions-what-s-that": {
+   "id": 22620,
+   "name": "what"
+  },
+  "questions-where-mama": {
+   "id": 7764,
+   "name": "where"
+  },
+  "actions-walk": {
+   "id": 3251,
+   "name": "walk"
+  },
+  "actions-run": {
+   "id": 2719,
+   "name": "run"
+  },
+  "actions-sit": {
+   "id": 6611,
+   "name": "sit"
+  },
+  "actions-stand": {
+   "id": 13368,
+   "name": "stand"
+  },
+  "actions-wash": {
+   "id": 8977,
+   "name": "wash"
+  },
+  "actions-brush": {
+   "id": 2326,
+   "name": "brush teeth"
+  },
+  "actions-push": {
+   "id": 4638,
+   "name": "push"
+  },
+  "actions-throw": {
+   "id": 6543,
+   "name": "throw"
+  },
+  "actions-catch": {
+   "id": 39647,
+   "name": "catch"
+  },
+  "actions-read": {
+   "id": 5973,
+   "name": "read"
+  },
+  "actions-sing": {
+   "id": 2315,
+   "name": "sing"
+  },
+  "actions-dance": {
+   "id": 2652,
+   "name": "dance"
+  },
+  "actions-jump": {
+   "id": 2804,
+   "name": "jump"
+  },
+  "actions-sleep": {
+   "id": 2369,
+   "name": "sleep"
+  },
+  "actions-hug": {
+   "id": 4550,
+   "name": "hug"
+  },
+  "actions-clap": {
+   "id": 4563,
+   "name": "clap"
+  },
+  "actions-draw": {
+   "id": 8088,
+   "name": "draw"
+  },
+  "body-head": {
+   "id": 2673,
+   "name": "head"
+  },
+  "body-eyes": {
+   "id": 2876,
+   "name": "eyes"
+  },
+  "body-ears": {
+   "id": 2871,
+   "name": "ear"
+  },
+  "body-nose": {
+   "id": 2887,
+   "name": "nose"
+  },
+  "body-mouth": {
+   "id": 2663,
+   "name": "mouth"
+  },
+  "body-hands": {
+   "id": 2928,
+   "name": "hand"
+  },
+  "body-feet": {
+   "id": 2841,
+   "name": "foot"
+  },
+  "body-belly": {
+   "id": 2786,
+   "name": "belly"
+  },
+  "body-arms": {
+   "id": 2669,
+   "name": "arm"
+  },
+  "body-legs": {
+   "id": 8666,
+   "name": "leg"
+  },
+  "body-teeth": {
+   "id": 2737,
+   "name": "teeth"
+  },
+  "body-hurt": {
+   "id": 30620,
+   "name": "hurt"
+  },
+  "places-home": {
+   "id": 6964,
+   "name": "home"
+  },
+  "places-outside": {
+   "id": 2806,
+   "name": "go out"
+  },
+  "places-park": {
+   "id": 2859,
+   "name": "playground"
+  },
+  "places-school": {
+   "id": 3082,
+   "name": "school"
+  },
+  "places-shop": {
+   "id": 8986,
+   "name": "shop"
+  },
+  "places-car": {
+   "id": 2339,
+   "name": "car"
+  },
+  "places-bath": {
+   "id": 2272,
+   "name": "bath"
+  },
+  "places-bed": {
+   "id": 2304,
+   "name": "bed"
+  },
+  "places-garden": {
+   "id": 2434,
+   "name": "garden"
+  },
+  "places-potty": {
+   "id": 2430,
+   "name": "toilet"
+  },
+  "social-hi": {
+   "id": 6009,
+   "name": "hi"
+  },
+  "social-bye": {
+   "id": 5896,
+   "name": "bye"
+  },
+  "social-please": {
+   "id": 8194,
+   "name": "please"
+  },
+  "social-thank-you": {
+   "id": 8129,
+   "name": "thank you"
+  },
+  "social-hug": {
+   "id": 4550,
+   "name": "hug"
+  },
+  "social-kiss": {
+   "id": 4576,
+   "name": "kiss"
+  },
+  "social-love-you": {
+   "id": 6600,
+   "name": "love"
+  },
+  "social-good-morning": {
+   "id": 6944,
+   "name": "good morning"
+  },
+  "social-good-night": {
+   "id": 6942,
+   "name": "good night"
+  },
+  "social-yes": {
+   "id": 5583,
+   "name": "yes"
+  },
+  "social-no-thank-you": {
+   "id": 31859,
+   "name": "no (shaking head)"
+  },
+  "social-my-turn": {
+   "id": 7158,
+   "name": "my turn"
+  },
+  "safety-stop": {
+   "id": 7195,
+   "name": "stop"
+  },
+  "safety-no": {
+   "id": 5526,
+   "name": "no"
+  },
+  "safety-help": {
+   "id": 4570,
+   "name": "help"
+  },
+  "safety-hurt": {
+   "id": 30620,
+   "name": "hurt"
+  },
+  "safety-hot": {
+   "id": 2300,
+   "name": "hot"
+  },
+  "safety-cold": {
+   "id": 4652,
+   "name": "cold"
+  },
+  "safety-scared": {
+   "id": 2261,
+   "name": "scared"
+  },
+  "safety-too-loud": {
+   "id": 7157,
+   "name": "noisy"
+  },
+  "safety-break": {
+   "id": 16643,
+   "name": "rest"
+  },
+  "safety-not-safe": {
+   "id": 25315,
+   "name": "danger"
+  },
+  "safety-quiet": {
+   "id": 38050,
+   "name": "quiet"
+  },
+  "safety-hug": {
+   "id": 4550,
+   "name": "hug"
+  },
+  "safety-all-done": {
+   "id": 28429,
+   "name": "finished"
+  },
+  "describe-big": {
+   "id": 4658,
+   "name": "big"
+  },
+  "describe-little": {
+   "id": 4571,
+   "name": "little"
+  },
+  "describe-wet": {
+   "id": 4697,
+   "name": "wet"
+  },
+  "describe-dry": {
+   "id": 2566,
+   "name": "dry"
+  },
+  "describe-dirty": {
+   "id": 4750,
+   "name": "dirty"
+  },
+  "describe-clean": {
+   "id": 3351,
+   "name": "clean"
+  },
+  "describe-fast": {
+   "id": 5306,
+   "name": "fast"
+  },
+  "describe-slow": {
+   "id": 4676,
+   "name": "slow"
+  },
+  "describe-yummy": {
+   "id": 32340,
+   "name": "delicious"
+  },
+  "describe-yucky": {
+   "id": 32338,
+   "name": "disgusting"
+  },
+  "describe-hot": {
+   "id": 2300,
+   "name": "hot"
+  },
+  "describe-cold": {
+   "id": 4652,
+   "name": "cold"
+  },
+  "describe-soft": {
+   "id": 4578,
+   "name": "soft"
+  },
+  "describe-loud": {
+   "id": 7157,
+   "name": "noisy"
+  },
+  "describe-quiet": {
+   "id": 38050,
+   "name": "quiet"
+  },
+  "describe-broken": {
+   "id": 4736,
+   "name": "broken"
+  },
+  "phrases-help-me": {
+   "id": 4570,
+   "name": "help"
+  },
+  "phrases-i-want-that": {
+   "id": 5441,
+   "name": "I want"
+  },
+  "phrases-open-it": {
+   "id": 4549,
+   "name": "open"
+  },
+  "phrases-go-outside": {
+   "id": 2806,
+   "name": "go out"
+  },
+  "phrases-more-bubbles": {
+   "id": 6945,
+   "name": "bubbles"
+  },
+  "phrases-my-turn": {
+   "id": 7158,
+   "name": "my turn"
+  },
+  "phrases-all-done": {
+   "id": 28429,
+   "name": "finished"
+  },
+  "phrases-no-thank-you": {
+   "id": 31859,
+   "name": "no (shaking head)"
+  },
+  "phrases-i-don-t-want-it": {
+   "id": 6156,
+   "name": "I don't want"
+  },
+  "phrases-it-hurts": {
+   "id": 30620,
+   "name": "hurt"
+  },
+  "phrases-where-is-mama": {
+   "id": 7764,
+   "name": "where"
+  },
+  "phrases-read-book": {
+   "id": 5973,
+   "name": "read"
+  },
+  "phrases-play-cars": {
+   "id": 2340,
+   "name": "toy car"
+  },
+  "phrases-look-at-that": {
+   "id": 2474,
+   "name": "look"
+  },
+  "phrases-i-don-t-like-that": {
+   "id": 22005,
+   "name": "I don't like that"
+  }
+ },
+ "missing": [
+  "play-your-turn",
+  "actions-pull",
+  "safety-too-bright",
+  "phrases-more-please"
+ ],
+ "ids": [
+  2243,
+  2244,
+  2248,
+  2261,
+  2269,
+  2272,
+  2275,
+  2276,
+  2300,
+  2304,
+  2314,
+  2315,
+  2326,
+  2339,
+  2340,
+  2349,
+  2362,
+  2369,
+  2374,
+  2392,
+  2400,
+  2404,
+  2406,
+  2422,
+  2423,
+  2430,
+  2432,
+  2434,
+  2439,
+  2445,
+  2450,
+  2457,
+  2458,
+  2462,
+  2474,
+  2482,
+  2494,
+  2517,
+  2522,
+  2529,
+  2530,
+  2532,
+  2540,
+  2541,
+  2566,
+  2582,
+  2606,
+  2608,
+  2617,
+  2618,
+  2652,
+  2663,
+  2669,
+  2673,
+  2697,
+  2719,
+  2728,
+  2737,
+  2786,
+  2804,
+  2806,
+  2841,
+  2859,
+  2871,
+  2876,
+  2887,
+  2928,
+  3082,
+  3245,
+  3247,
+  3251,
+  3351,
+  3389,
+  3429,
+  4549,
+  4550,
+  4563,
+  4570,
+  4571,
+  4576,
+  4578,
+  4608,
+  4609,
+  4610,
+  4638,
+  4652,
+  4658,
+  4676,
+  4694,
+  4697,
+  4736,
+  4750,
+  4759,
+  4921,
+  4935,
+  4945,
+  4951,
+  4962,
+  4963,
+  5306,
+  5355,
+  5388,
+  5441,
+  5447,
+  5526,
+  5583,
+  5896,
+  5973,
+  6009,
+  6027,
+  6049,
+  6156,
+  6543,
+  6600,
+  6611,
+  6906,
+  6942,
+  6944,
+  6945,
+  6964,
+  7034,
+  7095,
+  7157,
+  7158,
+  7195,
+  7217,
+  7297,
+  7764,
+  7814,
+  8050,
+  8088,
+  8109,
+  8129,
+  8194,
+  8312,
+  8486,
+  8593,
+  8652,
+  8666,
+  8977,
+  8986,
+  9813,
+  9853,
+  11238,
+  11461,
+  11708,
+  12264,
+  12313,
+  12359,
+  13368,
+  14534,
+  16643,
+  17038,
+  17044,
+  21365,
+  22005,
+  22017,
+  22620,
+  23891,
+  24763,
+  24791,
+  24795,
+  25191,
+  25315,
+  25498,
+  26985,
+  27768,
+  28425,
+  28429,
+  29151,
+  30620,
+  31146,
+  31310,
+  31853,
+  31859,
+  32338,
+  32340,
+  32584,
+  32598,
+  35197,
+  35425,
+  37163,
+  37883,
+  38050,
+  39090,
+  39647
+ ]
+}
