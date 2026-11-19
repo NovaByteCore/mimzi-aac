@@ -154,7 +154,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
           for (const c of CATEGORY_SEED) await db.setKv(`migrated:cat:${c.id}`, true);
           await db.setKv('migrated:vocab3', true);
           await db.setKv('migrated:symbols4', true);
-          await db.setKv('symbols:picks', 2);
+          await db.setKv('symbols:picks', 3);
         }
         const [tiles, rawCategories, media, saved, savedDay, observations] = await Promise.all([
           db.getAll('tiles'),

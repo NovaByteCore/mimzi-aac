@@ -3,7 +3,7 @@
  * without moving or overwriting anything a caregiver has customised.
  */
 import * as db from '../lib/db';
-import { ARASAAC_SKIP, STARTER_PICTOS } from '../lib/arasaac';
+import { ARASAAC_SKIP, KEEP_BUNDLED, STARTER_PICTOS } from '../lib/arasaac';
 import { buildSeedCategories, buildSeedTiles } from '../data/vocabulary';
 import { slotMap } from '../lib/grid';
 import type { Category, Tile } from '../types';
@@ -99,12 +99,12 @@ export async function migrateSymbolsV4(tiles: Tile[]): Promise<void> {
  * match, now that better search words exist. Only automatic pictures are touched.
  */
 export async function fixArasaacPicksV2(tiles: Tile[]): Promise<void> {
-  if ((await db.getKv<number>('symbols:picks')) === 2) return;
+  if (((await db.getKv<number>('symbols:picks')) ?? 0) >= 3) return;
   const changed: Tile[] = [];
   for (let i = 0; i < tiles.length; i++) {
     const t = tiles[i];
     const pinned = STARTER_PICTOS[t.id];
-    const bad = t.autoArasaac && (ARASAAC_SKIP.has(t.autoArasaac.id) || (pinned && pinned.id !== t.autoArasaac.id));
+    const bad = t.autoArasaac && (ARASAAC_SKIP.has(t.autoArasaac.id) || KEEP_BUNDLED.has(t.id) || (pinned && pinned.id !== t.autoArasaac.id));
     if (bad) {
       const { autoArasaac: _old, ...rest } = t;
       tiles[i] = { ...rest, updatedAt: Date.now() } as Tile;
@@ -113,5 +113,5 @@ export async function fixArasaacPicksV2(tiles: Tile[]): Promise<void> {
   }
   if (changed.length) await db.putMany('tiles', changed);
   await db.setKv('symbols:missing', {});
-  await db.setKv('symbols:picks', 2);
+  await db.setKv('symbols:picks', 3);
 }

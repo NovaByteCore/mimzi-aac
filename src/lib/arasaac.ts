@@ -124,6 +124,25 @@ export const STARTER_QUERIES: Record<string, string[]> = {
  * 32338 "disgusting", 7157 "noisy").
  */
 export const STARTER_PICTOS: Record<string, { id: number; name: string }> = {
+  // Reviewed picture by picture on the live service (Nov 2026): ARASAAC's best match had the
+  // wrong meaning for these toddler words (bus stop, coal mine, police arrest, rock-breaking…).
+  'core-stop': { id: 7195, name: 'stop' },
+  'safety-stop': { id: 7195, name: 'stop' },
+  'actions-catch': { id: 39647, name: 'catch' },
+  'core-mine': { id: 12264, name: 'mine' },
+  'actions-draw': { id: 8088, name: 'draw' },
+  'actions-brush': { id: 2326, name: 'brush teeth' },
+  'actions-wash': { id: 8977, name: 'wash' },
+  'core-out': { id: 2806, name: 'go out' },
+  'core-on': { id: 7814, name: 'on' },
+  'core-break': { id: 16643, name: 'rest' },
+  'needs-break': { id: 16643, name: 'rest' },
+  'feelings-break': { id: 16643, name: 'rest' },
+  'safety-break': { id: 16643, name: 'rest' },
+  'core-folder-places': { id: 32598, name: 'places' },
+  'places-park': { id: 2859, name: 'playground' },
+  'places-outside': { id: 2806, name: 'go out' },
+  'play-outside': { id: 2806, name: 'go out' },
   'food-crackers': { id: 37883, name: 'cracker' },
   'questions-who': { id: 9853, name: 'who' },
   'describe-yucky': { id: 32338, name: 'disgusting' },
@@ -131,6 +150,12 @@ export const STARTER_PICTOS: Record<string, { id: number; name: string }> = {
   'describe-loud': { id: 7157, name: 'noisy' },
   'safety-too-loud': { id: 7157, name: 'noisy' },
 };
+
+/**
+ * Starter words that keep their bundled Mulberry picture because ARASAAC has no picture with
+ * the right meaning (checked Nov 2026): "cereal" (only grain plants) and "safe" (a strongbox).
+ */
+export const KEEP_BUNDLED = new Set(['food-cereal', 'safety-safe']);
 
 /** Ordered search terms to try for a starter word. */
 export function starterQueries(tile: Pick<Tile, 'id' | 'label' | 'fallbackSymbol' | 'symbol'>): string[] {
@@ -147,7 +172,7 @@ export function starterQueries(tile: Pick<Tile, 'id' | 'label' | 'fallbackSymbol
 
 /** Starter words whose ARASAAC picture hasn't been found yet. */
 export function needsArasaac(tiles: Tile[], missing: Record<string, string> = {}): Tile[] {
-  return tiles.filter((t) => t.symbolAuto && !t.autoArasaac && !t.deletedAt && missing[t.id] !== t.label);
+  return tiles.filter((t) => t.symbolAuto && !t.autoArasaac && !t.deletedAt && !KEEP_BUNDLED.has(t.id) && missing[t.id] !== t.label);
 }
 
 /**

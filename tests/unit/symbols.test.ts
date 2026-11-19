@@ -213,3 +213,13 @@ test('live-service review: bad automatic matches are skipped or pinned; more wor
   assert.deepEqual(found, { 'food-crackers': 37883, 'questions-who': 9853, 'family-mama': 2458, 'needs-potty': 2430 });
   assert.equal(arasaacUrl(5508), 'https://api.arasaac.org/v1/pictograms/5508', 'CORS-enabled image address');
 });
+
+test('picture-by-picture review: wrong meanings are pinned to the right pictogram or keep the bundled one', async () => {
+  const { STARTER_PICTOS, KEEP_BUNDLED } = await import('../../src/lib/arasaac.ts');
+  const ids = new Set(seed.map((t) => t.id));
+  for (const id of [...Object.keys(STARTER_PICTOS), ...KEEP_BUNDLED]) assert.ok(ids.has(id), `${id} is a starter word`);
+  assert.equal(STARTER_PICTOS['core-stop'].id, 7195, 'stop is a hand, not a bus stop');
+  assert.equal(STARTER_PICTOS['core-break'].id, 16643, 'break means a rest');
+  const byId = new Map(seed.map((t) => [t.id, t]));
+  assert.equal(needsArasaac([byId.get('food-cereal')!, byId.get('safety-safe')!, byId.get('core-more')!]).length, 1);
+});
