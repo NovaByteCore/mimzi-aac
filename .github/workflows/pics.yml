@@ -1,0 +1,17 @@
+name: fetch-default-pictures
+on: { push: { branches: [tools/fetch-pictures] } }
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npx tsx scripts/fetch-default-pictures.ts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: default-pictures
+          path: |
+            public/symbols/arasaac
+            src/data/defaultPictures.json
