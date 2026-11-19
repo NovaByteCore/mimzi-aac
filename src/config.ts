@@ -12,4 +12,11 @@ export const config = {
   /** Same-origin pass-through that fetches picked Google Photos (Google blocks direct browser downloads). */
   photosProxyUrl: String(env.VITE_PHOTOS_PROXY_URL || '/api/photo'),
   isProd: Boolean(env.PROD),
+  /**
+   * Set VITE_COMMERCIAL_USE=true for any commercial deployment. Symbols under noncommercial
+   * licences (ARASAAC, other CC BY-NC sets) are then switched off automatically.
+   */
+  commercialUse: String(env.VITE_COMMERCIAL_USE || '').toLowerCase() === 'true',
+  /** Same-origin OpenSymbols search function (holds the shared secret server-side). */
+  openSymbolsUrl: String(env.VITE_OPENSYMBOLS_URL || '/api/symbols'),
 };

@@ -20,7 +20,7 @@ export function DeletedPanel() {
           {deleted.map((t) => (
             <li key={t.id} className="deleted-row" data-deleted-tile={t.id}>
               <span className={`mini-tile tile-${t.color}`}>
-                <TileFace symbol={t.symbol} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
+                <TileFace tile={t} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
               </span>
               <span>
                 <strong>{t.label}</strong>

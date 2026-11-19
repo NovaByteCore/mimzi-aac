@@ -18,7 +18,7 @@ export function ScheduleCard({ item, heading, tiles, mediaUrls, onTap, current, 
     <>
       {heading && <span className="sched-heading">{heading}</span>}
       <span className="sched-media">
-        <TileFace symbol={pic.symbol} asl={pic.asl} photoUrl={pic.photoUrl} label={item.label || '?'} />
+        <TileFace symbol={pic.symbol} tile={pic.tile} asl={pic.asl} photoUrl={pic.photoUrl} label={item.label || '?'} />
         {item.done && (
           <span className="sched-check" aria-hidden="true">
             ✓

@@ -63,3 +63,31 @@ export async function migrateVocabularyV3(tiles: Tile[], categories: Category[])
   if (tileChanges.length) await db.putMany('tiles', tileChanges);
   await db.setKv('migrated:vocab3', true);
 }
+
+/**
+ * Multi-library symbols: starter words whose picture a grown-up never changed become
+ * "Mimzi-chosen", so they follow the default style (ARASAAC). Pictures a grown-up chose,
+ * photos, positions, labels, speech and signs are left exactly as they are.
+ */
+/** Pure version of the symbol upgrade (also used for backups made by older versions). */
+export function upgradeSymbolFields(tiles: Tile[]): { tiles: Tile[]; changed: Tile[] } {
+  const seeds = new Map(buildSeedTiles().map((t) => [t.id, t]));
+  const changed: Tile[] = [];
+  const out = tiles.map((t) => {
+    const seed = seeds.get(t.id);
+    if (!seed || t.symbolAuto !== undefined) return t;
+    const untouched = !t.symbol || t.symbol === seed.symbol;
+    const next: Tile = untouched ? { ...t, symbolAuto: true, fallbackSymbol: seed.symbol } : { ...t, symbolAuto: false };
+    changed.push(next);
+    return next;
+  });
+  return { tiles: out, changed };
+}
+
+export async function migrateSymbolsV4(tiles: Tile[]): Promise<void> {
+  if (await db.getKv<boolean>('migrated:symbols4')) return;
+  const { tiles: next, changed } = upgradeSymbolFields(tiles);
+  tiles.splice(0, tiles.length, ...next);
+  if (changed.length) await db.putMany('tiles', changed);
+  await db.setKv('migrated:symbols4', true);
+}

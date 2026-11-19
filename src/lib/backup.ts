@@ -108,6 +108,25 @@ function isObj(v: unknown): v is Record<string, unknown> {
 }
 
 /** Validate an untrusted backup file and turn it into records ready for IndexedDB. */
+function cleanSymbolInfo(v: unknown): Tile['symbolInfo'] {
+  if (!isObj(v) || typeof v.library !== 'string' || typeof v.id !== 'string' || typeof v.license !== 'string') return undefined;
+  if (!['arasaac', 'mulberry', 'mimzi', 'opensymbols'].includes(v.library)) return undefined;
+  const str = (x: unknown) => (typeof x === 'string' ? x : undefined);
+  const url = str(v.url);
+  return {
+    library: v.library as NonNullable<Tile['symbolInfo']>['library'],
+    repo: str(v.repo),
+    id: v.id,
+    name: str(v.name) ?? '',
+    url: url && /^https:\/\//.test(url) ? url : url?.startsWith('/') ? url : undefined,
+    author: str(v.author) ?? '',
+    authorUrl: str(v.authorUrl),
+    license: v.license,
+    licenseUrl: str(v.licenseUrl),
+    sourceUrl: str(v.sourceUrl),
+  };
+}
+
 export function parseBackup(raw: unknown, currentPin?: Settings['pin']): RestoredData {
   if (!isObj(raw) || raw.format !== BACKUP_FORMAT) throw new BackupError('This file is not a Mimzi backup.');
   if (typeof raw.version !== 'number' || raw.version > BACKUP_VERSION) {
@@ -128,6 +147,11 @@ export function parseBackup(raw: unknown, currentPin?: Settings['pin']): Restore
       categoryId: t.categoryId,
       order: typeof t.order === 'number' ? t.order : i,
       symbol: typeof t.symbol === 'string' ? t.symbol : undefined,
+      symbolInfo: cleanSymbolInfo(t.symbolInfo),
+      symbolAuto: typeof t.symbolAuto === 'boolean' ? t.symbolAuto : undefined,
+      autoArasaac:
+        isObj(t.autoArasaac) && typeof t.autoArasaac.id === 'number' ? { id: t.autoArasaac.id, name: String(t.autoArasaac.name ?? '') } : undefined,
+      fallbackSymbol: typeof t.fallbackSymbol === 'string' ? t.fallbackSymbol : undefined,
       pronunciation: typeof t.pronunciation === 'string' ? t.pronunciation : undefined,
       lang: typeof t.lang === 'string' ? t.lang : undefined,
       wordType: typeof t.wordType === 'string' ? (t.wordType as Tile['wordType']) : undefined,

@@ -38,7 +38,7 @@ export function TileButton({ tile, photoUrl, onTap, onSign, compact }: Props) {
       }}
     >
       <span className="tile-media">
-        <TileFace symbol={tile.symbol} asl={tile.aslSign} photoUrl={photoUrl} label={tile.label} />
+        <TileFace tile={tile} asl={tile.aslSign} photoUrl={photoUrl} label={tile.label} />
       </span>
       <span className="tile-label">
         {isFolder && <span className="folder-tab" aria-hidden="true" />}

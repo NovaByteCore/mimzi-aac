@@ -67,9 +67,9 @@ export function itemPicture(
   item: ScheduleItem,
   tiles: Map<string, Tile>,
   mediaUrls: Record<string, string>,
-): { photoUrl?: string; symbol?: string; asl?: string } {
+): { photoUrl?: string; symbol?: string; asl?: string; tile?: Tile } {
   if (item.photoId && mediaUrls[item.photoId]) return { photoUrl: mediaUrls[item.photoId] };
   const tile = item.tileId ? tiles.get(item.tileId) : undefined;
-  if (tile) return { photoUrl: tile.photoId ? mediaUrls[tile.photoId] : undefined, symbol: tile.symbol, ...(tile.aslSign ? { asl: tile.aslSign } : {}) };
+  if (tile) return { photoUrl: tile.photoId ? mediaUrls[tile.photoId] : undefined, symbol: tile.symbol, tile, ...(tile.aslSign ? { asl: tile.aslSign } : {}) };
   return {};
 }

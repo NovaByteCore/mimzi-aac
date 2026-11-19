@@ -51,7 +51,7 @@ export function WordsPanel() {
               )}
               <button type="button" className={`tile tile-${t.color} edit-tile${t.photoId ? ' tile-has-photo' : ''}`} onClick={() => setEditing(t)} aria-label={`Edit ${t.label}`}>
                 <span className="tile-media">
-                  <TileFace symbol={t.symbol} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
+                  <TileFace tile={t} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
                 </span>
                 <span className="tile-label">
                   {t.label}

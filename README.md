@@ -15,7 +15,9 @@ Mimzi is a personal Augmentative and Alternative Communication (AAC) app for a t
 - **Back** and **Home** buttons. The sentence bar keeps the message while you move between pages.
 - **Built-in voice for every word.** You don't need to record anything: new words speak as soon as they are saved. A caregiver recording, if added, plays instead.
 - **Mimzi Voice:** pick any voice the device reports (with ▶ Preview), plus speed, pitch and volume. Words can have a **pronunciation override**, so the word shown and the word spoken can differ. Offline, a voice that "needs internet" automatically falls back to an on-device voice, and the panel says so. Other settings: speak on tap, speak folder names, interrupt or finish the current word, and a repeat guard against double taps.
-- **Real AAC symbols:** [Mulberry Symbols](https://mulberrysymbols.org) (3,436 symbols, CC BY-SA 4.0, © Steve Lee) are bundled, searchable in Parent Mode, and cached for offline use. Original Mimzi symbols cover core words Mulberry lacks. Real photos can replace any picture. No emoji.
+- **Real AAC symbols, ARASAAC by default.** Every starter word gets an [ARASAAC](https://arasaac.org) pictogram automatically, saved for offline use. Until a pictogram has downloaded, the word shows its built-in [Mulberry](https://mulberrysymbols.org) or Mimzi picture, so nothing is ever blank.
+- **Change any single picture** from ARASAAC, Mulberry (bundled), Mimzi originals, or other open libraries through OpenSymbols. A real photo can also replace any symbol. Changing a picture never moves the word or changes its label, speech or ASL sign.
+- **Licences are tracked and enforced.** Each picture records its source, author and licence. Unlicensed results are never offered. Non-commercial sets (ARASAAC) switch off automatically if `VITE_COMMERCIAL_USE=true`. No emoji are used. See `docs/SYMBOLS.md`.
 - **Fitzgerald-style colour coding** by word type: people/pronouns yellow, actions green, describing blue, things orange, social pink, questions purple, important red, little words white, folders grey. Custom colours are also available.
 - **ASL is separate from the picture.** The main button always shows the AAC picture. A small 🤟 **See sign** button opens a verified ASL drawing (17 signs, each with a how-to and source) or a parent-provided video. Mimzi never invents signs.
 - **Stable positions:** words keep fixed slots. Hidden words leave a gap and nothing shifts. Grids from 2×2 to 5×6 are available.
@@ -40,7 +42,8 @@ First/Then, I'm Working For (tokens are never taken away), My Three Steps and No
 | Grow My Words | Word schedule, approvals, calendar and history. |
 | Pages | Add, rename, hide and reorder pages. |
 | Mimzi Voice | Voice, preview, speed, pitch, volume, pronunciations, offline fallback status. |
-| Symbol / Photo / ASL Library | Browse everything that is available. |
+| Symbol Library | Default picture style (ARASAAC or Mulberry), search every library, put a symbol on any word, see credits and licences. |
+| Photo / ASL Library | Browse every photo and sign. |
 | Visual schedules | My Day setup. |
 | My Words | Private notebook with CSV and therapist-summary export (no scores). |
 | Board & accessibility | Grid, colour coding, text size, spacing, contrast, motion, quick words, PIN. |
@@ -95,6 +98,8 @@ Copy `.env.example` to `.env.local`. Only `VITE_*` variables reach the app and *
 | `VITE_DEFAULT_SPEECH_LANG` | `en-US` | Text-to-speech language. |
 | `VITE_GOOGLE_CLIENT_ID` | empty | Google OAuth **Client ID** (public, not a secret) for sign-in, Drive sync and Google Photos. Empty = those features show setup help. See `docs/GOOGLE_SETUP.md`. |
 | `VITE_PHOTOS_PROXY_URL` | `/api/photo` | Path of the Google Photos pass-through function (`netlify/functions/photo.mts` or `functions/api/photo.ts`). |
+| `VITE_COMMERCIAL_USE` | `false` | Set to `true` for any commercial deployment. Non-commercial symbol sets (ARASAAC, CC BY-NC) are then switched off. |
+| `VITE_OPENSYMBOLS_URL` | `/api/symbols` | Path of the OpenSymbols search function. Its key `OPENSYMBOLS_SECRET` is set only in the host's dashboard, never in Git. |
 
 ---
 
@@ -127,7 +132,7 @@ Host settings: serve `sw.js` and `index.html` with no long-term caching (`Cache-
 
 ## Privacy & data
 
-- No ads, analytics or tracking. Until a grown-up taps **Sign in with Google**, the app makes no network calls except loading itself.
+- No ads, analytics or tracking. Besides loading itself, the app only contacts ARASAAC, to look up and download AAC pictograms. Those requests carry just the search word, with no cookies and no referrer, and say nothing about the child. Google is contacted only after a grown-up taps **Sign in with Google**.
 - Google sign-in is optional. When it's on, data goes only to the hidden Mimzi folder in **your own** Google Drive. Google Photos only ever sends the photos you pick, through a pass-through on your own site that stores nothing.
 - Photos, recordings and settings live in the browser's IndexedDB on that device only.
 - **Data can be lost**: browsers may clear site data (storage pressure, clearing Safari website data, removing the Home Screen app). Mimzi requests persistent storage and shows whether the browser granted it — but **make backups**.
@@ -163,11 +168,14 @@ docs/                   testing checklist, deployment, sync design & research
 | 3 My Day | ✅ Built and tested in Chromium |
 | 4 Caregiver tools (My Words, food boards, sync) | ✅ Built and tested in Chromium |
 | V3 AAC system (voice, Mulberry, folders, colour coding, Words on My Board, Grow My Words) | ✅ Built and tested in Chromium |
+| Natural voice (ranking, friendly defaults, saved preference) | ✅ Built and tested in Chromium |
+| Multi-library AAC symbols (ARASAAC default, Mulberry, OpenSymbols, licence tracking) | ✅ Built and tested in Chromium against simulated ARASAAC and OpenSymbols. ⏳ OpenSymbols needs its free key, and the real ARASAAC pictures need checking on a device. |
 | Google sign-in, Drive sync, Google Photos | ✅ Built and tested in Chromium against a simulated Google. ⏳ Needs the one-time Google Cloud setup and a real-account test. |
 | 5 Testing & deployment | ✅ Automated tests, accessibility checks, offline test, deployment docs. ⏳ Physical iPad/Galaxy testing and hosting setup are still to do, and hosting needs the owner's permission. |
 
 ## Credits
 
+- **ARASAAC pictograms**: author Sergio Palao. Origin: ARASAAC (https://arasaac.org). Licence: CC BY-NC-SA 4.0. Owner: Government of Aragón (Spain). They are used for personal, non-commercial AAC only.
 - **Mulberry Symbols** © Steve Lee, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), from mulberrysymbols.org (`public/symbols/mulberry/LICENSE.txt`). The symbols are unchanged.
 - The ASL drawings are original illustrations of standard signs. Each one links to the reference it was checked against.
 - No artwork, layouts or audio from Proloquo2Go, TouchChat, TD Snap or other commercial AAC apps are used.

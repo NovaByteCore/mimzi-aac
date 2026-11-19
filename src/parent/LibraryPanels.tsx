@@ -4,7 +4,8 @@ import { SymbolSearch } from './SymbolSearch';
 import { TileFace } from '../components/TileFace';
 import { TileEditor } from './TileEditor';
 import { AslSignSvg, ASL_KEYS, ASL_SIGNS } from '../data/aslSigns';
-import type { Tile } from '../types';
+import type { SymbolInfo, Tile } from '../types';
+import { effectiveStyle, libraryAllowed, librariesInUse, LIBRARIES } from '../lib/symbols';
 
 function useEditor() {
   const { categories } = useMimzi();
@@ -14,25 +15,67 @@ function useEditor() {
   return { setEditing, editor };
 }
 
-/** Symbol Library — search all Mulberry symbols and put one on a word. */
+/** Symbol Library — default picture style, every library, and full credits. */
 export function SymbolLibraryPanel() {
-  const { tiles, saveTile } = useMimzi();
-  const [symbol, setSymbol] = useState('');
+  const { tiles, settings, updateSettings, setTileSymbol, symbols, findSymbols } = useMimzi();
+  const [picked, setPicked] = useState<{ symbol: string; info: SymbolInfo } | null>(null);
   const [target, setTarget] = useState('');
   const [status, setStatus] = useState('');
   const words = tiles.filter((t) => !t.deletedAt).sort((a, b) => a.label.localeCompare(b.label));
+  const style = effectiveStyle(settings);
+  const arasaacOn = libraryAllowed('arasaac');
+  const starters = tiles.filter((t) => t.symbolAuto && !t.deletedAt);
+  const ready = starters.filter((t) => t.autoArasaac).length;
+  const credits = librariesInUse(tiles, settings);
   return (
     <section className="panel">
       <h2>Symbol Library</h2>
       <p className="muted">
-        About 3,400 AAC symbols from the Mulberry Symbols set, saved with Mimzi for offline use. Search, pick one, then choose which word gets it.
-        Choosing a symbol never moves the word or changes what it says.
+        Mimzi shows a real AAC symbol on every starter word. Choose the default style below, or give any single word a different symbol (or a photo).
+        Changing a picture never moves the word, changes what it says, or removes its ASL sign.
       </p>
-      <SymbolSearch selected={symbol} onPick={setSymbol} />
-      {symbol && (
+
+      <h3>Default picture style</h3>
+      <div className="row" role="radiogroup" aria-label="Default picture style">
+        <label className="check">
+          <input
+            type="radio"
+            name="symbol-style"
+            checked={style === 'arasaac'}
+            disabled={!arasaacOn}
+            onChange={() => updateSettings({ symbolStyle: 'arasaac' })}
+            data-testid="style-arasaac"
+          />
+          ARASAAC (recommended) — clear, colourful pictograms used by AAC apps worldwide
+        </label>
+        <label className="check">
+          <input type="radio" name="symbol-style" checked={style === 'mulberry'} onChange={() => updateSettings({ symbolStyle: 'mulberry' })} data-testid="style-mulberry" />
+          Mulberry — simple line-and-colour symbols, built into Mimzi
+        </label>
+      </div>
+      {!arasaacOn && <p className="muted small">ARASAAC is off because this copy of Mimzi is set up for commercial use; its licence is non-commercial only.</p>}
+      {style === 'arasaac' && (
+        <p className="muted small" data-testid="symbol-status">
+          {symbols.phase === 'finding'
+            ? `Finding ARASAAC pictures… ${ready} of ${starters.length} ready.`
+            : symbols.phase === 'offline'
+              ? `${ready} of ${starters.length} ARASAAC pictures ready. The rest download next time this device is online — until then they show the built-in picture.`
+              : `${ready} of ${starters.length} starter words have their ARASAAC picture, saved for offline use.`}
+          {symbols.missing.length > 0 && ` ARASAAC has no match for ${symbols.missing.length} (they keep the built-in picture).`}{' '}
+          {symbols.phase !== 'finding' && ready < starters.length && (
+            <button type="button" className="btn btn-quiet small" onClick={() => findSymbols()}>
+              Try again
+            </button>
+          )}
+        </p>
+      )}
+
+      <h3>Find a symbol</h3>
+      <SymbolSearch selected={picked?.symbol} onPick={(symbol, info) => setPicked({ symbol, info })} />
+      {picked && (
         <div className="add-row">
           <span className="mini-tile big tile-white">
-            <TileFace symbol={symbol} label="" />
+            <TileFace symbol={picked.symbol} symbolInfo={picked.info} label="" />
           </span>
           <label className="field inline">
             <span>Put this symbol on</span>
@@ -52,7 +95,7 @@ export function SymbolLibraryPanel() {
             onClick={async () => {
               const t = tiles.find((x) => x.id === target);
               if (!t) return;
-              await saveTile({ ...t, symbol });
+              await setTileSymbol(t.id, picked);
               setStatus(`“${t.label}” now uses this symbol${t.photoId ? ' (its photo still shows first — remove the photo to see the symbol)' : ''}.`);
             }}
           >
@@ -61,10 +104,27 @@ export function SymbolLibraryPanel() {
         </div>
       )}
       {status && <p role="status">{status}</p>}
-      <h3>Credits</h3>
+
+      <h3>Credits &amp; licences</h3>
+      <ul className="credits" data-testid="symbol-credits">
+        {credits.map(({ info, count }) => (
+          <li key={`${info.library}:${info.repo ?? ''}:${info.author}:${info.license}`}>
+            <strong>{info.library === 'opensymbols' ? `${info.repo} (via OpenSymbols)` : LIBRARIES[info.library].name}</strong> — {count} word{count === 1 ? '' : 's'}
+            <br />
+            <span className="muted small">
+              {info.library === 'opensymbols' ? `${info.author ? `By ${info.author}. ` : ''}Licence: ${info.license}.` : LIBRARIES[info.library].credit}{' '}
+              {(info.licenseUrl || (info.library !== 'opensymbols' && LIBRARIES[info.library].licenseUrl)) && (
+                <a href={info.licenseUrl || (info.library !== 'opensymbols' ? LIBRARIES[info.library].licenseUrl : '')} target="_blank" rel="noreferrer">
+                  Licence
+                </a>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
       <p className="muted small">
-        Mulberry Symbols © 2018–2026 Steve Lee, licensed CC BY-SA 4.0 — mulberrysymbols.org. Some core-word symbols (stop, yes, no, me, you, please,
-        thank you, and others) are original Mimzi drawings because Mulberry doesn’t include them.
+        ARASAAC pictograms are by Sergio Palao for ARASAAC (Government of Aragón, Spain), CC BY-NC-SA 4.0: free for personal, non-commercial use like this
+        one. If Mimzi is ever used commercially, set VITE_COMMERCIAL_USE=true and ARASAAC and other non-commercial symbols switch off automatically.
       </p>
     </section>
   );

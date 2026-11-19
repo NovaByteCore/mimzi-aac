@@ -138,7 +138,7 @@ export function WordsOnBoardPanel() {
                   onClick={() => toggle(t)}
                 >
                   <span className="tile-media">
-                    <TileFace symbol={t.symbol} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
+                    <TileFace tile={t} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
                   </span>
                   <span className="tile-label">
                     {t.hidden ? '🙈 ' : ''}

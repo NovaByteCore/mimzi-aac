@@ -219,7 +219,7 @@ function RewardBoard({ say }: { say: (t: string) => void }) {
       <button type="button" className="reward-goal" onClick={() => say(`I'm working for ${spokenText(reward.item)}`)}>
         <span className="sched-heading">I’M WORKING FOR</span>
         <span className="sched-media">
-          <TileFace symbol={pic.symbol} asl={pic.asl} photoUrl={pic.photoUrl} label={reward.item.label} />
+          <TileFace symbol={pic.symbol} tile={pic.tile} asl={pic.asl} photoUrl={pic.photoUrl} label={reward.item.label} />
         </span>
         <span className="sched-label">{reward.item.label}</span>
       </button>

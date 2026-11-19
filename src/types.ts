@@ -65,8 +65,22 @@ export interface Tile {
   categoryId: string;
   /** Position inside its category. Only a caregiver changes this — never automatic. */
   order: number;
-  /** "svg:<key>" for a built-in Mimzi symbol, otherwise an emoji / short text. */
+  /**
+   * The picture: "arasaac:<id>", "mul:<file>", "svg:<key>", "os:<repo>:<id>" (see lib/symbols.ts),
+   * otherwise short text a caregiver typed.
+   */
   symbol?: string;
+  /** Source, author and licence of the chosen symbol (library symbols). */
+  symbolInfo?: SymbolInfo;
+  /**
+   * true = Mimzi chooses the picture (starter words): it follows the default symbol style.
+   * A grown-up choosing a picture sets this to false, and Mimzi never changes it again.
+   */
+  symbolAuto?: boolean;
+  /** The ARASAAC pictogram Mimzi found for this word (used when the style is ARASAAC). */
+  autoArasaac?: { id: number; name: string };
+  /** Bundled picture (Mulberry / Mimzi) shown until a downloaded symbol is available offline. */
+  fallbackSymbol?: string;
   /** Key of a Mimzi ASL sign drawing (src/data/aslSigns.tsx), shown when ASL drawings are on. */
   aslSign?: string;
   /** IndexedDB media id of a caregiver photo. Shown instead of the symbol when present. */
@@ -86,6 +100,20 @@ export interface Tile {
   privateNote?: string;
   /** Last change time (ms) — used by Google Drive sync to pick the newest copy. */
   updatedAt?: number;
+}
+
+export interface SymbolInfo {
+  library: 'arasaac' | 'mulberry' | 'mimzi' | 'opensymbols';
+  /** OpenSymbols repository key (e.g. "sclera", "tawasol"). */
+  repo?: string;
+  id: string;
+  name: string;
+  url?: string;
+  author: string;
+  authorUrl?: string;
+  license: string;
+  licenseUrl?: string;
+  sourceUrl?: string;
 }
 
 export interface Category {
@@ -130,6 +158,8 @@ export interface Settings {
   sharedVoiceName?: string;
   /** Version of the voice defaults applied (2 = gentle 1.1 pitch, 0.9× speed). */
   voiceDefaults?: number;
+  /** Default picture style for Mimzi-chosen pictures: ARASAAC (default) or the bundled Mulberry set. */
+  symbolStyle?: 'arasaac' | 'mulberry';
   speechLang: string;
   /** Multiplier for label text size. */
   textScale: number;

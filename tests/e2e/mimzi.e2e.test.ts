@@ -56,9 +56,48 @@ const stubWith = (voices: object[]) => speechStubTemplate.replace('__FAKE_VOICES
 const defaultStub = speechStubTemplate.replace('__FAKE_VOICES__', JSON.stringify(DEFAULT_VOICES));
 
 
+
+/* ARASAAC and OpenSymbols are simulated so tests never depend on outside services.
+   bestsearch: every word has a pictogram except those in ARASAAC_NONE; images are a test PNG. */
+const ARASAAC_NONE = new Set(['zzz']);
+const pictoId = (w: string) => 1000 + [...w].reduce((a, c) => a + c.charCodeAt(0), 0);
+let osMode: 'off' | 'on' = 'off';
+async function mockSymbolServices(ctx: BrowserContext) {
+  const png = await readFile(PHOTO);
+  await ctx.route('https://api.arasaac.org/**', async (route) => {
+    const u = new URL(route.request().url());
+    const m = u.pathname.match(/\/pictograms\/en\/(bestsearch|search)\/(.+)$/);
+    const word = m ? decodeURIComponent(m[2]).toLowerCase() : '';
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+    if (!m || ARASAAC_NONE.has(word)) return route.fulfill({ status: 404, headers: cors, body: '[]' });
+    const one = (w: string, n = 0) => ({ _id: pictoId(w) + n, keywords: [{ keyword: n ? `${w} ${n}` : w }], sex: false, violence: false });
+    const body = m[1] === 'bestsearch' ? [one(word)] : [one(word), one(word, 1), one(word, 2)];
+    return route.fulfill({ status: 200, headers: cors, body: JSON.stringify(body) });
+  });
+  await ctx.route('https://static.arasaac.org/**', (route) =>
+    route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/png' }, body: png }),
+  );
+  await ctx.route('**/api/symbols?**', (route) =>
+    osMode === 'off'
+      ? route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"not-configured"}' })
+      : route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([
+            { id: '7', repo: 'sclera', name: 'swing', url: 'https://cdn.opensymbols.test/swing.png', author: 'Sclera', license: 'CC BY-NC 2.0' },
+            { id: '8', repo: 'tawasol', name: 'swing', url: 'https://cdn.opensymbols.test/swing2.png', author: 'Mada', license: 'CC BY-SA 4.0' },
+          ]),
+        }),
+  );
+  await ctx.route('https://cdn.opensymbols.test/**', (route) =>
+    route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/png' }, body: png }),
+  );
+}
+
 async function openApp(viewport = IPAD, voices: object[] = DEFAULT_VOICES): Promise<{ ctx: BrowserContext; page: Page }> {
   const ctx = await browser.newContext({ viewport, hasTouch: true, acceptDownloads: true, permissions: ['microphone'] });
   await ctx.addInitScript({ content: stubWith(voices) });
+  await mockSymbolServices(ctx);
   const page = await ctx.newPage();
   page.on('pageerror', (e) => {
     throw e;
@@ -530,7 +569,7 @@ test('Food & Drinks: foods stay hidden until a grown-up picks them; private note
   await ctx.close();
 });
 
-test('Parent Mode shows that sync is off and data stays on this device', async () => {
+test('Parent Mode shows that sync is off; only AAC symbol downloads leave the device', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
   assert.match((await page.getByTestId('sync-status').textContent()) ?? '', /This device only/);
@@ -540,7 +579,8 @@ test('Parent Mode shows that sync is off and data stays on this device', async (
       .map((e) => e.name)
       .filter((u) => !u.startsWith(location.origin) && !u.startsWith('blob:') && !u.startsWith('data:')),
   );
-  assert.deepEqual(external, [], 'no requests leave the app’s own address');
+  const hosts = new Set(external.map((u) => new URL(u).hostname));
+  for (const h of hosts) assert.ok(['api.arasaac.org', 'static.arasaac.org'].includes(h), `unexpected request to ${h}`);
   await ctx.close();
 });
 
@@ -845,6 +885,7 @@ test('V3-7: hide and restore a word — same spot, picture and speech', async ()
 test('V3-6: two new words every Monday — scheduled, then waiting for approval on the day, then added', async () => {
   const ctx = await browser.newContext({ viewport: IPAD, hasTouch: true });
   await ctx.addInitScript({ content: defaultStub });
+  await mockSymbolServices(ctx);
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date('2026-11-18T10:00:00') }); // a Wednesday
   await page.goto(BASE);
@@ -996,4 +1037,127 @@ test('voice: on a device without the chosen voice, Mimzi explains and a replacem
   await tab.page.locator('.board-grid [data-tile-id="core-more"]').click();
   assert.equal((await voicesUsed(tab.page)).at(-1), 'en-us-x-sfg-local');
   await tab.ctx.close();
+});
+
+/* ---------------- Multi-library AAC symbols ---------------- */
+
+const slots = (page: Page) =>
+  page.locator('.board-grid > *').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id') ?? e.querySelector('[data-tile-id]')?.getAttribute('data-tile-id') ?? null));
+const pictureOf = (page: Page, id: string) => page.locator(`.board-grid [data-tile-id="${id}"] img.tile-symbol`).getAttribute('src');
+
+test('symbols: every starter word gets an ARASAAC picture automatically; nothing moves', async () => {
+  const { ctx, page } = await openApp();
+  const before = await slots(page);
+  await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
+  await page.locator('.board-grid [data-tile-id="core-all-done"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
+  assert.equal(await pictureOf(page, 'core-more'), `https://static.arasaac.org/pictograms/${pictoId('more')}/${pictoId('more')}_500.png`);
+  assert.equal(await pictureOf(page, 'core-all-done'), `https://static.arasaac.org/pictograms/${pictoId('finished')}/${pictoId('finished')}_500.png`, 'curated search term');
+  assert.deepEqual(await slots(page), before, 'positions unchanged');
+  assert.equal(await page.locator('.board-grid .tile-emoji').count(), 0, 'no emoji artwork');
+  await page.locator('.board-grid [data-tile-id="core-more"]').click();
+  assert.equal((await spoken(page)).at(-1), 'more', 'speech unchanged');
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Symbol Library' }).click();
+  await page.getByTestId('symbol-status').getByText(/starter words have their ARASAAC picture/).waitFor({ timeout: 20000 });
+  await page.getByTestId('symbol-credits').getByText(/Sergio Palao/).waitFor();
+  await page.getByTestId('symbol-credits').getByText(/CC \(BY-NC-SA\)/).waitFor();
+  await ctx.close();
+});
+
+test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) — label, speech, sign and place stay', async () => {
+  osMode = 'on';
+  const { ctx, page } = await openApp();
+  await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
+  const before = await slots(page);
+  await enterParentMode(page);
+  await page.locator('.edit-tile[aria-label="Edit help"]').click();
+  const search = page.getByTestId('symbol-search');
+  assert.equal(await search.inputValue(), 'help', 'searches the word by default');
+  await page.getByTestId('symbol-group-arasaac').locator(`[data-symbol="arasaac:${pictoId('help') + 1}"]`).click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-tile[aria-label="Edit help"]').waitFor();
+  // Another word from OpenSymbols (non-commercial licence shown), another from Mulberry.
+  await page.locator('.edit-tile[aria-label="Edit play"]').click();
+  await page.getByTestId('symbol-search').fill('swing');
+  await page.getByTestId('symbol-group-opensymbols').getByText('non-commercial').first().waitFor();
+  await page.getByTestId('symbol-group-opensymbols').locator('[data-symbol="os:tawasol:8"]').click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-tile[aria-label="Edit play"]').waitFor();
+  await page.locator('.edit-tile[aria-label="Edit go"]').click();
+  await page.getByTestId('symbol-lib-mulberry').click();
+  await page.getByTestId('symbol-search').fill('go');
+  await page.getByTestId('symbol-group-mulberry').locator('[data-symbol="go_,_to"]').click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('tab', { name: 'Symbol Library' }).click();
+  await page.getByTestId('symbol-credits').getByText(/tawasol \(via OpenSymbols\)/).waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  assert.equal(await pictureOf(page, 'core-help'), `https://static.arasaac.org/pictograms/${pictoId('help') + 1}/${pictoId('help') + 1}_500.png`);
+  assert.equal(await pictureOf(page, 'core-play'), 'https://cdn.opensymbols.test/swing2.png');
+  assert.match((await pictureOf(page, 'core-go')) ?? '', /mulberry\/go_%2C_to\.svg$/);
+  assert.deepEqual(await slots(page), before, 'no word moved');
+  await page.locator('.board-grid [data-tile-id="core-help"]').click();
+  assert.equal((await spoken(page)).at(-1), 'help');
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-help"] .tile-label').textContent(), 'help');
+  await page.locator('.board-grid').getByRole('button', { name: 'See sign for help' }).click();
+  await page.getByTestId('sign-drawing').waitFor();
+  await page.getByRole('button', { name: /Close/ }).click();
+  // Switching the default style never touches a picture a grown-up chose.
+  await enterParentMode(page, false);
+  await page.getByRole('tab', { name: 'Symbol Library' }).click();
+  await page.getByTestId('style-mulberry').click();
+  await page.locator('[data-testid="style-mulberry"]:checked').waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  assert.match((await pictureOf(page, 'core-more')) ?? '', /mulberry\/more\.svg$/, 'automatic pictures follow the style');
+  assert.equal(await pictureOf(page, 'core-play'), 'https://cdn.opensymbols.test/swing2.png', 'chosen picture kept');
+  assert.deepEqual(await slots(page), before);
+  osMode = 'off';
+  await ctx.close();
+});
+
+test('symbols: a photo can replace any symbol, and removing it brings the symbol back', async () => {
+  const { ctx, page } = await openApp();
+  await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
+  await enterParentMode(page);
+  await page.locator('.edit-tile[aria-label="Edit eat"]').click();
+  await page.getByTestId('photo-input').setInputFiles(PHOTO);
+  await page.getByRole('button', { name: 'Use photo' }).click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid [data-tile-id="core-eat"] img.tile-photo').waitFor();
+  await enterParentMode(page, false);
+  await page.locator('.edit-tile[aria-label="Edit eat"]').click();
+  await page.getByRole('button', { name: /Remove photo/ }).click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator(`.board-grid [data-tile-id="core-eat"] img.tile-symbol[src="https://static.arasaac.org/pictograms/${pictoId('eat')}/${pictoId('eat')}_500.png"]`).waitFor();
+  await ctx.close();
+});
+
+test('symbols: downloaded ARASAAC pictures work offline', async () => {
+  const { ctx, page } = await openApp();
+  await page.waitForFunction(() => navigator.serviceWorker?.controller !== null, null, { timeout: 15000 });
+  await page.locator('.board-grid [data-tile-id="core-want"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
+  const url = (await pictureOf(page, 'core-want'))!;
+  await page.waitForFunction(async (u) => !!(await (await caches.open('mimzi-symbols-v1')).match(u)), url, { timeout: 20000 });
+  await ctx.unrouteAll({ behavior: 'ignoreErrors' });
+  await ctx.setOffline(true);
+  await page.reload();
+  await page.waitForSelector('.board-grid .tile');
+  const img = page.locator('.board-grid [data-tile-id="core-want"] img.tile-symbol');
+  assert.equal(await img.getAttribute('src'), url);
+  await page.waitForFunction((sel) => {
+    const el = document.querySelector(sel) as HTMLImageElement | null;
+    return !!el && el.complete && el.naturalWidth > 0;
+  }, '.board-grid [data-tile-id="core-want"] img.tile-symbol');
+  await ctx.setOffline(false);
+  await ctx.close();
+});
+
+test('symbols: words ARASAAC has no picture for keep their built-in picture', async () => {
+  ARASAAC_NONE.add('i');
+  const { ctx, page } = await openApp();
+  await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 17, null, { timeout: 20000 });
+  assert.match((await pictureOf(page, 'core-i')) ?? '', /mulberry\/I\.svg$/);
+  ARASAAC_NONE.delete('i');
+  await ctx.close();
 });

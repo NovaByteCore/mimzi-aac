@@ -10,6 +10,7 @@ import { sentenceReducer, sentenceText } from './lib/sentence';
 import { speakText, speakTile, spokenFor, type SpeakOptions, type SpeakResult } from './lib/speech';
 import { HOME_PAGE } from './data/vocabulary';
 import { mulberryUrl } from './lib/colors';
+import { remoteSymbolUrls } from './lib/symbols';
 import type { Tile } from './types';
 import { ParentGate } from './parent/ParentGate';
 import { ParentMode } from './parent/ParentMode';
@@ -49,12 +50,16 @@ export function App() {
   useEffect(() => {
     if (!('serviceWorker' in navigator) || store.status !== 'ready') return;
     const t = setTimeout(() => {
-      const urls = new Set<string>();
-      for (const x of [...tiles, ...categories]) if (x.symbol?.startsWith('mul:')) urls.add(mulberryUrl(x.symbol.slice(4)));
+      const urls = new Set<string>(remoteSymbolUrls(tiles, { symbolStyle: settings.symbolStyle }));
+      for (const x of [...tiles, ...categories]) {
+        if (x.symbol?.startsWith('mul:')) urls.add(mulberryUrl(x.symbol.slice(4)));
+        const fb = (x as Tile).fallbackSymbol;
+        if (fb?.startsWith('mul:')) urls.add(mulberryUrl(fb.slice(4)));
+      }
       void navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage({ type: 'mimzi:cache-symbols', urls: [...urls] }));
     }, 1500);
     return () => clearTimeout(t);
-  }, [tiles, categories, store.status]);
+  }, [tiles, categories, store.status, settings.symbolStyle]);
   const speechOpts: SpeakOptions = {
     rate: settings.speechRate,
     lang: settings.speechLang,

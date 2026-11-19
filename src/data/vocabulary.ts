@@ -182,6 +182,9 @@ export function buildSeedTiles(): Tile[] {
         categoryId,
         order,
         symbol: word.symbol,
+        // Mimzi picks starter pictures: ARASAAC by default, this bundled one until it's downloaded.
+        symbolAuto: true,
+        fallbackSymbol: word.symbol,
         aslSign: ASL_BY_LABEL[word.label],
         wordType: word.type,
         linkTo: word.link,

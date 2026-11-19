@@ -34,7 +34,7 @@ export function ItemEditor({ title, item, onChange, testId }: Props) {
       <h4>{title}</h4>
       <div className="item-editor-row">
         <span className="mini-tile big tile-white">
-          <TileFace symbol={pic.symbol} asl={pic.asl} photoUrl={pic.photoUrl} label={item.label || '?'} />
+          <TileFace symbol={pic.symbol} tile={pic.tile} asl={pic.asl} photoUrl={pic.photoUrl} label={item.label || '?'} />
         </span>
         <div className="item-editor-fields">
           <label className="field inline">
@@ -111,7 +111,7 @@ export function TilePicker({ onPick, onCancel }: { onPick: (t: Tile) => void; on
           {list.map((t) => (
             <button key={t.id} type="button" className={`tile tile-${t.color} picker-tile${t.photoId ? ' tile-has-photo' : ''}`} onClick={() => onPick(t)} aria-label={`Pick ${t.label}`}>
               <span className="tile-media">
-                <TileFace symbol={t.symbol} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
+                <TileFace tile={t} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
               </span>
               <span className="tile-label">{t.label}</span>
             </button>

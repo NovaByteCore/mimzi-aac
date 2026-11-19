@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
-import type { Category, MediaRecord, Tile } from '../types';
+import type { Category, MediaRecord, SymbolInfo, Tile } from '../types';
 import { TILE_COLORS } from '../types';
 import { useMimzi } from '../state/MimziStore';
-import { SYMBOL_KEYS } from '../data/symbols';
 import { SymbolSearch } from './SymbolSearch';
 import { WORD_TYPE_LABEL, type WordType } from '../types';
 import { displayColor } from '../lib/colors';
@@ -33,6 +32,14 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
   const [categoryId, setCategoryId] = useState(tile?.categoryId ?? defaultCategoryId);
   const [color, setColor] = useState<Tile['color']>(tile?.color ?? categories.find((c) => c.id === defaultCategoryId)?.color ?? 'cream');
   const [symbol, setSymbol] = useState(tile?.symbol ?? '');
+  const [symbolInfo, setSymbolInfo] = useState<SymbolInfo | undefined>(tile?.symbolInfo);
+  const [symbolAuto, setSymbolAuto] = useState(tile?.symbolAuto ?? false);
+  const pickSymbol = (sym: string, info?: SymbolInfo) => {
+    setSymbol(sym);
+    setSymbolInfo(info);
+    setSymbolAuto(false);
+  };
+  const picture = { symbol: symbol || undefined, symbolInfo, symbolAuto, autoArasaac: tile?.autoArasaac, fallbackSymbol: tile?.fallbackSymbol };
   const [aslSign, setAslSign] = useState(tile?.aslSign);
   const [pronunciation, setPronunciation] = useState(tile?.pronunciation ?? '');
   const [lang, setLang] = useState(tile?.lang ?? '');
@@ -126,12 +133,15 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
       }
       const movedCategory = tile && tile.categoryId !== categoryId;
       const next: Tile = {
+        ...(tile ?? {}),
         id: tile?.id ?? newId('tile'),
         label: cleanLabel,
         speak: (spoken || cleanLabel).trim(),
         categoryId,
         order: tile && !movedCategory ? tile.order : nextOrder(tiles, categoryId),
         symbol: symbol.trim() || undefined,
+        symbolInfo: symbol.trim() && /^(arasaac|os|mul|svg):/.test(symbol) ? symbolInfo : undefined,
+        symbolAuto: symbolAuto || undefined,
         aslSign,
         pronunciation: pronunciation.trim() || undefined,
         lang: lang.trim() || undefined,
@@ -175,7 +185,7 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
             <div className="editor-preview">
               <div className={`tile tile-${displayColor({ color, wordType: wordType || undefined }, settings)} tile-preview${photoUrl ? ' tile-has-photo' : ''}`} aria-hidden="true">
                 <span className="tile-media">
-                  <TileFace symbol={symbol || undefined} asl={aslSign} photoUrl={photoUrl} label={label || '?'} />
+                  <TileFace tile={picture} asl={aslSign} photoUrl={photoUrl} label={label || '?'} />
                 </span>
                 <span className="tile-label">{label || 'Word'}</span>
               </div>
@@ -362,29 +372,35 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
               </label>
 
               <fieldset className="field">
-                <legend>AAC symbol (shown when there’s no photo)</legend>
-                <SymbolSearch initialQuery={tile ? '' : ''} selected={symbol} onPick={(sym) => setSymbol(sym)} />
-                <p className="muted small">Mimzi’s own symbols:</p>
-                <div className="symbol-picker">
-                  {SYMBOL_KEYS.map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      className={`symbol-choice${symbol === `svg:${k}` ? ' symbol-on' : ''}`}
-                      onClick={() => setSymbol(`svg:${k}`)}
-                      aria-label={`Symbol ${k.replace('-', ' ')}`}
-                      aria-pressed={symbol === `svg:${k}`}
-                    >
-                      <TileFace symbol={`svg:${k}`} label={k} />
-                    </button>
-                  ))}
-                </div>
+                <legend>AAC picture (a real photo, if added, is shown instead)</legend>
+                {tile?.fallbackSymbol && (
+                  <div className="row">
+                    <span className="muted small" data-testid="symbol-mode">
+                      {symbolAuto ? 'Mimzi chooses this picture (default style).' : 'You chose this picture.'}
+                    </span>
+                    {!symbolAuto && (
+                      <button
+                        type="button"
+                        className="btn btn-quiet small"
+                        data-testid="symbol-auto"
+                        onClick={() => {
+                          setSymbol(tile.fallbackSymbol ?? '');
+                          setSymbolInfo(undefined);
+                          setSymbolAuto(true);
+                        }}
+                      >
+                        Use Mimzi’s default picture
+                      </button>
+                    )}
+                  </div>
+                )}
+                <SymbolSearch suggest={label} selected={symbolAuto ? undefined : symbol} onPick={pickSymbol} />
                 <label className="field inline">
-                  <span>Or type a character</span>
+                  <span>Or type a letter or short text</span>
                   <input
-                    value={symbol.startsWith('svg:') || symbol.startsWith('mul:') ? '' : symbol}
-                    onChange={(e) => setSymbol(e.target.value.slice(0, 8))}
-                    placeholder="🐶"
+                    value={/^(svg|mul|arasaac|os):/.test(symbol) ? '' : symbol}
+                    onChange={(e) => pickSymbol(e.target.value.slice(0, 8))}
+                    placeholder="A"
                     className="emoji-input"
                   />
                 </label>

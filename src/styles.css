@@ -1008,3 +1008,15 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 /* Voice ranking */
 .voice-badge { color: var(--accent, #2f6f4f); font-weight: 700; font-size: 0.85em; }
 .voice-robotic { opacity: 0.7; }
+
+/* Multi-library symbols */
+.symbol-sources { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.chip { border: 1px solid var(--line, #c9ccd4); background: var(--card, #fff); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 0.9rem; min-height: 36px; }
+.chip-on { background: var(--ink, #263238); color: #fff; border-color: transparent; }
+.chip:disabled { opacity: 0.45; }
+.symbol-group h4 { margin: 10px 0 4px; font-size: 0.95rem; }
+.symbol-choice .tile-symbol, .symbol-choice svg { width: 64px; height: 64px; object-fit: contain; }
+.symbol-license { display: block; font-size: 0.7rem; color: var(--muted, #667); line-height: 1.2; }
+.nc-badge { color: #8a4b00; }
+.credits { padding-left: 18px; }
+.credits li { margin: 6px 0; }
