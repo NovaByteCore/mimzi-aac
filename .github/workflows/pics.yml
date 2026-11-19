@@ -1,7 +1,9 @@
 name: fetch-default-pictures
 on: { push: { branches: [tools/fetch-pictures] } }
+permissions: { contents: write }
 jobs:
   fetch:
+    if: "!contains(github.event.head_commit.message, '[pictures]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -9,9 +11,7 @@ jobs:
         with: { node-version: 22 }
       - run: npm install
       - run: npx tsx scripts/fetch-default-pictures.ts
-      - uses: actions/upload-artifact@v4
-        with:
-          name: default-pictures
-          path: |
-            public/symbols/arasaac
-            src/data/defaultPictures.json
+      - run: |
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" add public/symbols/arasaac src/data/defaultPictures.json
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "[pictures] default ARASAAC pictures"
+          git push -q origin HEAD:tools/fetch-pictures
