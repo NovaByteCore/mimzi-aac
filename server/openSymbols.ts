@@ -70,7 +70,7 @@ export async function handleSymbolSearch(req: Request, secret: string | undefine
   const params = new URL(req.url).searchParams;
   const q = (params.get('q') ?? '').trim();
   const locale = (params.get('locale') ?? 'en').toLowerCase();
-  if (!q || q.length > 60 || /[\u0000-\u001f]/.test(q)) return json(400, { error: 'query' });
+  if (!q || q.length > 60 || [...q].some((c) => c.charCodeAt(0) < 32)) return json(400, { error: 'query' });
   if (!/^[a-z]{2}$/.test(locale)) return json(400, { error: 'locale' });
   const search = async (fresh: boolean) => {
     const t = await getToken(secret, fetchImpl, fresh);
