@@ -1895,7 +1895,8 @@ test('dialog focus: Edit schedule → PIN → editor → picture chooser / confi
   const opener = page.getByTestId('edit-schedule');
   await opener.focus();
   await page.keyboard.press('Enter');
-  const inDialog = (sel: string) => page.evaluate((s) => !!document.activeElement && !!document.querySelector(s)?.contains(document.activeElement), sel);
+  const inDialog = (sel: string) =>
+    page.waitForFunction((s) => !!document.activeElement && !!document.querySelector(s)?.contains(document.activeElement), sel, { timeout: 2000 }).then(() => true, () => false);
   assert.ok(await inDialog('.pin-modal'), 'focus moves into the PIN dialog');
   for (let i = 0; i < 20; i++) await page.keyboard.press('Tab');
   assert.ok(await inDialog('.pin-modal'), 'Tab stays inside the PIN dialog');
@@ -1959,7 +1960,8 @@ test('compact screens: "Groups" opens the word-group list when enabled; hidden w
   await groups.click();
   await page.keyboard.press('Escape');
   await sheet.waitFor({ state: 'detached' });
-  assert.ok(await groups.evaluate((el) => el === document.activeElement), 'focus back on Groups');
+  const onGroups = await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'groups-btn', null, { timeout: 2000 }).then(() => true, () => false);
+  assert.ok(onGroups, 'focus back on Groups');
   await enterParentMode(page);
   await page.getByRole('tab', { name: 'Board & accessibility' }).click();
   await page.getByTestId('page-list-setting').selectOption('hide');
