@@ -5,6 +5,7 @@ import { itemPicture } from '../lib/myday';
 import { TileFace } from '../components/TileFace';
 import { PhotoCropper } from './PhotoCropper';
 import { newId } from '../lib/id';
+import { GooglePhotosButton } from './GooglePhotosButton';
 
 interface Props {
   title: string;
@@ -51,6 +52,7 @@ export function ItemEditor({ title, item, onChange, testId }: Props) {
             <button type="button" className="btn small" onClick={() => fileInput.current?.click()}>
               📷 Photo
             </button>
+            <GooglePhotosButton className="small" onPicked={(blob) => setCropFile(blob)} />
             {(item.photoId || item.tileId) && (
               <button type="button" className="btn btn-quiet small" onClick={() => onChange({ ...item, photoId: undefined, tileId: undefined })}>
                 No picture

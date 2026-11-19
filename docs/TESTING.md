@@ -4,8 +4,8 @@
 
 | Suite | Command | Covers |
 | --- | --- | --- |
-| Unit (33) | `npm run test:unit` | Vocabulary integrity, Food & Drink starts empty, sentence builder, grid paging and fixed positions, reordering, crop maths, settings migration, backup v2 round-trip including media, My Day and My Words, v1 backup compatibility, backup validation, PIN hashing, First/Then sentence, token rules (1–10, never removed by adding), routine current step and Now/Next/Later, schedule pictures, My Words CSV (quoting, formula-injection safety) and therapist summary, sync conflict rules, media reference tracking, recording format choice, WCAG AA contrast of every tile colour. |
-| End-to-end (23) | `npm run test:e2e` | **Phase 1:** opens straight to the board; one-tap speech; sentence across groups; hold + PIN, wrong PIN refused; photo tile survives reload; rename / reorder / delete / restore; 2×2 grid; backup → restore into a fresh browser; offline reload. **Phase 2:** recorded voice replaces text-to-speech (fake microphone); sign video only plays after "See sign"; quick-word picker. **Phase 3:** First/Then speak, hold to mark done, reset; tokens (3 default, quick tap ignored, hold adds, celebration, saved across reload, no remove button); routine edit + Now/Next/Later switch; templates. **Phase 4:** My Words note + CSV/summary export; Food & Drink empty state and private notes; sync status and no outside network requests. **Phase 5:** iPad-landscape and Galaxy-portrait layouts (Talk and My Day) fit without sideways scrolling; every child-screen control has an accessible name and a ≥ 44 px touch target. |
+| Unit (40) | `npm run test:unit` | Vocabulary integrity, Food & Drink starts empty, sentence builder, grid paging and fixed positions, reordering, crop maths, settings migration, backup v2 round-trip including media, My Day and My Words, v1 backup compatibility, backup validation, PIN hashing, First/Then sentence, token rules (1–10, never removed by adding), routine current step and Now/Next/Later, schedule pictures, My Words CSV (quoting, formula-injection safety) and therapist summary, sync conflict rules, media reference tracking, recording format choice, WCAG AA contrast of every tile colour. **Google:** two-device Drive sync (new device gets photos; per-word newest-wins; deletes spread; My Day/settings; unused media cleaned up; PIN and voice stay per device), photo pass-through security (Google-only URLs, Bearer required, images only), Google Photos picker flow. |
+| End-to-end (25) | `npm run test:e2e` | **Phase 1:** opens straight to the board; one-tap speech; sentence across groups; hold + PIN, wrong PIN refused; photo tile survives reload; rename / reorder / delete / restore; 2×2 grid; backup → restore into a fresh browser; offline reload. **Phase 2:** recorded voice replaces text-to-speech (fake microphone); sign video only plays after "See sign"; quick-word picker. **Phase 3:** First/Then speak, hold to mark done, reset; tokens (3 default, quick tap ignored, hold adds, celebration, saved across reload, no remove button); routine edit + Now/Next/Later switch; templates. **Phase 4:** My Words note + CSV/summary export; Food & Drink empty state and private notes; sync status and no outside network requests. **Google (simulated):** sign in on one device, sign in on a second and get photos and notes, delete on one and see it removed on the other; pick a photo from Google Photos into a tile. **Phase 5:** iPad-landscape and Galaxy-portrait layouts (Talk and My Day) fit without sideways scrolling; every child-screen control has an accessible name and a ≥ 44 px touch target. |
 
 Text-to-speech is stubbed in e2e tests (headless browsers have no voices), so they check *what* is spoken, not how it sounds.
 
@@ -51,6 +51,12 @@ Automated tests run in desktop Chromium. They are **not** a substitute for these
 
 ### My Words
 - [ ] CSV opens correctly in Numbers / Google Sheets; the summary .txt can be shared by email from Files.
+
+### Google (real account — needed once setup is done)
+- [ ] iPad Home Screen app: "Sign in with Google" window opens and returns to Mimzi. (Pop-ups from installed iPad web apps can behave differently from Safari; if it fails, sign in from Safari first.)
+- [ ] Galaxy: sign in with the same account → words, photos, recordings and My Day appear.
+- [ ] Change a word on each device, sync both, and check that both changes are kept.
+- [ ] "From Google Photos" opens Google Photos, the chosen photo appears in the cropper.
 
 ### Accessibility
 - [ ] VoiceOver (iPad) and TalkBack (Galaxy) read tile names and buttons.

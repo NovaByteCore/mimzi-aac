@@ -10,6 +10,7 @@ import { newId } from '../lib/id';
 import { nextOrder } from '../lib/grid';
 import { speakTile } from '../lib/speech';
 import { AudioRecorder } from './AudioRecorder';
+import { GooglePhotosButton } from './GooglePhotosButton';
 import { isSignFile, MAX_SIGN_BYTES, SIGN_ACCEPT } from '../lib/media';
 
 interface Props {
@@ -213,6 +214,7 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                   <button type="button" className="btn" onClick={() => libraryInput.current?.click()}>
                     🖼️ Choose photo
                   </button>
+                  <GooglePhotosButton onPicked={(blob) => setCropFile(blob)} />
                   {photoUrl && (
                     <button
                       type="button"

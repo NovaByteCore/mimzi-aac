@@ -892,3 +892,9 @@ button:disabled {
 .sync-status { font-size: 14px; font-weight: 700; color: var(--slate-soft); background: #fff; padding: 6px 10px; border-radius: 999px; }
 .quick-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; max-width: 520px; }
 @media (max-width: 640px) { .parent-header { flex-wrap: wrap; } .sync-status { order: 3; } }
+
+/* ---------- Google ---------- */
+.gphotos { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.gphotos-status { flex-basis: 100%; }
+.notice { background: var(--sun, #fff1c9); border: 2px solid #ddb748; border-radius: 14px; padding: 4px 14px; }
+button.sync-status { border: 0; cursor: pointer; min-height: 40px; }

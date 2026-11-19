@@ -536,3 +536,161 @@ for (const [name, viewport] of [
     await ctx.close();
   });
 }
+
+/* ---------------- Google sign-in, Drive sync, Google Photos (Google mocked) ---------------- */
+
+interface FakeFile {
+  id: string;
+  name: string;
+  appProperties?: Record<string, string>;
+  body: Buffer;
+  type: string;
+}
+
+/** Stands in for Google sign-in, the Drive app folder and the Photos Picker. Shared across "devices". */
+function fakeGoogle() {
+  const files = new Map<string, FakeFile>();
+  let n = 0;
+  const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET,POST,PATCH,DELETE' };
+  const gis = `window.google = { accounts: { oauth2: {
+    initTokenClient(cfg) { return { requestAccessToken() { setTimeout(() => cfg.callback({ access_token: 'test-token', expires_in: 3600, scope: cfg.scope }), 20); } }; },
+    revoke(t, done) { done && done(); } } } };`;
+
+  async function install(ctx: BrowserContext) {
+    await ctx.route('https://accounts.google.com/gsi/client', (r) => r.fulfill({ contentType: 'text/javascript', body: gis }));
+    await ctx.route('https://www.googleapis.com/oauth2/v3/userinfo', (r) =>
+      r.request().method() === 'OPTIONS' ? r.fulfill({ status: 204, headers: cors }) : r.fulfill({ json: { email: 'parent@example.com', name: 'Test Parent' }, headers: cors }),
+    );
+    await ctx.route(/https:\/\/www\.googleapis\.com\/(upload\/)?drive\/v3\/files.*/, async (route) => {
+      const req = route.request();
+      const url = new URL(req.url());
+      const method = req.method();
+      if (method === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+      if (req.headers()['authorization'] !== 'Bearer test-token') return route.fulfill({ status: 401, headers: cors, body: 'no' });
+      const id = url.pathname.match(/files\/([^/]+)$/)?.[1];
+      if (!id && method === 'GET') {
+        return route.fulfill({ headers: cors, json: { files: [...files.values()].map(({ body: _b, type: _t, ...f }) => f) } });
+      }
+      if (!id && method === 'POST') {
+        const meta = JSON.parse(req.postData() ?? '{}');
+        const newIdValue = `file${++n}`;
+        files.set(newIdValue, { id: newIdValue, name: meta.name, appProperties: meta.appProperties, body: Buffer.alloc(0), type: 'application/octet-stream' });
+        return route.fulfill({ headers: cors, json: { id: newIdValue } });
+      }
+      const f = id ? files.get(id) : undefined;
+      if (!f) return route.fulfill({ status: 404, headers: cors, body: 'not found' });
+      if (method === 'PATCH') {
+        f.body = req.postDataBuffer() ?? Buffer.alloc(0);
+        f.type = req.headers()['content-type'] ?? f.type;
+        return route.fulfill({ headers: cors, json: { id } });
+      }
+      if (method === 'GET' && url.searchParams.get('alt') === 'media') return route.fulfill({ headers: { ...cors, 'Content-Type': f.type }, body: f.body });
+      if (method === 'DELETE') {
+        files.delete(f.id);
+        return route.fulfill({ status: 204, headers: cors });
+      }
+      return route.fulfill({ status: 400, headers: cors, body: 'unsupported' });
+    });
+    // Google Photos Picker
+    await ctx.route(/https:\/\/photospicker\.googleapis\.com\/v1\/.*/, (route) => {
+      const req = route.request();
+      if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+      const url = req.url();
+      if (url.endsWith('/v1/sessions') && req.method() === 'POST') {
+        return route.fulfill({ headers: cors, json: { id: 'sess1', pickerUri: 'https://photos.google.com/picker/sess1', pollingConfig: { pollInterval: '1s', timeoutIn: '60s' } } });
+      }
+      if (url.includes('/v1/sessions/sess1') && req.method() === 'GET') return route.fulfill({ headers: cors, json: { id: 'sess1', pickerUri: 'x', mediaItemsSet: true } });
+      if (url.includes('/v1/mediaItems')) {
+        return route.fulfill({ headers: cors, json: { mediaItems: [{ id: 'm1', type: 'PHOTO', mediaFile: { baseUrl: 'https://lh3.googleusercontent.com/m1', mimeType: 'image/png', filename: 'ball.png' } }] } });
+      }
+      return route.fulfill({ status: 200, headers: cors, json: {} });
+    });
+    await ctx.route('https://photos.google.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<p>Google Photos (test)</p>' }));
+    // Mimzi's own pass-through function (deployed on the host; mocked here)
+    await ctx.route(/\/api\/photo\?/, async (route) => {
+      const u = new URL(route.request().url()).searchParams.get('url') ?? '';
+      if (!u.startsWith('https://lh3.googleusercontent.com/m1=') || route.request().headers()['authorization'] !== 'Bearer test-token') {
+        return route.fulfill({ status: 400, body: 'bad' });
+      }
+      return route.fulfill({ contentType: 'image/png', body: await readFile(PHOTO) });
+    });
+  }
+  return { install, files };
+}
+
+async function googleSignIn(page: Page) {
+  await page.getByRole('tab', { name: 'Google & sync' }).click();
+  await page.getByRole('button', { name: /Sign in with Google/ }).click();
+  await page.getByTestId('google-account').waitFor();
+  await page.getByText(/Last synced/).waitFor({ timeout: 15000 });
+}
+
+test('Google: sign in, then a second device signs in and gets everything (photos, notes) — and deletes sync back', async () => {
+  const google = fakeGoogle();
+  const ipad = await openApp(IPAD);
+  await google.install(ipad.ctx);
+  await enterParentMode(ipad.page);
+  await addPhotoTile(ipad.page, 'Rex', 'My People');
+  await ipad.page.getByRole('tab', { name: 'My Words' }).click();
+  await ipad.page.getByLabel('Target word').fill('more');
+  await ipad.page.getByLabel('How they say or show it').fill('mo');
+  await ipad.page.getByRole('button', { name: 'Add note' }).click();
+  await ipad.page.locator('tr[data-obs="more"]').waitFor();
+  await googleSignIn(ipad.page);
+  assert.match((await ipad.page.getByTestId('google-account').textContent()) ?? '', /Test Parent/);
+  const names = [...google.files.values()].map((f) => f.name);
+  assert.ok(names.includes('mimzi-state.json'));
+  assert.equal(names.filter((x) => x.startsWith('media-photo-')).length, 1, 'photo uploaded once');
+  assert.doesNotMatch(google.files.get([...google.files.values()].find((f) => f.name === 'mimzi-state.json')!.id)!.body.toString(), /"hash"/, 'PIN not uploaded');
+
+  const galaxy = await openApp(GALAXY);
+  await google.install(galaxy.ctx);
+  await enterParentMode(galaxy.page);
+  await googleSignIn(galaxy.page);
+  await galaxy.page.getByRole('button', { name: /back to Talk/ }).click();
+  await galaxy.page.getByRole('button', { name: 'My People', exact: true }).first().click();
+  await galaxy.page.locator('.board-grid .tile[aria-label="Rex"] img').waitFor();
+  await enterParentMode(galaxy.page, false);
+  await galaxy.page.getByRole('tab', { name: 'My Words' }).click();
+  await galaxy.page.locator('tr[data-obs="more"]').waitFor();
+
+  // Delete on the phone, sync, then sync the iPad
+  await galaxy.page.getByRole('tab', { name: 'Words & pictures' }).click();
+  await galaxy.page.getByRole('tab', { name: 'My People', exact: true }).click();
+  await galaxy.page.locator('.edit-tile[aria-label="Edit Rex"]').click();
+  await galaxy.page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await galaxy.page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await galaxy.page.locator('.edit-tile[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
+  await galaxy.page.getByRole('tab', { name: 'Google & sync' }).click();
+  await galaxy.page.getByRole('button', { name: /Sync now/ }).click();
+  await galaxy.page.getByRole('button', { name: /Sync now/ }).waitFor();
+
+  await ipad.page.getByRole('button', { name: /Sync now/ }).click();
+  await ipad.page.getByRole('button', { name: /Sync now/ }).waitFor();
+  await ipad.page.getByRole('tab', { name: 'Words & pictures' }).click();
+  await ipad.page.getByRole('tab', { name: 'My People', exact: true }).click();
+  await ipad.page.locator('.edit-tile[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
+  await ipad.page.getByRole('tab', { name: /Recently deleted/ }).click();
+  await ipad.page.getByText('Rex').waitFor();
+
+  await ipad.ctx.close();
+  await galaxy.ctx.close();
+});
+
+test('Google Photos: pick a photo in Google’s picker and use it on a tile', async () => {
+  const google = fakeGoogle();
+  const { ctx, page } = await openApp();
+  await google.install(ctx);
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add picture' }).click();
+  await page.getByLabel('Word on the tile').fill('Blue ball');
+  const [popup] = await Promise.all([ctx.waitForEvent('page'), page.getByRole('button', { name: /From Google Photos/ }).click()]);
+  assert.ok(popup, 'Google Photos opened in its own window');
+  await page.getByTestId('crop-viewport').waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: 'Use photo' }).click();
+  await page.locator('.tile-preview img.tile-photo').waitFor();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-tile[aria-label="Edit Blue ball"] img.tile-photo').waitFor();
+  await ctx.close();
+});

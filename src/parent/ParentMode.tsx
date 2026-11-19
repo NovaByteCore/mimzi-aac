@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { WordsPanel } from './WordsPanel';
 import { CategoriesPanel } from './CategoriesPanel';
@@ -7,9 +6,10 @@ import { BackupPanel } from './BackupPanel';
 import { DeletedPanel } from './DeletedPanel';
 import { MyDayPanel } from './MyDayPanel';
 import { MyWordsPanel } from './MyWordsPanel';
-import { currentSyncState, syncStatusText } from '../lib/sync';
+import { GoogleSyncPanel } from './GoogleSyncPanel';
+import { useEffect, useState } from 'react';
 
-type Tab = 'words' | 'groups' | 'myday' | 'mywords' | 'settings' | 'backup' | 'deleted';
+type Tab = 'words' | 'groups' | 'myday' | 'mywords' | 'settings' | 'google' | 'backup' | 'deleted';
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'words', label: 'Words & pictures' },
@@ -17,13 +17,30 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'myday', label: 'My Day' },
   { id: 'mywords', label: 'My Words' },
   { id: 'settings', label: 'Board & speech' },
+  { id: 'google', label: 'Google & sync' },
   { id: 'backup', label: 'Backup' },
   { id: 'deleted', label: 'Recently deleted' },
 ];
 
 export function ParentMode({ onExit }: { onExit: () => void }) {
-  const { settings, tiles } = useMimzi();
+  const { settings, tiles, sync, syncNow } = useMimzi();
   const [tab, setTab] = useState<Tab>('words');
+  // Quietly sync when Parent Mode opens and closes, if a recent Google sign-in is still valid.
+  useEffect(() => {
+    void syncNow(false);
+    return () => {
+      void syncNow(false);
+    };
+  }, [syncNow]);
+  const syncLabel = !sync.account
+    ? 'This device only — not signed in'
+    : sync.phase === 'syncing'
+      ? 'Syncing…'
+      : sync.phase === 'error'
+        ? 'Sync needs attention'
+        : sync.lastSyncedAt
+          ? `Synced ${new Date(sync.lastSyncedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+          : 'Signed in';
   const deletedCount = tiles.filter((t) => t.deletedAt).length;
 
   return (
@@ -32,9 +49,9 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
         <h1>
           <span aria-hidden="true">🔓</span> Parent Mode
         </h1>
-        <span className="sync-status" data-testid="sync-status" title="Cross-device sync">
-          <span aria-hidden="true">📱</span> {syncStatusText(currentSyncState())}
-        </span>
+        <button type="button" className="sync-status" data-testid="sync-status" onClick={() => setTab('google')}>
+          <span aria-hidden="true">{sync.account ? (sync.phase === 'error' ? '⚠️' : '☁️') : '📱'}</span> {syncLabel}
+        </button>
         <button type="button" className="btn btn-primary" onClick={onExit}>
           Done — back to Talk
         </button>
@@ -60,6 +77,7 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
         {tab === 'myday' && <MyDayPanel />}
         {tab === 'mywords' && <MyWordsPanel />}
         {tab === 'settings' && <SettingsPanel />}
+        {tab === 'google' && <GoogleSyncPanel />}
         {tab === 'backup' && <BackupPanel />}
         {tab === 'deleted' && <DeletedPanel />}
       </main>

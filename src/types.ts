@@ -28,6 +28,8 @@ export interface Tile {
   builtIn: boolean;
   /** Caregiver-only note (e.g. about a food). Never shown on child screens. */
   privateNote?: string;
+  /** Last change time (ms) — used by Google Drive sync to pick the newest copy. */
+  updatedAt?: number;
 }
 
 export interface Category {
@@ -38,6 +40,7 @@ export interface Category {
   order: number;
   hidden: boolean;
   builtIn: boolean;
+  updatedAt?: number;
 }
 
 export type MediaKind = 'photo' | 'audio' | 'sign';
@@ -153,4 +156,5 @@ export interface Observation {
   notes: string;
   audioId?: string;
   createdAt: number;
+  updatedAt?: number;
 }

@@ -1,6 +1,6 @@
 # Optional cross-device sync — design & provider research
 
-**Status: designed, not enabled.** Mimzi works fully on each device without any account. Nothing in this document has been connected, and no account will be created or billing enabled without the owner's approval.
+**Status: built using Google Drive's hidden app folder** (see `docs/GOOGLE_SETUP.md`). The owner asked for Google sign-in, so sync stores data in the family's own Google Drive app-data folder. That needs no extra service, account or subscription. The provider comparison below is kept for reference.
 
 ## Requirements (from the brief)
 

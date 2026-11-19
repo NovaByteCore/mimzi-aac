@@ -43,7 +43,9 @@ Mimzi is a personal Augmentative and Alternative Communication (AAC) app for a t
   - Signs and celebrations: their own controls.
   - Security: change the PIN.
 - **Backup:** one file with everything, including photos, recordings, My Day and My Words. Restore asks before replacing anything. The PIN is never exported. This screen also shows storage use and asks the browser to protect Mimzi's data.
-- **Sync status:** shows "This device only" (see `docs/SYNC.md`).
+- **Google & sync:** sign in with Google. Everything is saved in a hidden Mimzi folder in **your own Google Drive**, so a second device signs in with the same account and gets the full setup back (each device keeps its own PIN and voice). The newest change to each word wins, and deletes sync too. Setup steps are in `docs/GOOGLE_SETUP.md`.
+- **From Google Photos:** pick a photo with Google's own picker when editing a tile or a My Day picture.
+- **Sync status** shows in the Parent Mode header.
 
 ### Offline & install
 - Hand-written service worker plus IndexedDB: after the first visit, everything works without internet.
@@ -90,7 +92,8 @@ Copy `.env.example` to `.env.local`. Only `VITE_*` variables reach the app and *
 | `VITE_APP_NAME` | `Mimzi` | Display name. |
 | `VITE_BASE_PATH` | `/` | Set if hosted in a sub-folder, e.g. `/mimzi/`. |
 | `VITE_DEFAULT_SPEECH_LANG` | `en-US` | Text-to-speech language. |
-| `VITE_SYNC_PROVIDER`, `VITE_SYNC_URL` | empty | Reserved for optional sync (Phase 4). Nothing is enabled. |
+| `VITE_GOOGLE_CLIENT_ID` | empty | Google OAuth **Client ID** (public, not a secret) for sign-in, Drive sync and Google Photos. Empty = those features show setup help. See `docs/GOOGLE_SETUP.md`. |
+| `VITE_PHOTOS_PROXY_URL` | `/api/photo` | Path of the Google Photos pass-through function (`netlify/functions/photo.mts` or `functions/api/photo.ts`). |
 
 ---
 
@@ -121,7 +124,8 @@ Host settings: serve `sw.js` and `index.html` with no long-term caching (`Cache-
 
 ## Privacy & data
 
-- No accounts, ads, analytics, tracking, or third-party requests. The app makes no network calls except loading itself.
+- No ads, analytics or tracking. Until a grown-up taps **Sign in with Google**, the app makes no network calls except loading itself.
+- Google sign-in is optional. When it's on, data goes only to the hidden Mimzi folder in **your own** Google Drive. Google Photos only ever sends the photos you pick, through a pass-through on your own site that stores nothing.
 - Photos, recordings and settings live in the browser's IndexedDB on that device only.
 - **Data can be lost**: browsers may clear site data (storage pressure, clearing Safari website data, removing the Home Screen app). Mimzi requests persistent storage and shows whether the browser granted it — but **make backups**.
 - Backup files contain the child's photos: store them privately.
@@ -154,5 +158,6 @@ docs/                   testing checklist, deployment, sync design & research
 | 1 Foundation | ✅ Built and tested in Chromium |
 | 2 Communication (recording, ASL media, quick-word picker) | ✅ Built and tested in Chromium |
 | 3 My Day | ✅ Built and tested in Chromium |
-| 4 Caregiver tools (My Words, food boards, sync design) | ✅ Built and tested in Chromium. Sync is designed but **not enabled**; it needs the owner's choice of provider. |
+| 4 Caregiver tools (My Words, food boards, sync) | ✅ Built and tested in Chromium |
+| Google sign-in, Drive sync, Google Photos | ✅ Built and tested in Chromium against a simulated Google. ⏳ Needs the one-time Google Cloud setup and a real-account test. |
 | 5 Testing & deployment | ✅ Automated tests, accessibility checks, offline test, deployment docs. ⏳ Physical iPad/Galaxy testing and hosting setup are still to do, and hosting needs the owner's permission. |

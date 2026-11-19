@@ -35,6 +35,9 @@ jobs:
         run: npm run test:unit
 
       - name: Production build
+        # Placeholder client ID so the Google features render; tests simulate Google's servers.
+        env:
+          VITE_GOOGLE_CLIENT_ID: e2e-test-client.apps.googleusercontent.com
         run: npm run build
 
       - name: Install Chromium for end-to-end tests
