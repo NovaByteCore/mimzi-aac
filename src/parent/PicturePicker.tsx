@@ -104,7 +104,7 @@ export function PicturePicker({
   showBack?: boolean;
 }) {
   const { mediaUrls: storeUrls, mediaMime, myDay } = useMimzi();
-  const mediaUrls = { ...storeUrls, ...(extraUrls ?? {}) };
+  const mediaUrls = useMemo(() => ({ ...storeUrls, ...(extraUrls ?? {}) }), [storeUrls, extraUrls]);
   const [recent, setRecent] = useState<RecentPicture[]>([]);
   const [typed, setTyped] = useState('');
   const q = typed.trim();

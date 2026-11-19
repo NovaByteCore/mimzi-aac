@@ -14,7 +14,6 @@ import { chromium, type Browser, type BrowserContext, type Page } from 'playwrig
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:4173';
 const PHOTO = fileURLToPath(new URL('../fixtures/test-ball.png', import.meta.url));
-const SIGN = fileURLToPath(new URL('../fixtures/test-sign.webm', import.meta.url));
 const SHOTS = fileURLToPath(new URL('../../test-results/', import.meta.url));
 const IPAD = { width: 1180, height: 820 };
 const GALAXY = { width: 412, height: 915 };
@@ -540,13 +539,13 @@ async function openScheduleEditor(page: Page, button: RegExp | string, firstTime
 const editor = (page: Page) => page.getByTestId('schedule-editor');
 const preview = (page: Page) => page.getByTestId('schedule-preview');
 /** In the picture picker: search, tap a result, then "Use picture". */
-async function usePictureFromSearch(page: Page, query: string, symbol: string) {
+async function choosePictureFromSearch(page: Page, query: string, symbol: string) {
   const picker = page.getByTestId('picture-picker').last();
   await picker.getByTestId('picture-search').fill(query);
   await picker.getByTestId('picture-results').locator(`[data-symbol="${symbol}"]`).first().click();
   await picker.getByTestId('use-picture').click();
 }
-async function usePhotoFromPicker(page: Page) {
+async function choosePhotoInPicker(page: Page) {
   const picker = page.getByTestId('picture-picker').last();
   await picker.getByTestId('use-photo').click();
   await picker.getByTestId('picker-photo-input').setInputFiles(PHOTO);
@@ -556,12 +555,12 @@ async function usePhotoFromPicker(page: Page) {
 }
 async function pickArasaac(page: Page, card: string, query: string, n = 0) {
   await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).first().click();
-  await usePictureFromSearch(page, query, `arasaac:${pictoId(query) + n}`);
+  await choosePictureFromSearch(page, query, `arasaac:${pictoId(query) + n}`);
   await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
 }
 async function pickPhoto(page: Page, card: string) {
   await editor(page).getByTestId(card).getByRole('button', { name: /Choose picture|Change picture/ }).first().click();
-  await usePhotoFromPicker(page);
+  await choosePhotoInPicker(page);
   await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
 }
 async function saveSchedule(page: Page) {
@@ -1106,7 +1105,7 @@ test('V3-3: a brand-new word speaks automatically — no recording', async () =>
   await page.getByRole('button', { name: '+ Add picture' }).click();
   await page.getByLabel('Word on the tile').fill('Trampoline');
   await page.getByTestId('choose-picture').click();
-  await usePictureFromSearch(page, 'trampoline', 'mul:trampoline');
+  await choosePictureFromSearch(page, 'trampoline', 'mul:trampoline');
   await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Save' }).click();
   await page.locator('.edit-word[aria-label="Edit Trampoline"]').waitFor();
@@ -1392,7 +1391,7 @@ test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) �
   await enterParentMode(page);
   // Tap the picture → picker (Recent, Saved, then one search across every library).
   await page.locator('[data-change-picture="core-help"]').click();
-  await usePictureFromSearch(page, 'help', `arasaac:${pictoId('help') + 1}`);
+  await choosePictureFromSearch(page, 'help', `arasaac:${pictoId('help') + 1}`);
   await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
   // Another word from OpenSymbols (non-commercial licence in the picture details), another from Mulberry,
   // using the optional library filter.
@@ -2604,7 +2603,7 @@ for (const c of COMPACT) test(`pictures and Arrange words on a compact tablet ($
   await page.locator('.edit-word[aria-label="Edit go"]').waitFor();
   // Tap the picture → picker → Use picture.
   await page.locator('[data-change-picture="core-go"]').click();
-  await usePictureFromSearch(page, 'car', 'arasaac:2339');
+  await choosePictureFromSearch(page, 'car', 'arasaac:2339');
   await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
   // Arrange words: swap two words by dragging, undo, then move "go" into an empty spot and save.
   await page.getByTestId('arrange-words-btn').click();
