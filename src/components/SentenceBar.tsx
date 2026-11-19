@@ -1,5 +1,6 @@
 import type { SentenceItem } from '../lib/sentence';
 import type { Tile } from '../types';
+import { Icon } from './Icon';
 import { TileFace } from './TileFace';
 
 interface Props {
@@ -33,13 +34,13 @@ export function SentenceBar({ items, tilesById, mediaUrls, onSpeak, onBackspace,
       </button>
       <div className="sentence-actions">
         <button type="button" className="icon-btn speak-btn" onClick={onSpeak} disabled={!items.length} aria-label="Speak message">
-          <span aria-hidden="true">🔊</span>
+          <Icon name="speak" size={30} />
         </button>
         <button type="button" className="icon-btn" onClick={onBackspace} disabled={!items.length} aria-label="Remove last word">
-          <span aria-hidden="true">⌫</span>
+          <Icon name="backspace" size={28} />
         </button>
         <button type="button" className="icon-btn" onClick={onClear} disabled={!items.length} aria-label="Clear message">
-          <span aria-hidden="true">✕</span>
+          <Icon name="close" size={26} />
         </button>
       </div>
     </div>

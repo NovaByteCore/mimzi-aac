@@ -7,7 +7,8 @@
  *   mul:<file>            Mulberry Symbols (bundled in /symbols/mulberry)
  *   svg:<key>             original Mimzi drawing (bundled in the code)
  *   os:<repo>:<id>        a symbol found through OpenSymbols (image URL in tile.symbolInfo)
- * Anything else is text the caregiver typed. Emoji are never used for starter words.
+ * Anything else (older text/emoji pictures) is not drawn: the bundled symbol or the word's
+ * first letter is shown instead. Emoji are never used as vocabulary pictures.
  */
 import { config } from '../config';
 import { mulberryUrl } from './colors';
@@ -97,8 +98,13 @@ export function libraryAllowed(id: LibraryId, commercialUse = config.commercialU
 export const ARASAAC_API = 'https://api.arasaac.org/v1';
 export const ARASAAC_STATIC = 'https://static.arasaac.org/pictograms';
 
-export function arasaacUrl(id: number | string, size: 300 | 500 = 500): string {
-  return `${ARASAAC_STATIC}/${id}/${id}_${size}.png`;
+/**
+ * Image address for an ARASAAC pictogram. The API's image endpoint sends CORS headers
+ * (static.arasaac.org doesn't), so the service worker can save a normal — not opaque —
+ * copy for offline use, which keeps storage use small. Verified against the live service.
+ */
+export function arasaacUrl(id: number | string): string {
+  return `${ARASAAC_API}/pictograms/${id}`;
 }
 
 export function arasaacInfo(id: number | string, name: string): SymbolInfo {
@@ -176,7 +182,10 @@ export function shownSymbol(
     return info?.url && licenseAllowed(info, commercialUse) ? { url: info.url, fallback: bundled, info } : { symbol: bundled, info: bundled ? bundledInfo(bundled) : undefined };
   }
   if (s.startsWith('mul:')) return { url: mulberryUrl(s.slice(4)), info: bundledInfo(s) };
-  return { symbol: s, info: bundledInfo(s) };
+  if (s.startsWith('svg:')) return { symbol: s, info: bundledInfo(s) };
+  // Older text/emoji pictures are no longer drawn: use the bundled symbol, else the first letter.
+  if (bundled?.startsWith('mul:')) return { url: mulberryUrl(bundled.slice(4)), info: bundledInfo(bundled) };
+  return { symbol: bundled, info: bundled ? bundledInfo(bundled) : undefined };
 }
 
 /** Every remote image URL the board uses, so the service worker can save them for offline. */

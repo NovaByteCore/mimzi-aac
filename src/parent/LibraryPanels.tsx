@@ -167,7 +167,7 @@ export function AslLibraryPanel() {
     <section className="panel">
       <h2>ASL Library</h2>
       <p className="muted">
-        Signs appear only when someone taps the small 🤟 “See sign” button. The main button always keeps its AAC picture, and signs never interrupt
+        Signs appear only when someone taps the small “ASL” button in the corner of the word’s label. The main button always keeps its AAC picture, and signs never interrupt
         the voice. The drawings were checked against the linked ASL references; a video of a real signer (yours, or one you have permission to
         use) is the best way to learn a sign — add one to any word.
       </p>

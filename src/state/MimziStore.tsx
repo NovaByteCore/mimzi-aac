@@ -7,7 +7,7 @@ import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, Sym
 import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../lib/grow';
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
-import { migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
+import { fixArasaacPicksV2, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
 import { findStarterPictures, needsArasaac } from '../lib/arasaac';
 import { effectiveStyle } from '../lib/symbols';
 import { mergeMyDay, mergeSettings } from '../lib/defaults';
@@ -154,6 +154,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
           for (const c of CATEGORY_SEED) await db.setKv(`migrated:cat:${c.id}`, true);
           await db.setKv('migrated:vocab3', true);
           await db.setKv('migrated:symbols4', true);
+          await db.setKv('symbols:picks', 2);
         }
         const [tiles, rawCategories, media, saved, savedDay, observations] = await Promise.all([
           db.getAll('tiles'),
@@ -166,6 +167,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         const categories = await migrate(rawCategories);
         await migrateVocabularyV3(tiles, categories);
         await migrateSymbolsV4(tiles);
+        await fixArasaacPicksV2(tiles);
         stamps.current = { settings: 0, myday: 0, grow: 0, history: 0, ...((await db.getKv<Partial<Stamps>>('sync:stamps')) ?? {}) };
         // Grow My Words: apply anything that became due while Mimzi was closed.
         let grow = mergeGrowPlan(await db.getKv<Partial<GrowPlan>>('grow'));

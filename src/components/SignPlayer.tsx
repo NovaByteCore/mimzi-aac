@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Icon } from './Icon';
 import { AslSignSvg, ASL_SIGNS } from '../data/aslSigns';
 
 interface Props {
@@ -93,7 +94,7 @@ export function SignPlayer({ label, url, mime, aslSign, loop, speed, onClose }: 
                   }
                 }}
               >
-                {playing ? '⏸ Pause' : '▶ Play'}
+                {playing ? <><Icon name="pause" /> Pause</> : <><Icon name="play" /> Play</>}
               </button>
               <button
                 type="button"
@@ -110,7 +111,7 @@ export function SignPlayer({ label, url, mime, aslSign, loop, speed, onClose }: 
             </>
           )}
           <button type="button" className="btn btn-primary big-btn" onClick={onClose}>
-            ✕ Close
+            <Icon name="close" /> Close
           </button>
         </div>
       </div>

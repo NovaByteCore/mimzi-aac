@@ -14,6 +14,7 @@ import {
   rewardComplete,
   spokenText,
 } from '../lib/myday';
+import { Icon } from './Icon';
 import { TileFace } from './TileFace';
 
 interface Props {
@@ -83,7 +84,7 @@ export function MyDayView({ say }: Props) {
           </div>
           <div className="grownup-row">
             <button type="button" className="btn big-btn" onClick={() => say(firstThenSentence(myDay.firstThen.first, myDay.firstThen.then))}>
-              🔊 Say it
+              <Icon name="speak" /> Say it
             </button>
             {!myDay.firstThen.first.done ? (
               <HoldButton holdMs={HOLD} className="btn big-btn grownup" label="Hold to mark FIRST done" onHold={() => void updateMyDay({ ...myDay, firstThen: { ...myDay.firstThen, first: markDone(myDay.firstThen.first) } })}>
@@ -144,7 +145,7 @@ export function MyDayView({ say }: Props) {
                 )
               }
             >
-              🔊 Say the steps
+              <Icon name="speak" /> Say the steps
             </button>
             {currentStepIndex(myDay.routine.steps) >= 0 && (
               <HoldButton

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useMimzi } from './state/MimziStore';
 import { Board } from './components/Board';
 import { SentenceBar, SpokenBar } from './components/SentenceBar';
+import { Icon } from './components/Icon';
 import { TileButton } from './components/TileButton';
 import { TileFace } from './components/TileFace';
 import { HoldButton } from './components/HoldButton';
@@ -223,10 +224,10 @@ export function App() {
         {view === 'talk' && (
           <div className="page-toolbar" role="toolbar" aria-label="Pages">
             <button type="button" className="page-btn" onClick={() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st))} disabled={stack.length <= 1} aria-label="Back">
-              <span aria-hidden="true">◀</span> Back
+              <Icon name="back" /> Back
             </button>
             <button type="button" className="page-btn" onClick={() => setStack([HOME_PAGE])} disabled={categoryId === HOME_PAGE} aria-label="Home">
-              <span aria-hidden="true">🏠</span> Home
+              <Icon name="home" /> Home
             </button>
             <h2 className="page-title" data-testid="page-title">{boardLabel}</h2>
           </div>
@@ -255,19 +256,19 @@ export function App() {
 
       <nav className="main-nav" aria-label="Main">
         <button type="button" className={`nav-btn${view === 'talk' ? ' nav-on' : ''}`} onClick={() => setView('talk')} aria-current={view === 'talk' ? 'page' : undefined}>
-          <span aria-hidden="true">💬</span> Talk
+          <Icon name="talk" size={26} /> Talk
         </button>
         <button type="button" className={`nav-btn${view === 'myday' ? ' nav-on' : ''}`} onClick={() => setView('myday')} aria-current={view === 'myday' ? 'page' : undefined}>
-          <span aria-hidden="true">🗓️</span> My Day
+          <Icon name="day" size={26} /> My Day
         </button>
         <button type="button" className={`nav-btn${view === 'favorites' ? ' nav-on' : ''}`} onClick={() => setView('favorites')} aria-current={view === 'favorites' ? 'page' : undefined}>
-          <span aria-hidden="true">⭐</span> Favorites
+          <Icon name="star" size={26} /> Favorites
         </button>
         <button type="button" className={`nav-btn${view === 'people' ? ' nav-on' : ''}`} onClick={() => setView('people')} aria-current={view === 'people' ? 'page' : undefined}>
-          <span aria-hidden="true">👨‍👩‍👦</span> My People
+          <Icon name="people" size={26} /> My People
         </button>
         <HoldButton className="nav-btn nav-parent" label="Parent Mode — press and hold" onHold={() => setGateOpen(true)}>
-          <span aria-hidden="true">🔒</span> Hold for grown-ups
+          <Icon name="lock" size={26} /> Hold for grown-ups
         </HoldButton>
       </nav>
 

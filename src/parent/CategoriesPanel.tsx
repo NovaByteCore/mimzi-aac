@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { SymbolSearch } from './SymbolSearch';
 import { useMimzi } from '../state/MimziStore';
 import { TileFace } from '../components/TileFace';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -31,7 +32,7 @@ export function CategoriesPanel() {
     await saveCategory({
       id: newId('cat'),
       name: clean,
-      symbol: emoji.trim() || '⭐',
+      symbol: emoji || 'mul:star',
       color: 'cream',
       order: sorted.length,
       hidden: false,
@@ -94,14 +95,14 @@ export function CategoriesPanel() {
           <span>New group</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bath time" maxLength={24} />
         </label>
-        <label className="field inline">
-          <span>Emoji</span>
-          <input value={emoji} onChange={(e) => setEmoji(e.target.value.slice(0, 8))} placeholder="🛁" className="emoji-input" />
-        </label>
         <button type="button" className="btn btn-primary" onClick={add}>
           Add group
         </button>
       </div>
+      <details className="field">
+        <summary>Page picture (optional — a star if you skip this)</summary>
+        <SymbolSearch suggest={name} selected={emoji} onPick={(sym) => setEmoji(sym)} />
+      </details>
       {error && (
         <p className="form-error" role="alert">
           {error}

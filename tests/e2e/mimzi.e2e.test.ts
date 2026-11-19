@@ -66,6 +66,8 @@ async function mockSymbolServices(ctx: BrowserContext) {
   const png = await readFile(PHOTO);
   await ctx.route('https://api.arasaac.org/**', async (route) => {
     const u = new URL(route.request().url());
+    if (/^\/v1\/pictograms\/\d+$/.test(u.pathname))
+      return route.fulfill({ status: 200, headers: { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'image/png' }, body: png });
     const m = u.pathname.match(/\/pictograms\/en\/(bestsearch|search)\/(.+)$/);
     const word = m ? decodeURIComponent(m[2]).toLowerCase() : '';
     const cors = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
@@ -1050,8 +1052,8 @@ test('symbols: every starter word gets an ARASAAC picture automatically; nothing
   const before = await slots(page);
   await page.waitForFunction(() => document.querySelectorAll('.board-grid img.tile-symbol[data-library="arasaac"]').length >= 18, null, { timeout: 20000 });
   await page.locator('.board-grid [data-tile-id="core-all-done"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
-  assert.equal(await pictureOf(page, 'core-more'), `https://static.arasaac.org/pictograms/${pictoId('more')}/${pictoId('more')}_500.png`);
-  assert.equal(await pictureOf(page, 'core-all-done'), `https://static.arasaac.org/pictograms/${pictoId('finished')}/${pictoId('finished')}_500.png`, 'curated search term');
+  assert.equal(await pictureOf(page, 'core-more'), `https://api.arasaac.org/v1/pictograms/${pictoId('more')}`);
+  assert.equal(await pictureOf(page, 'core-all-done'), `https://api.arasaac.org/v1/pictograms/${pictoId('finished')}`, 'curated search term');
   assert.deepEqual(await slots(page), before, 'positions unchanged');
   assert.equal(await page.locator('.board-grid .tile-emoji').count(), 0, 'no emoji artwork');
   await page.locator('.board-grid [data-tile-id="core-more"]').click();
@@ -1091,7 +1093,7 @@ test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) â
   await page.getByRole('tab', { name: 'Symbol Library' }).click();
   await page.getByTestId('symbol-credits').getByText(/tawasol \(via OpenSymbols\)/).waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  assert.equal(await pictureOf(page, 'core-help'), `https://static.arasaac.org/pictograms/${pictoId('help') + 1}/${pictoId('help') + 1}_500.png`);
+  assert.equal(await pictureOf(page, 'core-help'), `https://api.arasaac.org/v1/pictograms/${pictoId('help') + 1}`);
   assert.equal(await pictureOf(page, 'core-play'), 'https://cdn.opensymbols.test/swing2.png');
   assert.match((await pictureOf(page, 'core-go')) ?? '', /mulberry\/go_%2C_to\.svg$/);
   assert.deepEqual(await slots(page), before, 'no word moved');
@@ -1129,7 +1131,7 @@ test('symbols: a photo can replace any symbol, and removing it brings the symbol
   await page.getByRole('button', { name: /Remove photo/ }).click();
   await page.getByRole('button', { name: 'Save' }).click();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  await page.locator(`.board-grid [data-tile-id="core-eat"] img.tile-symbol[src="https://static.arasaac.org/pictograms/${pictoId('eat')}/${pictoId('eat')}_500.png"]`).waitFor();
+  await page.locator(`.board-grid [data-tile-id="core-eat"] img.tile-symbol[src="https://api.arasaac.org/v1/pictograms/${pictoId('eat')}"]`).waitFor();
   await ctx.close();
 });
 
@@ -1161,3 +1163,32 @@ test('symbols: words ARASAAC has no picture for keep their built-in picture', as
   ARASAAC_NONE.delete('i');
   await ctx.close();
 });
+
+/* ---------------- Professional board: no emoji; sign tag never covers the picture ---------------- */
+
+for (const [name, viewport] of [
+  ['phone', { width: 383, height: 743 }],
+  ['onn tablet landscape', { width: 960, height: 600 }],
+  ['onn tablet portrait', { width: 600, height: 960 }],
+  ['ipad', IPAD],
+] as const) {
+  test(`board looks professional on ${name}: no emoji, "ASL" tag outside the AAC picture`, async () => {
+    const { ctx, page } = await openApp(viewport);
+    await page.locator('.board-grid [data-tile-id="core-want"] img.tile-symbol[data-library="arasaac"]').waitFor({ timeout: 20000 });
+    const emoji = await page.evaluate(() => {
+      const text = (document.querySelector('.child-view') as HTMLElement).innerText;
+      return [...text.matchAll(/\p{Extended_Pictographic}/gu)].map((m) => m[0]);
+    });
+    assert.deepEqual(emoji, [], 'no emoji anywhere on the child screen');
+    const overlaps = await page.evaluate(() =>
+      [...document.querySelectorAll('.tile-wrap-sign')].filter((w) => {
+        const tag = w.querySelector('.sign-tag')!.getBoundingClientRect();
+        const pic = w.querySelector('.tile-media')!.getBoundingClientRect();
+        return tag.top < pic.bottom - 1 && tag.bottom > pic.top && tag.left < pic.right && tag.right > pic.left;
+      }).length,
+    );
+    assert.equal(overlaps, 0, 'the ASL tag sits in the label strip, not on the picture');
+    assert.ok((await page.locator('.board-grid .sign-tag').count()) > 0);
+    await ctx.close();
+  });
+}

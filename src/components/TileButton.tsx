@@ -48,12 +48,13 @@ export function TileButton({ tile, photoUrl, onTap, onSign, compact }: Props) {
   );
 
   if (!showSign || !onSign) return button;
+  // "See sign" sits in the label strip (bottom corner), never over the AAC picture.
   return (
-    <div className="tile-wrap">
+    <div className="tile-wrap tile-wrap-sign">
       {button}
-      <button type="button" className="sign-btn" onClick={() => onSign(tile)} aria-label={`See sign for ${tile.label}`}>
-        <span className="sign-dot" aria-hidden="true">
-          🤟
+      <button type="button" className="sign-btn" onClick={() => onSign(tile)} aria-label={`See sign for ${tile.label}`} title="See the ASL sign">
+        <span className="sign-tag" aria-hidden="true">
+          ASL
         </span>
       </button>
     </div>

@@ -28,6 +28,15 @@ interface RawPictogram {
 
 type Fetch = typeof fetch;
 
+/**
+ * Pictograms never used automatically for starter words (checked against the live service):
+ * 9080 = "WHO" (World Health Organization logo), 16851 = firecracker (matches "cracker").
+ */
+export const ARASAAC_SKIP = new Set([9080, 16851]);
+
+/** A keyword in capitals (an acronym like "WHO") is not the toddler word. */
+const isAcronym = (k: string) => k.length > 1 && k === k.toUpperCase() && /[A-Z]/.test(k);
+
 function normalize(raw: unknown, query: string): SymbolResult[] {
   if (!Array.isArray(raw)) return [];
   const out: SymbolResult[] = [];
@@ -58,12 +67,12 @@ export async function searchArasaac(query: string, locale = 'en', fetchImpl: Fet
   return normalize(raw, q).slice(0, limit);
 }
 
-/** ARASAAC's own "best match" for a word (exact keyword matches). */
+/** ARASAAC's own "best match" for a word (exact keyword matches), skipping known bad matches. */
 export async function bestArasaac(query: string, locale = 'en', fetchImpl: Fetch = fetch): Promise<SymbolResult | undefined> {
   const q = query.trim();
   if (!q) return undefined;
   const raw = await getJson(`${ARASAAC_API}/pictograms/${locale}/bestsearch/${encodeURIComponent(q)}`, fetchImpl);
-  return normalize(raw, q)[0];
+  return normalize(raw, q).find((r) => !ARASAAC_SKIP.has(Number(r.info.id)) && !isAcronym(r.name));
 }
 
 /**
@@ -71,6 +80,27 @@ export async function bestArasaac(query: string, locale = 'en', fetchImpl: Fetch
  * concept. Everything else searches its own label, then the concept of its bundled symbol.
  */
 export const STARTER_QUERIES: Record<string, string[]> = {
+  // Checked against the live ARASAAC service (Nov 2026).
+  'family-mama': ['mom'],
+  'family-dada': ['dad'],
+  'food-crackers': ['cracker'],
+  'questions-who': ['who'],
+  'needs-potty': ['toilet'],
+  'places-potty': ['toilet'],
+  'describe-yummy': ['delicious'],
+  'food-yummy': ['delicious'],
+  'describe-yucky': ['disgusting'],
+  'food-yucky': ['disgusting'],
+  'describe-loud': ['noise'],
+  'safety-too-loud': ['noise'],
+  'feelings-silly': ['funny'],
+  'play-playdough': ['plasticine'],
+  'core-off': ['switch off', 'turn off'],
+  'safety-not-safe': ['danger'],
+  'social-love-you': ['love'],
+  'phrases-go-outside': ['go out'],
+  "phrases-i-don-t-want-it": ["I don't want"],
+  'phrases-i-want-that': ['I want'],
   'core-all-done': ['finished', 'end'],
   'needs-all-done': ['finished', 'end'],
   'core-folder-food': ['food'],
@@ -86,6 +116,20 @@ export const STARTER_QUERIES: Record<string, string[]> = {
   'core-folder-safety': ['safety', 'help'],
   'core-folder-describe': ['adjectives', 'big'],
   'core-folder-phrases': ['communication book', 'sentence'],
+};
+
+/**
+ * Starter words pinned to a specific pictogram where ARASAAC's best match isn't the toddler
+ * meaning (checked against the live service: 37883 "cracker" food, 9853 "who" question,
+ * 32338 "disgusting", 7157 "noisy").
+ */
+export const STARTER_PICTOS: Record<string, { id: number; name: string }> = {
+  'food-crackers': { id: 37883, name: 'cracker' },
+  'questions-who': { id: 9853, name: 'who' },
+  'describe-yucky': { id: 32338, name: 'disgusting' },
+  'food-yucky': { id: 32338, name: 'disgusting' },
+  'describe-loud': { id: 7157, name: 'noisy' },
+  'safety-too-loud': { id: 7157, name: 'noisy' },
 };
 
 /** Ordered search terms to try for a starter word. */
@@ -124,6 +168,12 @@ export async function findStarterPictures(
     while (queue.length && !opts.signal?.cancelled) {
       const t = queue.shift()!;
       try {
+        const pinned = STARTER_PICTOS[t.id];
+        if (pinned) {
+          found++;
+          await onFound(t.id, pinned);
+          continue;
+        }
         let hit: SymbolResult | undefined;
         for (const q of starterQueries(t)) {
           hit = await bestArasaac(q, opts.locale ?? 'en', opts.fetchImpl ?? fetch);

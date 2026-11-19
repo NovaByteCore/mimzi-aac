@@ -335,7 +335,7 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 </p>
                 <div className="row">
                   <button type="button" className="btn" onClick={() => signInput.current?.click()}>
-                    🤟 {signUrl ? 'Replace sign' : 'Add sign video'}
+                    {signUrl ? 'Replace sign video' : 'Add sign video'}
                   </button>
                   {signUrl && (
                     <button
@@ -395,15 +395,6 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                   </div>
                 )}
                 <SymbolSearch suggest={label} selected={symbolAuto ? undefined : symbol} onPick={pickSymbol} />
-                <label className="field inline">
-                  <span>Or type a letter or short text</span>
-                  <input
-                    value={/^(svg|mul|arasaac|os):/.test(symbol) ? '' : symbol}
-                    onChange={(e) => pickSymbol(e.target.value.slice(0, 8))}
-                    placeholder="A"
-                    className="emoji-input"
-                  />
-                </label>
               </fieldset>
 
               <fieldset className="field">

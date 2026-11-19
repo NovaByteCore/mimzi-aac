@@ -934,9 +934,49 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 .tile-media > .tile-photo,
 .tile-media > .symbol-svg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 
-/* smaller "See sign" badge so it never hides the picture */
-.sign-btn { width: 44px; height: 44px; top: 0; right: 0; border: 0; background: transparent; padding: 4px; }
-.sign-dot { display: grid; place-items: center; width: 32px; height: 32px; margin-left: auto; border-radius: 50%; border: 2px solid var(--slate); background: rgba(255, 255, 255, 0.95); font-size: 16px; }
+/* "See sign": a small "ASL" tag in the label strip, bottom-right — never over the AAC picture.
+   The touch area is 44 px; the visible tag stays small and quiet. */
+.tile-wrap-sign > .tile .tile-label { padding-right: 24px; }
+.sign-btn {
+  top: auto;
+  bottom: 3px;
+  right: 3px;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  padding: 0 4px 6px 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  font-size: inherit;
+}
+.sign-tag {
+  display: inline-block;
+  padding: 1px 3px;
+  border-radius: 5px;
+  border: 1.5px solid color-mix(in srgb, var(--slate) 45%, transparent);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--slate-soft);
+  font: 800 9px/1.1 system-ui, sans-serif;
+  letter-spacing: 0.04em;
+}
+.sign-btn:focus-visible .sign-tag { outline: 3px solid var(--slate); outline-offset: 1px; }
+.ui-icon { flex: none; vertical-align: -0.2em; }
+@media (max-width: 600px) {
+  .nav-btn .ui-icon { margin-bottom: 2px; }
+}
+
+/* Small portrait phones: the category list repeats the folder buttons (plus Home/Back),
+   so give its space to the words; quick words get a slimmer row. */
+@media (orientation: portrait) and (max-width: 520px) {
+  .category-bar { display: none; }
+  .child-view { grid-template-rows: auto minmax(0, 1fr) auto auto; grid-template-areas: 'top' 'board' 'quick' 'nav'; gap: 6px; padding-left: 6px; padding-right: 6px; }
+  .quick-bar { height: 72px; gap: 5px; }
+  .tile { padding: 4px; gap: 2px; }
+  .page-toolbar { margin-bottom: 2px; }
+}
 
 /* Short landscape screens (8" Android tablets like the onn kids tablet, phones):
    the page list is redundant with folder buttons + Home/Back, so give the space to words. */

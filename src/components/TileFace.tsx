@@ -21,14 +21,13 @@ interface Props {
   forceAsl?: boolean;
 }
 
-/** A bundled picture: Mulberry/Mimzi reference, or text a caregiver typed. */
+/** A bundled picture (Mulberry / Mimzi original). With none, the word's first letter — never emoji. */
 function Bundled({ symbol, label }: { symbol?: string; label: string }) {
   if (symbol?.startsWith('svg:')) return <SymbolSvg name={symbol.slice(4)} />;
   if (symbol?.startsWith('mul:')) {
     const shown = shownSymbol({ symbol }, {});
     return <img className="tile-symbol" src={shown.url} alt="" draggable={false} loading="lazy" />;
   }
-  if (symbol && !/^(arasaac|os):/.test(symbol)) return <span className="tile-emoji" aria-hidden="true">{symbol}</span>;
   return (
     <span className="tile-initial" aria-hidden="true">
       {label.trim().charAt(0).toUpperCase() || '?'}
@@ -56,8 +55,9 @@ function Remote({ shown, label }: { shown: Shown; label: string }) {
 }
 
 /**
- * The picture part of a tile: caregiver photo > AAC symbol (ARASAAC by default, or Mulberry,
- * Mimzi originals, OpenSymbols) > text the caregiver typed > first letter.
+ * The picture part of a tile: caregiver photo > AAC symbol (ARASAAC by default; Mulberry or
+ * Mimzi originals when ARASAAC isn't available; or one a grown-up chose from OpenSymbols)
+ * > the word's first letter. Emoji are never used as vocabulary pictures.
  * ASL drawings live under "See sign"; changing the picture never changes the word, its
  * speech, its sign or its place on the board.
  */

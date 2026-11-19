@@ -21,7 +21,9 @@ const SYMBOLS = 'mimzi-symbols-v1';
 const MATCH = { ignoreVary: true, ignoreSearch: false };
 const SCOPE = new URL('./', self.registration.scope);
 // Symbol image hosts the board may load directly (cache-first).
-const REMOTE_SYMBOL_HOSTS = new Set(['static.arasaac.org']);
+// Only image addresses are saved (never search results).
+const isSymbolImage = (url) =>
+  url.hostname === 'static.arasaac.org' || (url.hostname === 'api.arasaac.org' && /^\/v1\/pictograms\/\d+$/.test(url.pathname));
 const INDEX_URL = new URL('index.html', SCOPE).href;
 const STATIC_FILES = [
   'manifest.webmanifest',
@@ -86,14 +88,21 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== SCOPE.origin) {
     // Remote AAC symbols: serve the saved copy when there is one (works offline).
-    if (url.protocol !== 'https:' || (req.destination !== 'image' && !REMOTE_SYMBOL_HOSTS.has(url.hostname))) return;
+    if (url.protocol !== 'https:' || (req.destination !== 'image' && !isSymbolImage(url))) return;
     event.respondWith(
       (async () => {
         const cache = await caches.open(SYMBOLS);
         const cached = await cache.match(url.href, MATCH);
         if (cached) return cached;
-        const res = await fetch(req);
-        if (REMOTE_SYMBOL_HOSTS.has(url.hostname) && (res.ok || res.type === 'opaque')) await cache.put(url.href, res.clone());
+        if (!isSymbolImage(url)) return fetch(req);
+        // Prefer a CORS copy (small, normal storage); fall back to the page's own request.
+        let res;
+        try {
+          res = await fetch(url.href, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer' });
+        } catch {
+          res = await fetch(req);
+        }
+        if (res.ok || res.type === 'opaque') await cache.put(url.href, res.clone());
         return res;
       })(),
     );

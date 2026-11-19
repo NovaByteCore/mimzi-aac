@@ -197,3 +197,19 @@ test('OpenSymbols function: secret stays server-side; token reused, refreshed on
   assert.equal((await handleSymbolSearch(other, 'shh', f)).status, 403, 'other websites cannot spend the key');
   assert.equal((await handleSymbolSearch(new Request('https://m.app/api/symbols?q=cup&locale=en-US'), 'shh', f)).status, 400);
 });
+
+test('live-service review: bad automatic matches are skipped or pinned; more words get pictures', async () => {
+  const f = fakeFetch({
+    '/bestsearch/who': [{ _id: 9080, keywords: [{ keyword: 'WHO' }] }, { _id: 9853, keywords: [{ keyword: 'who' }] }],
+    '/bestsearch/cracker': [{ _id: 16851, keywords: [{ keyword: 'firecracker' }] }, { _id: 37883, keywords: [{ keyword: 'cracker' }] }],
+    '/bestsearch/mom': [{ _id: 2458, keywords: [{ keyword: 'mom' }] }],
+    '/bestsearch/toilet': [{ _id: 2430, keywords: [{ keyword: 'toilet' }] }],
+  });
+  assert.equal((await bestArasaac('who', 'en', f))?.info.id, '9853', 'acronym WHO skipped');
+  assert.equal((await bestArasaac('cracker', 'en', f))?.info.id, '37883', 'firework skipped');
+  const byId = new Map(seed.map((t) => [t.id, t]));
+  const found: Record<string, number> = {};
+  await findStarterPictures(['food-crackers', 'questions-who', 'family-mama', 'needs-potty'].map((id) => byId.get(id)!), (id, hit) => void (found[id] = hit.id), { fetchImpl: f });
+  assert.deepEqual(found, { 'food-crackers': 37883, 'questions-who': 9853, 'family-mama': 2458, 'needs-potty': 2430 });
+  assert.equal(arasaacUrl(5508), 'https://api.arasaac.org/v1/pictograms/5508', 'CORS-enabled image address');
+});

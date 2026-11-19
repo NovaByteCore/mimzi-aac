@@ -3,6 +3,7 @@
  * without moving or overwriting anything a caregiver has customised.
  */
 import * as db from '../lib/db';
+import { ARASAAC_SKIP, STARTER_PICTOS } from '../lib/arasaac';
 import { buildSeedCategories, buildSeedTiles } from '../data/vocabulary';
 import { slotMap } from '../lib/grid';
 import type { Category, Tile } from '../types';
@@ -90,4 +91,27 @@ export async function migrateSymbolsV4(tiles: Tile[]): Promise<void> {
   tiles.splice(0, tiles.length, ...next);
   if (changed.length) await db.putMany('tiles', changed);
   await db.setKv('migrated:symbols4', true);
+}
+
+/**
+ * ARASAAC pick fixes (Nov 2026 review against the live service): forget known-bad automatic
+ * picks (e.g. a firework for "crackers", the WHO logo for "who") and retry words that had no
+ * match, now that better search words exist. Only automatic pictures are touched.
+ */
+export async function fixArasaacPicksV2(tiles: Tile[]): Promise<void> {
+  if ((await db.getKv<number>('symbols:picks')) === 2) return;
+  const changed: Tile[] = [];
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i];
+    const pinned = STARTER_PICTOS[t.id];
+    const bad = t.autoArasaac && (ARASAAC_SKIP.has(t.autoArasaac.id) || (pinned && pinned.id !== t.autoArasaac.id));
+    if (bad) {
+      const { autoArasaac: _old, ...rest } = t;
+      tiles[i] = { ...rest, updatedAt: Date.now() } as Tile;
+      changed.push(tiles[i]);
+    }
+  }
+  if (changed.length) await db.putMany('tiles', changed);
+  await db.setKv('symbols:missing', {});
+  await db.setKv('symbols:picks', 2);
 }

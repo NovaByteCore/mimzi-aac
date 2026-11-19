@@ -1,5 +1,6 @@
 import type { GridSize, Tile } from '../types';
 import { pageCells, pageCount } from '../lib/grid';
+import { Icon } from './Icon';
 import { TileButton } from './TileButton';
 
 interface Props {
@@ -45,7 +46,7 @@ export function Board({ tiles, grid, page, onPage, onTap, onSign, mediaUrls, lab
       {pages > 1 && (
         <nav className="pager" aria-label="Pages">
           <button type="button" className="pager-btn" onClick={() => onPage(current - 1)} disabled={current === 0} aria-label="Previous page">
-            ◀
+            <Icon name="prev" size={30} />
           </button>
           <span className="pager-dots" aria-live="polite">
             {Array.from({ length: pages }, (_, i) => (
@@ -56,7 +57,7 @@ export function Board({ tiles, grid, page, onPage, onTap, onSign, mediaUrls, lab
             </span>
           </span>
           <button type="button" className="pager-btn" onClick={() => onPage(current + 1)} disabled={current >= pages - 1} aria-label="Next page">
-            ▶
+            <Icon name="next" size={30} />
           </button>
         </nav>
       )}
