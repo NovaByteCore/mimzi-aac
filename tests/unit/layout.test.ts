@@ -34,6 +34,12 @@ test('auto layout: larger text → larger tiles (fewer per page); short phone sc
   assert.ok(phone.grid.cols >= 4, `phone landscape ${phone.grid.rows}×${phone.grid.cols}`);
 });
 
+test('a wide Home grid uses at most 30 tiles so pictures have room', () => {
+  const { grid, tile } = autoGrid({ width: 1048, height: 660, textScale: 1, maxGap: 12 });
+  assert.ok(grid.rows * grid.cols <= 30);
+  assert.ok(Math.min(tile.w, tile.h) >= minTileFor(1));
+});
+
 test('rotation keeps the same words on screen: the page comes from the first slot that was showing', () => {
   // Landscape 4 × 7 = 28 per page, on page 2 (slots 28–55). Portrait 6 × 4 = 24 per page.
   const anchor = 1 * 28;

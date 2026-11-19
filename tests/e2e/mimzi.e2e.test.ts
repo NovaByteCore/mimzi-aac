@@ -1423,7 +1423,7 @@ test('symbols: change one picture (ARASAAC alternative, Mulberry, OpenSymbols) â
   assert.match((await pictureOf(page, 'core-help')) ?? '', /^data:image\/png;base64,/);
   const chosenPlay = await pictureOf(page, 'core-play');
   assert.match(chosenPlay ?? '', /^data:image\/png;base64,/);
-  assert.match((await pictureOf(page, 'core-go')) ?? '', /^data:image\/svg\+xml;base64,/);
+  assert.match((await pictureOf(page, 'core-go')) ?? '', /mulberry\/go_%2C_to\.svg$/);
   assert.deepEqual(await slots(page), before, 'no word moved');
   await page.locator('.board-grid [data-tile-id="core-help"]').click();
   assert.equal((await spoken(page)).at(-1), 'help');

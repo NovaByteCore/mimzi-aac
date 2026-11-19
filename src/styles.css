@@ -1225,7 +1225,9 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 .grownup-live { margin: 0; font-weight: 700; color: var(--slate); background: #fff7e0; border-radius: 12px; padding: 6px 10px; }
 .myday-saying { margin: 0; padding: 6px 12px; border-radius: 12px; background: #eef5ff; font-weight: 800; font-size: calc(16px * var(--text-scale)); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .myday-saying-fail, .speech-fail { background: #fff1e6; color: #7a3300; }
-.speech-fail { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(96px + var(--safe-b, 0px)); z-index: 40; display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 16px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); max-width: min(92vw, 640px); font-weight: 700; }
+.speech-fail { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 4px 8px; border-radius: 10px; font-size: 14px; font-weight: 700; }
+.speech-fail > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.speech-fail > button { flex: none; min-height: 44px; }
 /* Compact screens: the word-group list opens from a "Groups" button (when the setting shows it). */
 .groups-btn { display: none; }
 @media (orientation: portrait) and (max-width: 700px), (orientation: landscape) and (max-height: 700px) {
@@ -1405,3 +1407,6 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 /* The quick editor and picture picker keep their buttons on screen (keyboard open, small tablets). */
 .picture-picker .modal-actions, .quick-editor .quick-actions { position: sticky; bottom: 0; background: var(--card, #fff); padding-top: 8px; z-index: 2; }
 .pager-idle { visibility: hidden; pointer-events: none; }
+
+/* Folder names can need a third line when text is enlarged. */
+.board-grid .tile-folder .tile-label { -webkit-line-clamp: 3; overflow-wrap: anywhere; word-break: normal; }

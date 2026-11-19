@@ -105,6 +105,11 @@ export const ARASAAC_STATIC = 'https://static.arasaac.org/pictograms';
  * copy for offline use, which keeps storage use small. Verified against the live service.
  */
 const bundledIds = new Set(defaultPictures.ids);
+const offlineMulberry = new Set(defaultPictures.mulberry);
+
+export function isOfflineMulberry(symbol: string): boolean {
+  return symbol.startsWith('mul:') && offlineMulberry.has(symbol.slice(4));
+}
 const starterPictures: Readonly<Record<string, Tile['autoArasaac']>> = defaultPictures.tiles;
 const base = ((import.meta.env ?? {}) as { BASE_URL?: string }).BASE_URL ?? '/';
 

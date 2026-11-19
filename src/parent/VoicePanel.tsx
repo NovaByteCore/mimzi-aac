@@ -1,3 +1,4 @@
+import { nativeTtsAvailable } from '../lib/nativeTts';
 import { useEffect, useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { bestVoice, chooseVoice, getVoices, lastVoiceUse, onVoiceUse, onVoicesChanged, rankVoices, speakText, speechSupported, voiceQuality, type VoiceUse } from '../lib/speech';
@@ -48,6 +49,13 @@ export function VoicePanel() {
     volume: settings.speechVolume,
   });
   const current = () => opts(settings.voiceURI, settings.voiceName);
+  const [voiceTest, setVoiceTest] = useState<'idle' | 'checking' | 'spoken' | 'failed'>('idle');
+  const testVoice = async () => {
+    setVoiceTest('checking');
+    const result = await speakText(SAMPLE, { ...current(), interrupt: 'interrupt' });
+    setVoiceTest(result === 'spoken' ? 'spoken' : 'failed');
+  };
+
 
   const lang2 = settings.speechLang.slice(0, 2).toLowerCase();
   const ranked = useMemo(() => {
@@ -117,7 +125,7 @@ export function VoicePanel() {
       </div>
 
       <div className="row">
-        <button type="button" className="btn btn-primary" onClick={() => void speakText(SAMPLE, current())}>
+        <button type="button" className="btn btn-primary" onClick={() => void testVoice()} disabled={voiceTest === 'checking'}>
           <Icon name="speak" /> Hear Mimzi’s voice
         </button>
         <button
@@ -129,6 +137,16 @@ export function VoicePanel() {
           Use the most natural voice automatically
         </button>
       </div>
+
+      <p className="muted small">
+        To verify offline speech, turn on Airplane Mode, make sure Wi-Fi is off, and tap Hear Mimzi’s voice.
+        {nativeTtsAvailable() && ' The Android app uses the tablet’s text-to-speech engine.'}
+      </p>
+      <p role="status">
+        {voiceTest === 'checking' && 'Testing speech…'}
+        {voiceTest === 'spoken' && (online ? 'The speech test completed. Repeat in Airplane Mode to check offline speech.' : 'The speech test completed while offline. If you heard it, offline speech is working.')}
+        {voiceTest === 'failed' && 'Speech did not finish. Check your text-to-speech voice and media volume. For offline speech, download a voice in your device settings.'}
+      </p>
 
       <h3>Choose Mimzi’s voice</h3>
       <p className="muted small">Most natural voices are listed first. Tap Preview to hear one, then choose it — every word and sentence will use it.</p>

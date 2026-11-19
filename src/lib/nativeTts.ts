@@ -62,7 +62,6 @@ interface Pending {
 let seq = 0;
 let current: Pending | null = null; // the word being spoken (or waiting for the engine)
 let queueTail: Promise<unknown> = Promise.resolve(); // "let it finish first" mode
-let engineReady = false;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -96,6 +95,7 @@ function speakOne(text: string, o: NativeSpeakOptions): Promise<SpeakResult> {
       settle: (r) => {
         if (done) return;
         done = true;
+        clearTimeout(timeout);
         if (current === me) current = null;
         resolve(r);
       },
@@ -116,7 +116,6 @@ function speakOne(text: string, o: NativeSpeakOptions): Promise<SpeakResult> {
         queueStrategy: 0, // flush: the plugin stops the previous word itself
       }).then(
         () => {
-          engineReady = true;
           me.settle('spoken');
         },
         async (e: unknown) => {
@@ -136,10 +135,10 @@ function speakOne(text: string, o: NativeSpeakOptions): Promise<SpeakResult> {
         },
       );
     };
-    attempt();
     // The plugin only reports when a word ends. If Android never says so (it can drop
     // the callback), don't leave the word "speaking" forever.
-    setTimeout(() => me.settle(engineReady ? 'spoken' : 'error'), NATIVE_READY_WAIT_MS + 15000 + text.length * 150);
+    const timeout = setTimeout(() => me.settle('error'), NATIVE_READY_WAIT_MS + 15000 + text.length * 150);
+    attempt();
   });
 }
 
@@ -155,5 +154,4 @@ export function resetNativeTtsForTests(): void {
   seq = 0;
   current = null;
   queueTail = Promise.resolve();
-  engineReady = false;
 }

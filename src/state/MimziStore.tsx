@@ -1,3 +1,5 @@
+import { downloadPicture, remotePicture } from '../lib/localPictures';
+import { allScheduleItems } from '../lib/myday';
 /*
  * App data store: loads everything from IndexedDB once, keeps it in memory for instant
  * taps, and writes every change straight back to IndexedDB.
@@ -638,6 +640,68 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     },
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );
+
+  const ready = data.status === 'ready';
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    let running = false;
+    const keepOlderPictures = async () => {
+      if (running || !navigator.onLine) return;
+      running = true;
+      try {
+        const { tiles, myDay } = dataRef.current;
+        const urls = new Set<string>();
+        for (const entry of [...tiles.filter((tile) => !tile.symbolAuto), ...allScheduleItems(myDay)]) {
+          const source = remotePicture(entry.symbol, entry.symbolInfo);
+          if (source) urls.add(source.url);
+        }
+        const saved = new Map<string, string>();
+        for (const url of urls) {
+          if (controller.signal.aborted) return;
+          const request = new AbortController();
+          const abort = () => request.abort();
+          controller.signal.addEventListener('abort', abort, { once: true });
+          const timer = setTimeout(abort, 8000);
+          try {
+            saved.set(url, await downloadPicture(url, request.signal));
+          } catch {
+            // An unavailable picture stays selected and can be retried at the next online launch.
+          } finally {
+            clearTimeout(timer);
+            controller.signal.removeEventListener('abort', abort);
+          }
+        }
+        if (controller.signal.aborted || !saved.size) return;
+        const upgrade = (entry: { symbol?: string; symbolInfo?: SymbolInfo }) => {
+          const source = remotePicture(entry.symbol, entry.symbolInfo);
+          const localImage = source && saved.get(source.url);
+          if (!source || !localImage) return false;
+          entry.symbolInfo = { ...source.info, localImage };
+          return true;
+        };
+        for (const tile of dataRef.current.tiles) {
+          const next = { ...tile };
+          if (!tile.symbolAuto && upgrade(next)) await patchTile(tile.id, { symbolInfo: next.symbolInfo });
+        }
+        const nextDay = structuredClone(dataRef.current.myDay);
+        let changed = false;
+        for (const item of allScheduleItems(nextDay)) {
+          if (upgrade(item)) changed = true;
+        }
+        if (changed) await updateMyDay(nextDay);
+      } finally {
+        running = false;
+      }
+    };
+    const retry = () => void keepOlderPictures().catch(() => undefined);
+    retry();
+    window.addEventListener('online', retry);
+    return () => {
+      controller.abort();
+      window.removeEventListener('online', retry);
+    };
+  }, [ready, patchTile, updateMyDay]);
 
   const value = useMemo(
     () => ({

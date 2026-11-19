@@ -24,9 +24,9 @@ export interface AutoGridResult {
   tile: { w: number; h: number };
 }
 
-/** Smallest tile auto layout will use at normal text size (≈ 15 mm on an 8" tablet). */
-export const MIN_TILE_PX = 88;
-const MAX_COLS = 8;
+/** Smallest tile auto layout will use at normal text size (CSS pixels). */
+export const MIN_TILE_PX = 112;
+const MAX_COLS = 7;
 const MAX_ROWS = 6;
 
 export function minTileFor(textScale: number): number {
@@ -56,7 +56,7 @@ export function autoGrid({ width, height, textScale, maxGap }: AutoGridInput): A
       if (!biggest || side > biggest.side) biggest = { grid: { rows, cols }, gap, tile: { w, h }, side };
       const ratio = w / h;
       // Tiles must be big enough and roughly square (a picture above a label).
-      if (side < minTile || ratio < 0.7 || ratio > 1.8) continue;
+      if (rows * cols > 30 || side < minTile || ratio < 0.7 || ratio > 1.8) continue;
       // Most words per page, then the squarest tiles.
       const score = rows * cols * 1000 - Math.abs(Math.log(ratio)) * 100;
       if (!best || score > best.score) best = { grid: { rows, cols }, gap, tile: { w, h }, score };

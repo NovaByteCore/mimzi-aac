@@ -229,6 +229,22 @@ export function App() {
         ) : (
           <SpokenBar text={lastSpoken?.text ?? ''} onReplay={replay} />
         )}
+        {speech && (speech.status === 'failed' || speech.status === 'unsupported') && view !== 'myday' && (
+          <div className="speech-fail" role="alert" data-testid="speech-fail">
+            <span>
+              {speech.status === 'unsupported' ? 'This device can’t speak right now' : 'Mimzi couldn’t say'} “{speech.utterance.text}”.
+              {speech.atTop && shownAtTop(speech.utterance.text) ? ' The words are shown at the top of the screen.' : ''}
+            </span>
+            {speech.status === 'failed' && (
+              <button type="button" className="btn small" onClick={() => play(speech.utterance, speech.atTop)}>
+                Try again
+              </button>
+            )}
+            <button type="button" className="btn btn-quiet small" onClick={() => setSpeech(null)} aria-label="Dismiss">
+              <Icon name="close" />
+            </button>
+          </div>
+        )}
       </header>
 
       {view === 'talk' && settings.pageList !== 'hide' && (
@@ -322,24 +338,6 @@ export function App() {
           <Icon name="lock" size={26} /> Grown-ups
         </HoldButton>
       </nav>
-
-      {speech && (speech.status === 'failed' || speech.status === 'unsupported') && view !== 'myday' && (
-        <div className="speech-fail" role="alert" data-testid="speech-fail">
-          <span>
-            {speech.status === 'unsupported' ? 'This device can’t speak right now' : 'Mimzi couldn’t say'} “{speech.utterance.text}”.
-            {speech.atTop && shownAtTop(speech.utterance.text) ? ' The words are shown at the top of the screen.' : ''}
-          </span>
-          {speech.status === 'failed' && (
-            <button type="button" className="btn small" onClick={() => play(speech.utterance, speech.atTop)}>
-              Try again
-            </button>
-          )}
-          <button type="button" className="btn btn-quiet small" onClick={() => setSpeech(null)} aria-label="Dismiss">
-            <Icon name="close" />
-          </button>
-        </div>
-      )}
-
 
       {groupsOpen && (
         <GroupsSheet

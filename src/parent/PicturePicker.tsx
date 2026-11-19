@@ -1,8 +1,9 @@
+import { downloadPicture, remotePicture } from '../lib/localPictures';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import { config } from '../config';
 import { SYMBOL_KEYS } from '../data/symbols';
 import { searchArasaac } from '../lib/arasaac';
-import { bundledArasaacUrl, arasaacUrl, localSymbolData, bundledInfo, libraryAllowed, LIBRARIES, licenseFlags, type LibraryId } from '../lib/symbols';
+import { isOfflineMulberry, localSymbolData, bundledInfo, libraryAllowed, LIBRARIES, licenseFlags, type LibraryId } from '../lib/symbols';
 import { addRecentPicture, getRecentPictures, onRecentPictures, type RecentPicture } from '../lib/recentPictures';
 import { everydayPictures } from '../lib/pictureSets';
 import { useDialogFocus } from '../lib/useDialogFocus';
@@ -203,28 +204,9 @@ export function PicturePicker({
     setSaving(true);
     let info = chosen.info;
     try {
-      const isArasaac = chosen.symbol.startsWith('arasaac:');
-      if (isArasaac && bundledArasaacUrl(chosen.symbol.slice(8))) {
-        // The same copy ships in the APK and is precached by the web app.
-      } else if (!chosen.symbol.startsWith('svg:') && !localSymbolData(info.localImage)) {
-        const url = isArasaac ? arasaacUrl(chosen.symbol.slice(8)) : info.url;
-        if (!url) throw new Error('Missing picture URL');
-        const response = await fetch(url, { signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer' });
-        if (!response.ok) throw new Error('Picture download failed');
-        const blob = await response.blob();
-        if (!blob.size || blob.size > 1024 * 1024) throw new Error('Invalid picture size');
-        const data = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(reader.error);
-          reader.onload = () => resolve(String(reader.result));
-          reader.readAsDataURL(blob);
-        });
-        if (!localSymbolData(data)) throw new Error('Unsupported picture format');
-        const picture = new Image();
-        picture.src = data;
-        await picture.decode();
-        info = { ...info, localImage: data };
-      }
+      const remote = remotePicture(chosen.symbol, info);
+      const url = remote?.url ?? (chosen.symbol.startsWith('mul:') && !isOfflineMulberry(chosen.symbol) && !localSymbolData(info.localImage) ? info.url : undefined);
+      if (url) info = { ...info, localImage: await downloadPicture(url, controller.signal) };
       if (controller.signal.aborted) return;
       await addRecentPicture(chosen.symbol, info);
       if (!controller.signal.aborted) onUse({ kind: 'symbol', symbol: chosen.symbol, info });
