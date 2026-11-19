@@ -3,6 +3,10 @@ import type { Category, MediaRecord, Tile } from '../types';
 import { TILE_COLORS } from '../types';
 import { useMimzi } from '../state/MimziStore';
 import { SYMBOL_KEYS } from '../data/symbols';
+import { SymbolSearch } from './SymbolSearch';
+import { WORD_TYPE_LABEL, type WordType } from '../types';
+import { displayColor } from '../lib/colors';
+import { ASL_KEYS, ASL_SIGNS } from '../data/aslSigns';
 import { TileFace } from '../components/TileFace';
 import { PhotoCropper } from './PhotoCropper';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -29,6 +33,11 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
   const [categoryId, setCategoryId] = useState(tile?.categoryId ?? defaultCategoryId);
   const [color, setColor] = useState<Tile['color']>(tile?.color ?? categories.find((c) => c.id === defaultCategoryId)?.color ?? 'cream');
   const [symbol, setSymbol] = useState(tile?.symbol ?? '');
+  const [aslSign, setAslSign] = useState(tile?.aslSign);
+  const [pronunciation, setPronunciation] = useState(tile?.pronunciation ?? '');
+  const [lang, setLang] = useState(tile?.lang ?? '');
+  const [wordType, setWordType] = useState<WordType | ''>(tile?.wordType ?? (isNewTypeGuess(defaultCategoryId)));
+  const [linkTo, setLinkTo] = useState(tile?.linkTo ?? '');
   const [photoId, setPhotoId] = useState(tile?.photoId);
   const [pendingPhoto, setPendingPhoto] = useState<{ blob: Blob; url: string } | null>(null);
   const [cropFile, setCropFile] = useState<Blob | null>(null);
@@ -123,6 +132,11 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         categoryId,
         order: tile && !movedCategory ? tile.order : nextOrder(tiles, categoryId),
         symbol: symbol.trim() || undefined,
+        aslSign,
+        pronunciation: pronunciation.trim() || undefined,
+        lang: lang.trim() || undefined,
+        wordType: wordType || undefined,
+        linkTo: linkTo || undefined,
         photoId: nextPhotoId,
         audioId: nextAudioId,
         signId: nextSignId,
@@ -159,9 +173,9 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
         ) : (
           <div className="editor-body">
             <div className="editor-preview">
-              <div className={`tile tile-${color} tile-preview${photoUrl ? ' tile-has-photo' : ''}`} aria-hidden="true">
+              <div className={`tile tile-${displayColor({ color, wordType: wordType || undefined }, settings)} tile-preview${photoUrl ? ' tile-has-photo' : ''}`} aria-hidden="true">
                 <span className="tile-media">
-                  <TileFace symbol={symbol || undefined} photoUrl={photoUrl} label={label || '?'} />
+                  <TileFace symbol={symbol || undefined} asl={aslSign} photoUrl={photoUrl} label={label || '?'} />
                 </span>
                 <span className="tile-label">{label || 'Word'}</span>
               </div>
@@ -169,7 +183,13 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 type="button"
                 className="btn btn-quiet"
                 onClick={() =>
-                  void speakTile(spoken || label, audioUrl, { rate: settings.speechRate, lang: settings.speechLang, voiceURI: settings.voiceURI })
+                  void speakTile(pronunciation.trim() || spoken || label, audioUrl, {
+                    rate: settings.speechRate,
+                    lang: lang.trim() || settings.speechLang,
+                    voiceURI: settings.voiceURI,
+                    pitch: settings.speechPitch,
+                    volume: settings.speechVolume,
+                  })
                 }
                 disabled={!label.trim()}
               >
@@ -195,7 +215,28 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 />
               </label>
               <label className="field">
-                <span>Group</span>
+                <span>Pronunciation (optional — only changes how the voice says it)</span>
+                <input value={pronunciation} onChange={(e) => setPronunciation(e.target.value)} maxLength={120} placeholder="e.g. Ree-ah for Ria" data-testid="pronunciation" />
+              </label>
+              <div className="form-grid">
+                <label className="field inline">
+                  <span>Word type (colour)</span>
+                  <select value={wordType} onChange={(e) => setWordType(e.target.value as WordType | '')} data-testid="word-type">
+                    <option value="">None (use tile colour)</option>
+                    {(Object.keys(WORD_TYPE_LABEL) as WordType[]).map((k) => (
+                      <option key={k} value={k}>
+                        {WORD_TYPE_LABEL[k]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field inline">
+                  <span>Voice language (optional)</span>
+                  <input value={lang} onChange={(e) => setLang(e.target.value)} placeholder="e.g. es-US" maxLength={12} />
+                </label>
+              </div>
+              <label className="field">
+                <span>Page</span>
                 <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -230,6 +271,35 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 </div>
                 <input ref={cameraInput} type="file" accept="image/*" capture="environment" hidden onChange={onFile} data-testid="camera-input" />
                 <input ref={libraryInput} type="file" accept="image/*" hidden onChange={onFile} data-testid="photo-input" />
+              </fieldset>
+
+              <fieldset className="field">
+                <legend>ASL sign drawing</legend>
+                <div className="symbol-picker asl-picker">
+                  <button type="button" className={`symbol-choice${!aslSign ? ' symbol-on' : ''}`} onClick={() => setAslSign(undefined)} aria-pressed={!aslSign}>
+                    None
+                  </button>
+                  {ASL_KEYS.map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      className={`symbol-choice${aslSign === k ? ' symbol-on' : ''}`}
+                      onClick={() => setAslSign(k)}
+                      aria-label={`ASL drawing ${ASL_SIGNS[k].gloss}`}
+                      aria-pressed={aslSign === k}
+                    >
+                      <TileFace asl={k} forceAsl label={k} />
+                    </button>
+                  ))}
+                </div>
+                {aslSign && ASL_SIGNS[aslSign] && (
+                  <p className="muted small" data-testid="asl-how">
+                    <strong>{ASL_SIGNS[aslSign].gloss}:</strong> {ASL_SIGNS[aslSign].how}{' '}
+                    <a href={ASL_SIGNS[aslSign].source} target="_blank" rel="noopener noreferrer">
+                      Reference
+                    </a>
+                  </p>
+                )}
               </fieldset>
 
               <fieldset className="field">
@@ -277,8 +347,22 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                 <input ref={signInput} type="file" accept={SIGN_ACCEPT} hidden onChange={onSignFile} data-testid="sign-input" />
               </fieldset>
 
+              <label className="field">
+                <span>Button opens a page (folder)</span>
+                <select value={linkTo} onChange={(e) => setLinkTo(e.target.value)}>
+                  <option value="">No — this button speaks</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Opens “{c.name}”
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <fieldset className="field">
-                <legend>Symbol (used when there’s no photo)</legend>
+                <legend>AAC symbol (shown when there’s no photo)</legend>
+                <SymbolSearch initialQuery={tile ? '' : ''} selected={symbol} onPick={(sym) => setSymbol(sym)} />
+                <p className="muted small">Mimzi’s own symbols:</p>
                 <div className="symbol-picker">
                   {SYMBOL_KEYS.map((k) => (
                     <button
@@ -294,9 +378,9 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
                   ))}
                 </div>
                 <label className="field inline">
-                  <span>Or type an emoji</span>
+                  <span>Or type a character</span>
                   <input
-                    value={symbol.startsWith('svg:') ? '' : symbol}
+                    value={symbol.startsWith('svg:') || symbol.startsWith('mul:') ? '' : symbol}
                     onChange={(e) => setSymbol(e.target.value.slice(0, 8))}
                     placeholder="🐶"
                     className="emoji-input"
@@ -383,4 +467,9 @@ export function TileEditor({ tile, defaultCategoryId, categories, onClose }: Pro
       </div>
     </div>
   );
+}
+
+function isNewTypeGuess(categoryId: string): WordType | '' {
+  const guess: Record<string, WordType> = { food: 'noun', play: 'noun', body: 'noun', places: 'noun', actions: 'verb', feelings: 'describe', describe: 'describe', family: 'pronoun', questions: 'question', social: 'social', phrases: 'social' };
+  return guess[categoryId] ?? '';
 }

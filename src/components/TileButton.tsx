@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Tile } from '../types';
 import { TileFace } from './TileFace';
+import { useOptionalMimzi } from '../state/MimziStore';
+import { displayColor } from '../lib/colors';
 
 interface Props {
   tile: Tile;
@@ -13,6 +15,10 @@ interface Props {
 
 export function TileButton({ tile, photoUrl, onTap, onSign, compact }: Props) {
   const [active, setActive] = useState(false);
+  const store = useOptionalMimzi();
+  const color = displayColor(tile, store?.settings);
+  const isFolder = Boolean(tile.linkTo);
+  const showSign = Boolean(onSign && (tile.signId || (tile.aslSign && (store?.settings.showAslDrawings ?? true))));
   useEffect(() => {
     if (!active) return;
     const t = setTimeout(() => setActive(false), 450);
@@ -22,27 +28,33 @@ export function TileButton({ tile, photoUrl, onTap, onSign, compact }: Props) {
   const button = (
     <button
       type="button"
-      className={`tile tile-${tile.color}${active ? ' tile-active' : ''}${compact ? ' tile-compact' : ''}${photoUrl ? ' tile-has-photo' : ''}`}
+      className={`tile tile-${color}${active ? ' tile-active' : ''}${compact ? ' tile-compact' : ''}${photoUrl ? ' tile-has-photo' : ''}${isFolder ? ' tile-folder' : ''}`}
       data-tile-id={tile.id}
-      aria-label={tile.label}
+      data-word-type={tile.wordType}
+      aria-label={isFolder ? `${tile.label} (folder)` : tile.label}
       onClick={() => {
         setActive(true);
         onTap(tile);
       }}
     >
       <span className="tile-media">
-        <TileFace symbol={tile.symbol} photoUrl={photoUrl} label={tile.label} />
+        <TileFace symbol={tile.symbol} asl={tile.aslSign} photoUrl={photoUrl} label={tile.label} />
       </span>
-      <span className="tile-label">{tile.label}</span>
+      <span className="tile-label">
+        {isFolder && <span className="folder-tab" aria-hidden="true" />}
+        {tile.label}
+      </span>
     </button>
   );
 
-  if (!onSign || !tile.signId) return button;
+  if (!showSign || !onSign) return button;
   return (
     <div className="tile-wrap">
       {button}
       <button type="button" className="sign-btn" onClick={() => onSign(tile)} aria-label={`See sign for ${tile.label}`}>
-        <span aria-hidden="true">🤟</span>
+        <span className="sign-dot" aria-hidden="true">
+          🤟
+        </span>
       </button>
     </div>
   );

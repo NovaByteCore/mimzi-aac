@@ -7,7 +7,9 @@ import { TileFace } from './components/TileFace';
 import { HoldButton } from './components/HoldButton';
 import { orderedTiles } from './lib/grid';
 import { sentenceReducer, sentenceText } from './lib/sentence';
-import { speakText, speakTile, type SpeakResult } from './lib/speech';
+import { speakText, speakTile, spokenFor, type SpeakOptions, type SpeakResult } from './lib/speech';
+import { HOME_PAGE } from './data/vocabulary';
+import { mulberryUrl } from './lib/colors';
 import type { Tile } from './types';
 import { ParentGate } from './parent/ParentGate';
 import { ParentMode } from './parent/ParentMode';
@@ -21,7 +23,11 @@ export function App() {
   const { tiles, categories, settings, mediaUrls, mediaMime } = store;
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
-  const [categoryId, setCategoryId] = useState('core');
+  // Page navigation: a stack of page ids (Home at the bottom) for folders, Back and Home.
+  const [stack, setStack] = useState<string[]>([HOME_PAGE]);
+  const categoryId = stack[stack.length - 1];
+  const setCategoryId = (id: string) => setStack(id === HOME_PAGE ? [HOME_PAGE] : [HOME_PAGE, id]);
+  const lastTap = useRef<{ id: string; at: number }>({ id: '', at: 0 });
   const [pages, setPages] = useState<Record<string, number>>({});
   const [sentence, dispatch] = useReducer(sentenceReducer, []);
   const [lastSpoken, setLastSpoken] = useState('');
@@ -34,13 +40,29 @@ export function App() {
     [categories],
   );
   useEffect(() => {
-    if (visibleCategories.length && !visibleCategories.some((c) => c.id === categoryId)) {
-      setCategoryId(visibleCategories[0].id);
-    }
-  }, [visibleCategories, categoryId]);
+    if (categories.length && !categories.some((c) => c.id === categoryId)) setStack([HOME_PAGE]);
+  }, [categories, categoryId]);
 
   const tilesById = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
-  const speechOpts = { rate: settings.speechRate, lang: settings.speechLang, voiceURI: settings.voiceURI };
+
+  // Save every symbol the board uses for offline use (service worker cache).
+  useEffect(() => {
+    if (!('serviceWorker' in navigator) || store.status !== 'ready') return;
+    const t = setTimeout(() => {
+      const urls = new Set<string>();
+      for (const x of [...tiles, ...categories]) if (x.symbol?.startsWith('mul:')) urls.add(mulberryUrl(x.symbol.slice(4)));
+      void navigator.serviceWorker.ready.then((reg) => reg.active?.postMessage({ type: 'mimzi:cache-symbols', urls: [...urls] }));
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [tiles, categories, store.status]);
+  const speechOpts: SpeakOptions = {
+    rate: settings.speechRate,
+    lang: settings.speechLang,
+    voiceURI: settings.voiceURI,
+    pitch: settings.speechPitch,
+    volume: settings.speechVolume,
+    interrupt: settings.interruptMode,
+  };
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -57,12 +79,24 @@ export function App() {
   );
 
   const onTap = (tile: Tile) => {
+    // Optional guard against accidental double taps (Parent Mode → Mimzi Voice).
+    const now = Date.now();
+    if (settings.repeatGuardMs > 0 && lastTap.current.id === tile.id && now - lastTap.current.at < settings.repeatGuardMs) return;
+    lastTap.current = { id: tile.id, at: now };
     if (settings.haptics && 'vibrate' in navigator) navigator.vibrate?.(15);
-    setLastSpoken(tile.speak);
-    if (settings.showSentenceBar) {
-      dispatch({ type: 'add', item: { tileId: tile.id, label: tile.label, speak: tile.speak } });
+    if (tile.linkTo) {
+      setStack((st) => [...st.filter((p) => p !== tile.linkTo), tile.linkTo!]);
+      if (settings.speakFolders) void speakText(spokenFor(tile), { ...speechOpts, lang: tile.lang || speechOpts.lang }).then(report);
+      return;
     }
-    void speakTile(tile.speak, tile.audioId ? mediaUrls[tile.audioId] : undefined, speechOpts).then(report);
+    const spoken = spokenFor(tile);
+    setLastSpoken(tile.speak || tile.label);
+    if (settings.showSentenceBar) {
+      dispatch({ type: 'add', item: { tileId: tile.id, label: tile.label, speak: spoken } });
+    }
+    if (settings.speakOnTap) {
+      void speakTile(spoken, tile.audioId ? mediaUrls[tile.audioId] : undefined, { ...speechOpts, lang: tile.lang || speechOpts.lang }).then(report);
+    }
   };
 
   const speakSentence = () => {
@@ -112,10 +146,11 @@ export function App() {
   let boardTiles: Tile[] = [];
   let boardLabel = '';
   let emptyMessage: string | undefined;
+  let slotted = true;
   const pageKey = view === 'talk' ? `cat:${categoryId}` : view;
   if (view === 'talk') {
     boardTiles = orderedTiles(tiles, categoryId);
-    boardLabel = visibleCategories.find((c) => c.id === categoryId)?.name ?? 'Words';
+    boardLabel = categories.find((c) => c.id === categoryId)?.name ?? 'Words';
     emptyMessage =
       categoryId === 'food'
         ? 'A grown-up can add your foods and drinks with real photos in Parent Mode.'
@@ -126,6 +161,7 @@ export function App() {
       .filter((t) => t.favorite && !t.deletedAt)
       .sort((a, b) => (catOrder.get(a.categoryId) ?? 99) - (catOrder.get(b.categoryId) ?? 99) || a.order - b.order);
     boardLabel = 'Favorites';
+    slotted = false;
     emptyMessage = 'No favorites yet. A grown-up can add them in Parent Mode.';
   } else {
     boardTiles = orderedTiles(tiles, 'family');
@@ -176,7 +212,20 @@ export function App() {
         {view === 'myday' ? (
           <MyDayView say={say} />
         ) : (
+        <div className="board-wrap">
+        {view === 'talk' && (
+          <div className="page-toolbar" role="toolbar" aria-label="Pages">
+            <button type="button" className="page-btn" onClick={() => setStack((st) => (st.length > 1 ? st.slice(0, -1) : st))} disabled={stack.length <= 1} aria-label="Back">
+              <span aria-hidden="true">◀</span> Back
+            </button>
+            <button type="button" className="page-btn" onClick={() => setStack([HOME_PAGE])} disabled={categoryId === HOME_PAGE} aria-label="Home">
+              <span aria-hidden="true">🏠</span> Home
+            </button>
+            <h2 className="page-title" data-testid="page-title">{boardLabel}</h2>
+          </div>
+        )}
         <Board
+          slotted={slotted}
           tiles={boardTiles}
           grid={settings.grid}
           page={pages[pageKey] ?? 0}
@@ -187,6 +236,7 @@ export function App() {
           label={boardLabel}
           emptyMessage={emptyMessage}
         />
+        </div>
         )}
       </main>
 
@@ -220,11 +270,12 @@ export function App() {
         </div>
       )}
 
-      {signTile?.signId && mediaUrls[signTile.signId] && (
+      {signTile && (
         <SignPlayer
           label={signTile.label}
-          url={mediaUrls[signTile.signId]}
-          mime={mediaMime[signTile.signId] ?? 'video/mp4'}
+          url={signTile.signId ? mediaUrls[signTile.signId] : undefined}
+          aslSign={settings.showAslDrawings ? signTile.aslSign : undefined}
+          mime={(signTile.signId && mediaMime[signTile.signId]) || 'video/mp4'}
           loop={settings.signLoop}
           speed={settings.signSpeed}
           onClose={() => setSignTile(null)}

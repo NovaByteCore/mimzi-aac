@@ -7,23 +7,49 @@ import { DeletedPanel } from './DeletedPanel';
 import { MyDayPanel } from './MyDayPanel';
 import { MyWordsPanel } from './MyWordsPanel';
 import { GoogleSyncPanel } from './GoogleSyncPanel';
+import { WordsOnBoardPanel } from './WordsOnBoardPanel';
+import { GrowPanel } from './GrowPanel';
+import { VoicePanel } from './VoicePanel';
+import { AslLibraryPanel, PhotoLibraryPanel, SymbolLibraryPanel } from './LibraryPanels';
+import { pendingItems } from '../lib/grow';
 import { useEffect, useState } from 'react';
 
-type Tab = 'words' | 'groups' | 'myday' | 'mywords' | 'settings' | 'google' | 'backup' | 'deleted';
+type Tab =
+  | 'words'
+  | 'wob'
+  | 'grow'
+  | 'groups'
+  | 'symbols'
+  | 'photos'
+  | 'voice'
+  | 'asl'
+  | 'myday'
+  | 'mywords'
+  | 'settings'
+  | 'google'
+  | 'backup'
+  | 'deleted';
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'words', label: 'Words & pictures' },
-  { id: 'groups', label: 'Groups' },
-  { id: 'myday', label: 'My Day' },
+  { id: 'words', label: 'Edit AAC board' },
+  { id: 'wob', label: 'Words on My Board' },
+  { id: 'grow', label: 'Grow My Words' },
+  { id: 'groups', label: 'Pages' },
+  { id: 'voice', label: 'Mimzi Voice' },
+  { id: 'symbols', label: 'Symbol Library' },
+  { id: 'photos', label: 'Photo Library' },
+  { id: 'asl', label: 'ASL Library' },
+  { id: 'myday', label: 'Visual schedules' },
   { id: 'mywords', label: 'My Words' },
-  { id: 'settings', label: 'Board & speech' },
+  { id: 'settings', label: 'Board & accessibility' },
   { id: 'google', label: 'Google & sync' },
   { id: 'backup', label: 'Backup' },
   { id: 'deleted', label: 'Recently deleted' },
 ];
 
 export function ParentMode({ onExit }: { onExit: () => void }) {
-  const { settings, tiles, sync, syncNow } = useMimzi();
+  const { settings, tiles, sync, syncNow, grow } = useMimzi();
+  const waiting = grow.remind ? pendingItems(grow).length : 0;
   const [tab, setTab] = useState<Tab>('words');
   // Quietly sync when Parent Mode opens and closes, if a recent Google sign-in is still valid.
   useEffect(() => {
@@ -71,9 +97,20 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
           </button>
         ))}
       </nav>
+      {waiting > 0 && tab !== 'grow' && (
+        <button type="button" className="grow-banner" onClick={() => setTab('grow')} data-testid="grow-banner">
+          🌱 {waiting} new word{waiting === 1 ? ' is' : 's are'} ready for your OK — open Grow My Words
+        </button>
+      )}
       <main className="parent-main" role="tabpanel">
         {tab === 'words' && <WordsPanel />}
+        {tab === 'wob' && <WordsOnBoardPanel />}
+        {tab === 'grow' && <GrowPanel />}
         {tab === 'groups' && <CategoriesPanel />}
+        {tab === 'voice' && <VoicePanel />}
+        {tab === 'symbols' && <SymbolLibraryPanel />}
+        {tab === 'photos' && <PhotoLibraryPanel />}
+        {tab === 'asl' && <AslLibraryPanel />}
         {tab === 'myday' && <MyDayPanel />}
         {tab === 'mywords' && <MyWordsPanel />}
         {tab === 'settings' && <SettingsPanel />}

@@ -4,48 +4,49 @@
 
 Mimzi is a personal Augmentative and Alternative Communication (AAC) app for a toddler (ages ~2–3, growing with the child). It runs as an installable Progressive Web App on iPad (Safari) and Samsung Galaxy phones (Chrome), works offline, and keeps every photo and recording **on the device**.
 
-> Status: **Phases 1–4 built; Phase 5 automated testing done.** Physical-device testing on the iPad and Galaxy is still to do (see `docs/TESTING.md`). Nothing is deployed.
+> Status: **V3 AAC system built and tested in Chromium** (89 automated tests). It has not been tested on the physical onn tablet, iPad or Galaxy yet (see `docs/TESTING.md`). It is not deployed.
 
 ---
 
 ## Features
 
 ### Talk (AAC board)
-- Opens straight to the board: no login and no splash screen.
-- 141 starter tiles (about 130 different words and phrases) in 12 editable groups: Core, Needs, Food & Drink, Feelings, My People, Play, Social, Actions, Body, Safety, Describe, Phrases. This is a starting point, not a limit, and nothing is locked behind levels.
-- **One tap speaks immediately.** A caregiver's recording plays if the tile has one. Otherwise the device voice speaks. If sound fails, a message appears and the words stay on screen.
-- **Quick words** (Help · Stop · No · More · All done by default, up to 6, caregiver-editable) are on every child screen.
-- **Sentence bar.** Build "I want more bubbles" from several tiles, then speak, backspace or clear. Words are never changed or reordered, and selections stay when you switch groups. The bar can be hidden.
-- **Stable positions.** Words move only when a caregiver moves them. Hidden words leave a blank space, and there is no frequency-based shuffling.
-- **Grids** from 2×2 to 5×6, with big page arrows.
-- **Three kinds of tile picture:** real photos (camera or library, with crop/zoom and a "show whole photo" option), 29 original Mimzi symbols for abstract words, or the device's emoji.
-- **ASL "See sign".** Attach a parent-provided GIF/MP4/MOV/WebM to any tile. A small 🤟 button opens it in a player with play/pause/again. It never autoplays on the board. Loop and speed are adjustable. Mimzi ships no sign videos and never invents signs.
+- Opens straight to a **Home page of core words** (I, want, more, help, stop, all done, you, go, play, eat, drink, no, yes, open, look, get, again, wait) plus **folder buttons** for 13 fringe pages: Food & Drinks, People, Toys & Play, Feelings, Needs, Questions, Actions, Body, Places, Social, Safety & Comfort, Describing, Phrases. The vocabulary has 242 words, phrases and folders.
+- **Back** and **Home** buttons. The sentence bar keeps the message while you move between pages.
+- **Built-in voice for every word.** You don't need to record anything: new words speak as soon as they are saved. A caregiver recording, if added, plays instead.
+- **Mimzi Voice:** pick any voice the device reports (with ▶ Preview), plus speed, pitch and volume. Words can have a **pronunciation override**, so the word shown and the word spoken can differ. Offline, a voice that "needs internet" automatically falls back to an on-device voice, and the panel says so. Other settings: speak on tap, speak folder names, interrupt or finish the current word, and a repeat guard against double taps.
+- **Real AAC symbols:** [Mulberry Symbols](https://mulberrysymbols.org) (3,436 symbols, CC BY-SA 4.0, © Steve Lee) are bundled, searchable in Parent Mode, and cached for offline use. Original Mimzi symbols cover core words Mulberry lacks. Real photos can replace any picture. No emoji.
+- **Fitzgerald-style colour coding** by word type: people/pronouns yellow, actions green, describing blue, things orange, social pink, questions purple, important red, little words white, folders grey. Custom colours are also available.
+- **ASL is separate from the picture.** The main button always shows the AAC picture. A small 🤟 **See sign** button opens a verified ASL drawing (17 signs, each with a how-to and source) or a parent-provided video. Mimzi never invents signs.
+- **Stable positions:** words keep fixed slots. Hidden words leave a gap and nothing shifts. Grids from 2×2 to 5×6 are available.
+
+### Words on My Board
+Show only some words: presets for 4, 6, 8, 12, 16, 20, 24, 30, 40 or all words, or tick words one at a time. Hidden words keep their spot and come back to it. Mimzi warns before you hide important words such as help, stop, no or all done.
+
+### Grow My Words
+Plan new words daily or weekly (for example, 2 every Monday) with a start date, a calendar and a history of when words were added, hidden or restored.
+- **A grown-up approves new words by default.** Adding them automatically is a separate opt-in.
+- Plans can be paused, resumed, edited and skipped, and words can be added early.
+- Words that came due while the tablet was off wait for approval the next time Mimzi opens.
 
 ### My Day (visual supports)
-- **First / Then:** two big panels. Tap to hear them, or tap "Say it" for "First brush teeth, then play cars".
-- **I'm Working For:** a reward photo with 1–10 tokens (3 by default) and an optional gentle "You did it!" (visual and/or spoken). Tokens are **never removed**; only a deliberate "New board" clears them.
-- **My Three Steps** and **Now / Next / Later:** the same routine shown two ways, with a highlighted current step and checkmarks. A parent chooses the layout.
-- Marking done, adding tokens and resetting are **press-and-hold grown-up actions**, so toddler taps only speak.
-- Every board can be **saved as a template** ("Bedtime", "Bath time") and reused.
-
-### Favorites · My People · Food & Drink
-- Favorites shows ⭐ tiles. My People shows the family group, ready for real photos.
-- Food & Drink **starts empty**: the caregiver chooses every food. Use "Hide for now" for foods that aren't available today (they keep their spot). **Private notes** appear only in Parent Mode. Mimzi never suggests foods and never labels anything allergy-safe.
+First/Then, I'm Working For (tokens are never taken away), My Three Steps and Now/Next/Later, with templates. Done, tokens and reset are press-and-hold grown-up actions.
 
 ### Parent Mode (press-and-hold 1.5 s + PIN)
-- **Words & pictures:** add, edit, reorder, hide, delete and restore tiles. Each tile can have a photo (camera/library), a recorded voice, a sign video and a private note.
-- **Groups:** add, rename, hide, reorder and delete empty groups.
-- **My Day:** set up all four tools, with templates.
-- **My Words:** a private notebook with the target word, how the child said or showed it, the method (speech, approximation, gesture, sign, AAC, combined), the date, notes and an optional audio clip. Export as a **CSV spreadsheet** or a **plain-text summary for the speech-language pathologist**. No scores, levels or diagnostic wording.
-- **Board & speech:**
-  - Board: grid size, sentence bar on/off, quick words, text size, spacing, high contrast, reduced motion and vibration (Android).
-  - Speech: speed and voice.
-  - Signs and celebrations: their own controls.
-  - Security: change the PIN.
-- **Backup:** one file with everything, including photos, recordings, My Day and My Words. Restore asks before replacing anything. The PIN is never exported. This screen also shows storage use and asks the browser to protect Mimzi's data.
-- **Google & sync:** sign in with Google. Everything is saved in a hidden Mimzi folder in **your own Google Drive**, so a second device signs in with the same account and gets the full setup back (each device keeps its own PIN and voice). The newest change to each word wins, and deletes sync too. Setup steps are in `docs/GOOGLE_SETUP.md`.
-- **From Google Photos:** pick a photo with Google's own picker when editing a tile or a My Day picture.
-- **Sync status** shows in the Parent Mode header.
+| Tab | What it does |
+| --- | --- |
+| Edit AAC board | Add, edit, move, hide, delete and restore words. Each word has a symbol search, photo, pronunciation, word type, the page it opens, voice language, recording, sign and private note. |
+| Words on My Board | Choose which words are visible. |
+| Grow My Words | Word schedule, approvals, calendar and history. |
+| Pages | Add, rename, hide and reorder pages. |
+| Mimzi Voice | Voice, preview, speed, pitch, volume, pronunciations, offline fallback status. |
+| Symbol / Photo / ASL Library | Browse everything that is available. |
+| Visual schedules | My Day setup. |
+| My Words | Private notebook with CSV and therapist-summary export (no scores). |
+| Board & accessibility | Grid, colour coding, text size, spacing, contrast, motion, quick words, PIN. |
+| Google & sync | Optional Google sign-in. Everything syncs through a hidden folder in your own Drive, and Google Photos can be used for pictures. |
+| Backup | One file with everything (v3; older backups still load). |
+| Recently deleted | Restore deleted words. |
 
 ### Offline & install
 - Hand-written service worker plus IndexedDB: after the first visit, everything works without internet.
@@ -103,9 +104,11 @@ Mimzi must be opened from an **HTTPS** address to install and to work offline (l
 
 - **iPad (Safari):** open the Mimzi address → Share → **Add to Home Screen**. Open it from the Home Screen icon once while online so it saves itself for offline use.
 - **Samsung Galaxy (Chrome):** open the address → ⋮ menu → **Add to Home screen / Install app**. (Samsung Internet also works: menu → Add page to → Home screen.)
-- Each device keeps its own words and photos. Use **Parent Mode → Backup** to copy a setup from the iPad to the phone until sync exists.
+- Sign in with the same Google account on each device (Parent Mode → Google & sync) to share words and photos, or copy a setup with **Backup**.
 
-Tips: on the iPad, **Guided Access** (Settings → Accessibility) keeps a child inside Mimzi. In Parent Mode → Board & speech, pick a voice *without* “needs internet” so speech works offline.
+- **onn kids tablet (Android):** open the address in Chrome → ⋮ → **Add to Home screen / Install app**. Use the tablet's normal (parent) profile for Chrome. To keep your child inside Mimzi, turn on **App pinning** (Settings → Security → App pinning) and pin Mimzi. The layout is tested at the tablet's 1280×800 screen in both landscape and portrait.
+
+Tips: on the iPad, **Guided Access** (Settings → Accessibility) keeps a child inside Mimzi. In Parent Mode → Mimzi Voice, pick a voice *without* “needs internet” so speech works offline.
 
 ---
 
@@ -159,5 +162,12 @@ docs/                   testing checklist, deployment, sync design & research
 | 2 Communication (recording, ASL media, quick-word picker) | ✅ Built and tested in Chromium |
 | 3 My Day | ✅ Built and tested in Chromium |
 | 4 Caregiver tools (My Words, food boards, sync) | ✅ Built and tested in Chromium |
+| V3 AAC system (voice, Mulberry, folders, colour coding, Words on My Board, Grow My Words) | ✅ Built and tested in Chromium |
 | Google sign-in, Drive sync, Google Photos | ✅ Built and tested in Chromium against a simulated Google. ⏳ Needs the one-time Google Cloud setup and a real-account test. |
 | 5 Testing & deployment | ✅ Automated tests, accessibility checks, offline test, deployment docs. ⏳ Physical iPad/Galaxy testing and hosting setup are still to do, and hosting needs the owner's permission. |
+
+## Credits
+
+- **Mulberry Symbols** © Steve Lee, [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/), from mulberrysymbols.org (`public/symbols/mulberry/LICENSE.txt`). The symbols are unchanged.
+- The ASL drawings are original illustrations of standard signs. Each one links to the reference it was checked against.
+- No artwork, layouts or audio from Proloquo2Go, TouchChat, TD Snap or other commercial AAC apps are used.

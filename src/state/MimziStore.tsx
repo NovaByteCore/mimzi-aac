@@ -3,11 +3,13 @@
  * taps, and writes every change straight back to IndexedDB.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Category, MediaRecord, MyDay, Observation, Settings, Tile } from '../types';
+import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, Tile, VocabEvent } from '../types';
+import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../lib/grow';
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
+import { migrateVocabularyV3 } from './migrations';
 import { mergeMyDay, mergeSettings } from '../lib/defaults';
-import { moveTile as computeMove } from '../lib/grid';
+import { moveTile as computeMove, nextOrder, slotMap } from '../lib/grid';
 import { createBackup, type BackupFile, type RestoredData } from '../lib/backup';
 import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
@@ -23,6 +25,10 @@ export interface MimziData {
   settings: Settings;
   myDay: MyDay;
   observations: Observation[];
+  /** Grow My Words schedule. */
+  grow: GrowPlan;
+  /** Vocabulary history (newest last). */
+  history: VocabEvent[];
   mediaUrls: Record<string, string>;
   /** MIME type per media id (e.g. to tell a GIF sign from a video sign). */
   mediaMime: Record<string, string>;
@@ -49,6 +55,11 @@ export interface MimziActions {
   updateMyDay(next: MyDay, newMedia?: MediaRecord[]): Promise<void>;
   saveObservation(obs: Observation, newMedia?: MediaRecord[]): Promise<void>;
   deleteObservation(id: string): Promise<void>;
+  /** Show or hide words (keeps their slots) and record it in the vocabulary history. */
+  setTilesHidden(ids: string[], hidden: boolean, source?: VocabEvent['source']): Promise<void>;
+  updateGrow(plan: GrowPlan): Promise<void>;
+  /** Approve (show now) or skip/cancel scheduled words. */
+  resolveGrow(itemIds: string[], action: 'approve' | 'skip' | 'cancel'): Promise<void>;
   exportBackup(): Promise<BackupFile>;
   restoreBackup(data: RestoredData): Promise<void>;
   /** Sign in with Google (must be called from a tap) and sync with Google Drive. */
@@ -56,6 +67,12 @@ export interface MimziActions {
   googleSignOut(): Promise<void>;
   /** Sync with Google Drive. `interactive` may open the Google window (only from a tap). */
   syncNow(interactive?: boolean, justSignedIn?: SyncStatus['account']): Promise<void>;
+}
+
+/** A first-run grid that suits the screen: 4 × 6 on tablets, 4 × 4 on phones. */
+function defaultGridForScreen() {
+  const small = typeof window !== 'undefined' && Math.min(window.innerWidth, window.innerHeight) < 560;
+  return small ? { rows: 4, cols: 4 } : { rows: 4, cols: 6 };
 }
 
 const Ctx = createContext<(MimziData & MimziActions) | null>(null);
@@ -84,13 +101,15 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     settings: mergeSettings(undefined),
     myDay: mergeMyDay(undefined),
     observations: [],
+    grow: mergeGrowPlan(undefined),
+    history: [],
     mediaUrls: {},
     mediaMime: {},
     sync: { phase: 'off' },
   });
   const dataRef = useRef(data);
   dataRef.current = data;
-  const stamps = useRef<Stamps>({ settings: 0, myday: 0 });
+  const stamps = useRef<Stamps>({ settings: 0, myday: 0, grow: 0, history: 0 });
   const tombstones = useRef<Tombstone[]>([]);
   const deviceId = useRef('');
 
@@ -110,9 +129,10 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         if (!(await db.getKv<boolean>('seeded'))) {
           await db.putMany('categories', buildSeedCategories());
           await db.putMany('tiles', buildSeedTiles());
-          await db.setKv('settings', mergeSettings(undefined));
+          await db.setKv('settings', { ...mergeSettings(undefined), grid: defaultGridForScreen() });
           await db.setKv('seeded', true);
           for (const c of CATEGORY_SEED) await db.setKv(`migrated:cat:${c.id}`, true);
+          await db.setKv('migrated:vocab3', true);
         }
         const [tiles, rawCategories, media, saved, savedDay, observations] = await Promise.all([
           db.getAll('tiles'),
@@ -123,7 +143,33 @@ export function MimziProvider({ children }: { children: ReactNode }) {
           db.getAll('observations'),
         ]);
         const categories = await migrate(rawCategories);
-        stamps.current = (await db.getKv<Stamps>('sync:stamps')) ?? { settings: 0, myday: 0 };
+        await migrateVocabularyV3(tiles, categories);
+        stamps.current = { settings: 0, myday: 0, grow: 0, history: 0, ...((await db.getKv<Partial<Stamps>>('sync:stamps')) ?? {}) };
+        // Grow My Words: apply anything that became due while Mimzi was closed.
+        let grow = mergeGrowPlan(await db.getKv<Partial<GrowPlan>>('grow'));
+        let history = (await db.getKv<VocabEvent[]>('history')) ?? [];
+        {
+          const today = dayString();
+          const r = processDue(grow, today);
+          if (r.plan !== grow && (r.show.length || r.newlyPending.length)) {
+            grow = r.plan;
+            const shown: Tile[] = [];
+            for (const id of r.show) {
+              const t = tiles.find((x) => x.id === id);
+              if (t && t.hidden) {
+                const next = { ...t, hidden: false, updatedAt: Date.now() };
+                tiles.splice(tiles.indexOf(t), 1, next);
+                shown.push(next);
+                history = [...history, vocabEvent(next, 'added', 'scheduled', today)];
+              }
+            }
+            if (shown.length) await db.putMany('tiles', shown);
+            await db.setKv('grow', grow);
+            await db.setKv('history', history);
+            stamps.current = { ...stamps.current, grow: Date.now(), history: Date.now() };
+            await db.setKv('sync:stamps', stamps.current);
+          }
+        }
         tombstones.current = (await db.getKv<Tombstone[]>('sync:tombstones')) ?? [];
         deviceId.current = (await db.getKv<string>('sync:deviceId')) ?? '';
         if (!deviceId.current) {
@@ -146,6 +192,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
             settings: mergeSettings(saved),
             myDay: mergeMyDay(savedDay),
             observations,
+            grow,
+            history,
             mediaUrls,
             mediaMime,
             sync: account ? { phase: 'idle', account, lastSyncedAt } : { phase: 'off' },
@@ -213,8 +261,10 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       if (!t) return;
       const categoryExists = dataRef.current.categories.some((c) => c.id === t.categoryId);
       const categoryId = categoryExists ? t.categoryId : 'core';
-      const live = dataRef.current.tiles.filter((x) => x.categoryId === categoryId && !x.deletedAt);
-      const order = live.length ? Math.max(...live.map((x) => x.order)) + 1 : 0;
+      // Back to its saved spot if that spot is still free; otherwise the first free spot.
+      const live = dataRef.current.tiles.filter((x) => x.categoryId === categoryId && !x.deletedAt && x.id !== id);
+      const taken = new Set(slotMap(live).keys());
+      const order = categoryId === t.categoryId && !taken.has(t.order) ? t.order : nextOrder(live, categoryId);
       await patchTile(id, { deletedAt: undefined, order, categoryId });
     },
     [patchTile],
@@ -301,10 +351,53 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     [commitMedia],
   );
 
+  const recordHistory = async (events: VocabEvent[]) => {
+    if (!events.length) return;
+    const history = [...dataRef.current.history, ...events].slice(-2000);
+    await db.setKv('history', history);
+    setStamp('history');
+    setData((d) => ({ ...d, history }));
+  };
+
+  const setTilesHidden = useCallback(async (ids: string[], hidden: boolean, source: VocabEvent['source'] = 'manual') => {
+    const now = Date.now();
+    const today = dayString();
+    const changed = dataRef.current.tiles.filter((t) => ids.includes(t.id) && t.hidden !== hidden).map((t) => ({ ...t, hidden, updatedAt: now }));
+    if (!changed.length) return;
+    await db.putMany('tiles', changed);
+    const byId = new Map(changed.map((t) => [t.id, t]));
+    setData((d) => ({ ...d, tiles: d.tiles.map((t) => byId.get(t.id) ?? t) }));
+    await recordHistory(changed.map((t) => vocabEvent(t, hidden ? 'hidden' : source === 'scheduled' ? 'added' : 'shown', source, today)));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateGrow = useCallback(async (plan: GrowPlan) => {
+    await db.setKv('grow', plan);
+    setStamp('grow');
+    setData((d) => ({ ...d, grow: plan }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resolveGrow = useCallback(
+    async (itemIds: string[], action: 'approve' | 'skip' | 'cancel') => {
+      const today = dayString();
+      const plan = dataRef.current.grow;
+      const items = plan.items.filter((i) => itemIds.includes(i.id));
+      const status = action === 'approve' ? 'added' : action === 'skip' ? 'skipped' : 'canceled';
+      await updateGrow(setStatus(plan, itemIds, status, today));
+      if (action === 'approve') await setTilesHidden(items.map((i) => i.tileId), false, 'scheduled');
+      else {
+        const tiles = dataRef.current.tiles;
+        await recordHistory(
+          items.map((i) => tiles.find((t) => t.id === i.tileId)).filter((t): t is Tile => Boolean(t)).map((t) => vocabEvent(t, action === 'skip' ? 'skipped' : 'canceled', 'scheduled', today)),
+        );
+      }
+    },
+    [updateGrow, setTilesHidden], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
   const exportBackup = useCallback(async () => {
     const media = await db.getAll('media');
-    const { tiles, categories, settings, myDay, observations } = dataRef.current;
-    return createBackup({ tiles, categories, settings, media, myDay, observations });
+    const { tiles, categories, settings, myDay, observations, grow, history } = dataRef.current;
+    return createBackup({ tiles, categories, settings, media, myDay, observations, grow, history });
   }, []);
 
   const restoreBackup = useCallback(async (raw: RestoredData) => {
@@ -317,7 +410,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       observations: raw.observations.map((o) => ({ ...o, updatedAt: now })),
     };
     await db.replaceAll(incoming);
-    stamps.current = { settings: now, myday: now };
+    stamps.current = { settings: now, myday: now, grow: now, history: now };
     await db.setKv('sync:stamps', stamps.current);
     setData((d) => {
       Object.values(d.mediaUrls).forEach((u) => URL.revokeObjectURL(u));
@@ -334,6 +427,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         settings: incoming.settings,
         myDay: incoming.myDay,
         observations: incoming.observations,
+        grow: incoming.grow,
+        history: incoming.history,
         mediaUrls,
         mediaMime,
         sync: d.sync,
@@ -370,6 +465,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
           observations: cur.observations,
           settings: cur.settings,
           myDay: cur.myDay,
+          grow: cur.grow,
+          history: cur.history,
           stamps: stamps.current,
           tombstones: tombstones.current,
         },
@@ -384,7 +481,13 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       // Apply only if nothing changed locally while syncing; otherwise the next sync merges it.
       const now0 = dataRef.current;
       const unchanged =
-        now0.tiles === cur.tiles && now0.categories === cur.categories && now0.observations === cur.observations && now0.settings === cur.settings && now0.myDay === cur.myDay;
+        now0.tiles === cur.tiles &&
+        now0.categories === cur.categories &&
+        now0.observations === cur.observations &&
+        now0.settings === cur.settings &&
+        now0.myDay === cur.myDay &&
+        now0.grow === cur.grow &&
+        now0.history === cur.history;
       if (unchanged) {
         await db.replaceAll({ ...result.state, media });
         stamps.current = result.state.stamps;
@@ -455,6 +558,9 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       updateMyDay,
       saveObservation,
       deleteObservation,
+      setTilesHidden,
+      updateGrow,
+      resolveGrow,
       exportBackup,
       restoreBackup,
       googleSignIn,
@@ -475,6 +581,9 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       updateMyDay,
       saveObservation,
       deleteObservation,
+      setTilesHidden,
+      updateGrow,
+      resolveGrow,
       exportBackup,
       restoreBackup,
       googleSignIn,
@@ -484,6 +593,11 @@ export function MimziProvider({ children }: { children: ReactNode }) {
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** Like useMimzi, but returns null outside the provider (for shared display components). */
+export function useOptionalMimzi() {
+  return useContext(Ctx);
 }
 
 export function useMimzi() {

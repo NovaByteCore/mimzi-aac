@@ -212,6 +212,72 @@ export const SYMBOLS: Record<string, () => ReactElement> = {
       <path d="M56 14 L68 26 L54 36" {...S} strokeWidth={8} />
     </g>
   ),
+  please: () => (
+    <g>
+      {/* two hands pressed together, asking nicely */}
+      <path d="M50 18 C40 26 36 44 38 62 L46 84 H54 L62 62 C64 44 60 26 50 18 Z" fill="#F8E1D2" stroke={INK} strokeWidth={5} strokeLinejoin="round" />
+      <path d="M50 22 V80" {...S} strokeWidth={4} />
+      <Heart x={78} y={30} s={0.5} />
+    </g>
+  ),
+  'thank-you': () => (
+    <g>
+      <circle cx={34} cy={30} r={14} fill="#FFF3E6" stroke={INK} strokeWidth={5} />
+      <path d="M28 34 Q34 38 40 34" {...S} strokeWidth={3} />
+      <path d="M44 46 L64 40 Q72 38 72 44 L70 50 L52 56 Z" fill="#F8E1D2" stroke={INK} strokeWidth={4} strokeLinejoin="round" />
+      <Arrow d="M56 64 Q72 70 84 62" head="M76 58 L85 61 L80 70" />
+      <Heart x={80} y={28} s={0.5} />
+    </g>
+  ),
+  bye: () => (
+    <g>
+      <Person x={36} />
+      <path d="M58 14 L64 32 M66 10 L70 30 M74 12 L74 30 M60 32 Q66 42 76 34 L76 28" {...S} strokeWidth={4} />
+      <path d="M80 18 Q86 24 82 32 M86 12 Q94 22 88 36" {...S} strokeWidth={3} />
+    </g>
+  ),
+  friend: () => (
+    <g>
+      <Person x={32} y={24} fill="#F8E1D2" />
+      <Person x={68} y={24} fill="#FFE7A3" />
+      <path d="M48 48 H52" {...S} strokeWidth={6} />
+    </g>
+  ),
+  pee: () => (
+    <g>
+      <path d="M50 14 C40 32 32 44 32 58 A18 18 0 0 0 68 58 C68 44 60 32 50 14 Z" fill="#FFE27A" stroke={INK} strokeWidth={5} strokeLinejoin="round" />
+      <path d="M22 88 H78" {...S} strokeWidth={5} />
+    </g>
+  ),
+  poop: () => (
+    <g>
+      <path d="M24 80 Q24 66 36 66 Q30 54 42 50 Q40 38 52 36 Q60 30 60 22 Q72 30 66 44 Q78 46 74 58 Q84 62 80 80 Z" fill="#B07A4F" stroke={INK} strokeWidth={5} strokeLinejoin="round" />
+      <path d="M18 88 H82" {...S} strokeWidth={5} />
+    </g>
+  ),
+  'my-turn': () => (
+    <g>
+      <Person x={30} />
+      <path d="M58 40 A16 16 0 1 1 74 56" {...S} strokeWidth={6} />
+      <path d="M66 50 L74 57 L82 50" {...S} strokeWidth={6} />
+      <Arrow d="M92 82 H52" head="M60 74 L52 82 L60 90" />
+    </g>
+  ),
+  'your-turn': () => (
+    <g>
+      <Person x={70} />
+      <path d="M42 40 A16 16 0 1 0 26 56" {...S} strokeWidth={6} />
+      <path d="M34 50 L26 57 L18 50" {...S} strokeWidth={6} />
+      <Arrow d="M8 82 H48" head="M40 74 L48 82 L40 90" />
+    </g>
+  ),
+  throw: () => (
+    <g>
+      <Person x={26} y={30} />
+      <path d="M42 54 Q60 20 80 30" {...S} strokeWidth={4} strokeDasharray="4 7" />
+      <circle cx={84} cy={34} r={9} fill="#E57373" stroke={INK} strokeWidth={4} />
+    </g>
+  ),
   help: () => (
     <g>
       {/* rescue ring */}

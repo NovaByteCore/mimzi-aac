@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { GRID_PRESETS } from '../lib/defaults';
-import { getVoices, onVoicesChanged, speakText, speechSupported } from '../lib/speech';
 import { createPinRecord, isValidPin } from '../lib/pin';
+import { WORD_TYPE_COLOR, WORD_TYPE_LABEL, type WordType } from '../types';
 
 const MAX_QUICK = 6;
 
@@ -19,20 +19,11 @@ export function SettingsPanel() {
     [next[i], next[j]] = [next[j], next[i]];
     void updateSettings({ quickTileIds: next });
   };
-  const [voices, setVoices] = useState(() => getVoices());
   const [pinA, setPinA] = useState('');
   const [pinB, setPinB] = useState('');
   const [pinMsg, setPinMsg] = useState('');
 
-  useEffect(() => {
-    setVoices(getVoices());
-    return onVoicesChanged(() => setVoices(getVoices()));
-  }, []);
-
-  const langVoices = voices.filter((v) => v.lang?.slice(0, 2).toLowerCase() === settings.speechLang.slice(0, 2).toLowerCase());
   const gridValue = `${settings.grid.rows}x${settings.grid.cols}`;
-  const test = () =>
-    void speakText('I want more bubbles', { rate: settings.speechRate, lang: settings.speechLang, voiceURI: settings.voiceURI });
 
   return (
     <section className="panel settings">
@@ -139,6 +130,23 @@ export function SettingsPanel() {
         </div>
       )}
 
+      <h2>Colour coding</h2>
+      <label className="field">
+        <span>Button colours</span>
+        <select value={settings.colorMode} onChange={(e) => updateSettings({ colorMode: e.target.value as 'wordType' | 'custom' })} data-testid="color-mode">
+          <option value="wordType">AAC colour coding by word type (recommended)</option>
+          <option value="custom">Each button’s own colour</option>
+        </select>
+      </label>
+      <ul className="color-key" aria-label="Colour key">
+        {(Object.keys(WORD_TYPE_LABEL) as WordType[]).map((k) => (
+          <li key={k} className={`tile-${WORD_TYPE_COLOR[k]}`}>
+            {WORD_TYPE_LABEL[k]}
+          </li>
+        ))}
+      </ul>
+      <p className="muted small">Based on the Modified Fitzgerald Key. Words always have labels and pictures too, so colour is never the only clue.</p>
+
       <h2>Signs</h2>
       <label className="check">
         <input type="checkbox" checked={settings.showSignButtons} onChange={(e) => updateSettings({ showSignButtons: e.target.checked })} />
@@ -162,31 +170,6 @@ export function SettingsPanel() {
         <input type="checkbox" checked={settings.celebrationSound} onChange={(e) => updateSettings({ celebrationSound: e.target.checked })} />
         Say “You did it!” out loud
       </label>
-
-      <h2>Speech</h2>
-      {!speechSupported() && <p className="form-error">This browser has no text-to-speech. Recorded voices will still play.</p>}
-      <label className="field">
-        <span>Speaking speed ({settings.speechRate.toFixed(1)}×)</span>
-        <input type="range" min={0.5} max={1.5} step={0.1} value={settings.speechRate} onChange={(e) => updateSettings({ speechRate: Number(e.target.value) })} />
-      </label>
-      <label className="field">
-        <span>Voice on this device</span>
-        <select value={settings.voiceURI ?? ''} onChange={(e) => updateSettings({ voiceURI: e.target.value || undefined })}>
-          <option value="">Automatic</option>
-          {langVoices.map((v) => (
-            <option key={v.voiceURI} value={v.voiceURI}>
-              {v.name} {v.localService ? '' : '(needs internet)'}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p className="muted small">
-        Voices come from the device, so the iPad and the Samsung phone will sound different. Voices marked “needs internet” won’t work
-        offline — pick one without that label.
-      </p>
-      <button type="button" className="btn" onClick={test}>
-        🔊 Test speech
-      </button>
 
       <h2>Parent PIN</h2>
       <div className="add-row">

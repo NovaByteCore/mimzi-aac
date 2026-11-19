@@ -14,7 +14,7 @@ export const GRID_PRESETS: { label: string; grid: GridSize }[] = [
 
 export function defaultSettings(): Settings {
   return {
-    grid: { rows: 3, cols: 3 },
+    grid: { rows: 4, cols: 6 },
     showSentenceBar: true,
     speechRate: 0.9,
     speechLang: config.defaultSpeechLang,
@@ -27,6 +27,14 @@ export function defaultSettings(): Settings {
     showSignButtons: true,
     signLoop: true,
     signSpeed: 1,
+    showAslDrawings: true,
+    colorMode: 'wordType',
+    speechPitch: 1,
+    speechVolume: 1,
+    speakOnTap: true,
+    speakFolders: false,
+    interruptMode: 'interrupt',
+    repeatGuardMs: 0,
     celebrationVisual: true,
     celebrationSound: false,
   };

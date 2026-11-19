@@ -3,12 +3,13 @@
  * (base64). It is created on the device and never uploaded anywhere by Mimzi.
  * The Parent PIN is NOT included, so restoring on another device keeps that device's PIN.
  */
-import type { Category, MediaKind, MediaRecord, MyDay, Observation, Settings, Tile } from '../types';
+import type { Category, GrowPlan, MediaKind, MediaRecord, MyDay, Observation, Settings, Tile, VocabEvent } from '../types';
+import { mergeGrowPlan } from './grow';
 import { OBSERVATION_METHODS } from '../types';
 import { mergeMyDay, mergeSettings } from './defaults';
 
 export const BACKUP_FORMAT = 'mimzi-backup';
-export const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 3;
 
 export interface BackupMedia {
   id: string;
@@ -30,6 +31,10 @@ export interface BackupFile {
   myDay?: MyDay;
   /** v2+ */
   observations?: Observation[];
+  /** v3+ */
+  grow?: GrowPlan;
+  /** v3+ */
+  history?: VocabEvent[];
 }
 
 export interface RestoredData {
@@ -39,6 +44,8 @@ export interface RestoredData {
   media: MediaRecord[];
   myDay: MyDay;
   observations: Observation[];
+  grow: GrowPlan;
+  history: VocabEvent[];
 }
 
 export function arrayBufferToBase64(buf: ArrayBuffer): string {
@@ -65,6 +72,8 @@ export async function createBackup(input: {
   media: MediaRecord[];
   myDay: MyDay;
   observations: Observation[];
+  grow?: GrowPlan;
+  history?: VocabEvent[];
 }): Promise<BackupFile> {
   const { pin: _pin, ...settings } = input.settings;
   const media: BackupMedia[] = [];
@@ -87,6 +96,8 @@ export async function createBackup(input: {
     media,
     myDay: input.myDay,
     observations: input.observations,
+    grow: input.grow,
+    history: input.history,
   };
 }
 
@@ -117,6 +128,11 @@ export function parseBackup(raw: unknown, currentPin?: Settings['pin']): Restore
       categoryId: t.categoryId,
       order: typeof t.order === 'number' ? t.order : i,
       symbol: typeof t.symbol === 'string' ? t.symbol : undefined,
+      pronunciation: typeof t.pronunciation === 'string' ? t.pronunciation : undefined,
+      lang: typeof t.lang === 'string' ? t.lang : undefined,
+      wordType: typeof t.wordType === 'string' ? (t.wordType as Tile['wordType']) : undefined,
+      linkTo: typeof t.linkTo === 'string' ? t.linkTo : undefined,
+      aslSign: typeof t.aslSign === 'string' ? t.aslSign : undefined,
       photoId: typeof t.photoId === 'string' ? t.photoId : undefined,
       audioId: typeof t.audioId === 'string' ? t.audioId : undefined,
       signId: typeof t.signId === 'string' ? t.signId : undefined,
@@ -140,6 +156,7 @@ export function parseBackup(raw: unknown, currentPin?: Settings['pin']): Restore
       order: typeof c.order === 'number' ? c.order : i,
       hidden: Boolean(c.hidden),
       builtIn: Boolean(c.builtIn),
+      parentId: typeof c.parentId === 'string' ? c.parentId : undefined,
     };
   });
   const cleanMedia: MediaRecord[] = media.map((m, i) => {
@@ -180,7 +197,9 @@ export function parseBackup(raw: unknown, currentPin?: Settings['pin']): Restore
     };
   });
   const myDay = mergeMyDay(isObj(raw.myDay) ? (raw.myDay as Partial<MyDay>) : undefined);
-  return { tiles: cleanTiles, categories: cleanCategories, settings: merged, media: cleanMedia, myDay, observations };
+  const grow = mergeGrowPlan(isObj(raw.grow) ? (raw.grow as Partial<GrowPlan>) : undefined);
+  const history = Array.isArray(raw.history) ? (raw.history.filter((e) => isObj(e) && typeof e.tileId === 'string') as VocabEvent[]) : [];
+  return { tiles: cleanTiles, categories: cleanCategories, settings: merged, media: cleanMedia, myDay, observations, grow, history };
 }
 
 export function backupFileName(date = new Date()): string {

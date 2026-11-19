@@ -10,7 +10,8 @@
  * Photos, recordings and tiles live in IndexedDB, not here, so they are available
  * offline without any network request.
  */
-const CACHE = 'mimzi-shell-v2';
+const CACHE = 'mimzi-shell-v3';
+const SYMBOLS = 'mimzi-symbols-v1';
 // Hosts often send `Vary: Origin` / `Vary: Accept-Encoding`; the page's module script
 // request carries an Origin header the precache request didn't, so match by URL only.
 const MATCH = { ignoreVary: true, ignoreSearch: false };
@@ -66,7 +67,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       for (const key of await caches.keys()) {
-        if (key !== CACHE && key.startsWith('mimzi-')) await caches.delete(key);
+        if (key !== CACHE && key !== SYMBOLS && key.startsWith('mimzi-')) await caches.delete(key);
       }
       await self.clients.claim();
     })(),
@@ -102,6 +103,21 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // AAC symbols: cache-first in their own cache so they work offline once seen.
+  if (url.pathname.includes('/symbols/')) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(SYMBOLS);
+        const cached = await cache.match(req, MATCH);
+        if (cached) return cached;
+        const res = await fetch(req);
+        if (res.ok) await cache.put(req, res.clone());
+        return res;
+      })(),
+    );
+    return;
+  }
+
   event.respondWith(
     (async () => {
       const cache = await caches.open(CACHE);
@@ -118,4 +134,23 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('message', (event) => {
   if (event.data === 'mimzi:refresh-shell') event.waitUntil(cacheShell().catch(() => undefined));
+  // The app sends the symbols its words use, so they're saved for offline use right away.
+  if (event.data && event.data.type === 'mimzi:cache-symbols' && Array.isArray(event.data.urls)) {
+    event.waitUntil(
+      (async () => {
+        const cache = await caches.open(SYMBOLS);
+        for (const u of event.data.urls) {
+          const abs = new URL(u, SCOPE).href;
+          if (!abs.startsWith(SCOPE.origin) || !abs.includes('/symbols/')) continue;
+          if (await cache.match(abs, MATCH)) continue;
+          try {
+            const res = await fetch(abs);
+            if (res.ok) await cache.put(abs, res);
+          } catch {
+            /* offline — try again next time */
+          }
+        }
+      })(),
+    );
+  }
 });

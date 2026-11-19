@@ -46,10 +46,12 @@ export function WordsPanel() {
         <ol className="edit-grid" style={{ gridTemplateColumns: `repeat(${settings.grid.cols}, minmax(0, 150px))` }}>
           {list.map((t, i) => (
             <li key={t.id} className={`edit-item${t.hidden ? ' edit-hidden' : ''}`} data-edit-tile={t.id}>
-              {i % perPage === 0 && list.length > perPage && <span className="page-marker">Page {i / perPage + 1}</span>}
+              {(i === 0 || Math.floor(list[i - 1].order / perPage) !== Math.floor(t.order / perPage)) && list.length > 0 && Math.floor(list[list.length - 1].order / perPage) > 0 && (
+                <span className="page-marker">Page {Math.floor(t.order / perPage) + 1}</span>
+              )}
               <button type="button" className={`tile tile-${t.color} edit-tile${t.photoId ? ' tile-has-photo' : ''}`} onClick={() => setEditing(t)} aria-label={`Edit ${t.label}`}>
                 <span className="tile-media">
-                  <TileFace symbol={t.symbol} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
+                  <TileFace symbol={t.symbol} asl={t.aslSign} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} label={t.label} />
                 </span>
                 <span className="tile-label">
                   {t.label}

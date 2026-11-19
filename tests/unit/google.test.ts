@@ -6,6 +6,7 @@ import { handlePhotoProxy, isAllowedPhotoUrl } from '../../server/photoProxy.ts'
 import { pickFromGooglePhotos } from '../../src/lib/google/photosPicker.ts';
 import { buildSeedCategories, buildSeedTiles } from '../../src/data/vocabulary.ts';
 import { defaultMyDay, defaultSettings } from '../../src/lib/defaults.ts';
+import { defaultGrowPlan } from '../../src/lib/grow.ts';
 import type { MediaRecord } from '../../src/types.ts';
 
 /** In-memory stand-in for the Drive appDataFolder. */
@@ -40,7 +41,9 @@ const fresh = (): SyncableState => ({
   observations: [],
   settings: defaultSettings(),
   myDay: defaultMyDay(),
-  stamps: { settings: 0, myday: 0 },
+  grow: defaultGrowPlan(),
+  history: [],
+  stamps: { settings: 0, myday: 0, grow: 0, history: 0 },
   tombstones: [],
 });
 
@@ -81,7 +84,7 @@ test('sync: a new device signs in and gets everything, including photos', async 
     ...ipad.state,
     tiles: [...ipad.state.tiles, { id: 'tile-dog', label: 'Rex', speak: 'Rex', categoryId: 'family', order: 7, color: 'sage', favorite: true, hidden: false, builtIn: false, photoId: 'photo-1', updatedAt: 100 }],
     settings: { ...ipad.state.settings, grid: { rows: 2, cols: 3 }, pin: { hash: 'ipad-pin', salt: 's', algo: 'pbkdf2' }, voiceURI: 'Samantha' },
-    stamps: { settings: 100, myday: 0 },
+    stamps: { settings: 100, myday: 0, grow: 0, history: 0 },
   };
   const up = await ipad.sync(client);
   assert.equal(up.uploaded, 1);
@@ -132,7 +135,7 @@ test('sync: My Day and settings follow the newest change; unused media is remove
   const { client, files } = fakeDrive();
   const a = device('a');
   a.media.set('photo-x', { id: 'photo-x', kind: 'photo', mime: 'image/jpeg', blob: new Blob(['x']), createdAt: 1 });
-  a.state = { ...a.state, myDay: { ...a.state.myDay, reward: { ...a.state.myDay.reward, item: { label: 'Park', done: false, photoId: 'photo-x' } } }, stamps: { settings: 0, myday: 50 } };
+  a.state = { ...a.state, myDay: { ...a.state.myDay, reward: { ...a.state.myDay.reward, item: { label: 'Park', done: false, photoId: 'photo-x' } } }, stamps: { settings: 0, myday: 50, grow: 0, history: 0 } };
   await a.sync(client);
   assert.ok([...files.values()].some((f) => f.name === 'media-photo-x'));
   const b = device('b');

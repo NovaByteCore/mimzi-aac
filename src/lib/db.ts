@@ -2,7 +2,7 @@
  * Minimal promise wrapper around IndexedDB. Everything Mimzi knows lives here, on the
  * device: tiles, categories, settings, photos, recordings and sign videos.
  */
-import type { Category, MediaRecord, MyDay, Observation, Settings, Tile } from '../types';
+import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, Tile, VocabEvent } from '../types';
 
 export const DB_NAME = 'mimzi';
 export const DB_VERSION = 2;
@@ -111,6 +111,8 @@ export async function replaceAll(data: {
   settings: Settings;
   myDay: MyDay;
   observations: Observation[];
+  grow?: GrowPlan;
+  history?: VocabEvent[];
 }): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(['tiles', 'categories', 'media', 'observations', 'kv'], 'readwrite');
@@ -121,6 +123,8 @@ export async function replaceAll(data: {
   data.observations.forEach((o) => tx.objectStore('observations').put(o));
   tx.objectStore('kv').put({ key: 'settings', value: data.settings });
   tx.objectStore('kv').put({ key: 'myday', value: data.myDay });
+  if (data.grow) tx.objectStore('kv').put({ key: 'grow', value: data.grow });
+  if (data.history) tx.objectStore('kv').put({ key: 'history', value: data.history });
   tx.objectStore('kv').put({ key: 'seeded', value: true });
   await done(tx);
 }

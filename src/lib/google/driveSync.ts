@@ -8,7 +8,8 @@
  *    devices that don't have them yet.
  * The Parent PIN and the chosen voice stay on each device.
  */
-import type { Category, MediaKind, MediaRecord, MyDay, Observation, Settings, Tile } from '../../types';
+import type { Category, GrowPlan, MediaKind, MediaRecord, MyDay, Observation, Settings, Tile, VocabEvent } from '../../types';
+import { mergeGrowPlan } from '../grow';
 import { mergeRecords, type SyncRecord } from '../sync';
 import { referencedMediaIds } from '../media';
 import { mergeMyDay, mergeSettings } from '../defaults';
@@ -27,6 +28,8 @@ export interface Tombstone {
 export interface Stamps {
   settings: number;
   myday: number;
+  grow: number;
+  history: number;
 }
 
 export interface SyncableState {
@@ -35,6 +38,8 @@ export interface SyncableState {
   observations: Observation[];
   settings: Settings;
   myDay: MyDay;
+  grow: GrowPlan;
+  history: VocabEvent[];
   stamps: Stamps;
   tombstones: Tombstone[];
 }
@@ -63,6 +68,8 @@ export function toRecords(state: SyncableState, deviceId: string): SyncRecord[] 
     ...state.observations.map((o) => rec('observations', o.id, o.updatedAt, o)),
     rec('kv', 'settings', state.stamps.settings, sharedSettings(state.settings)),
     rec('kv', 'myday', state.stamps.myday, state.myDay),
+    rec('kv', 'grow', state.stamps.grow, state.grow),
+    rec('kv', 'history', state.stamps.history, state.history),
     ...state.tombstones.map((t) => ({ store: t.store, id: t.id, updatedAt: t.deletedAt, deviceId, deleted: true, value: null }) as SyncRecord),
   ];
 }
@@ -71,6 +78,8 @@ export function fromRecords(records: SyncRecord[], keep: Pick<Settings, 'pin' | 
   const live = (store: SyncRecord['store']) => records.filter((r) => r.store === store && !r.deleted);
   const settingsRec = records.find((r) => r.store === 'kv' && r.id === 'settings');
   const mydayRec = records.find((r) => r.store === 'kv' && r.id === 'myday');
+  const growRec = records.find((r) => r.store === 'kv' && r.id === 'grow');
+  const historyRec = records.find((r) => r.store === 'kv' && r.id === 'history');
   const settings = mergeSettings((settingsRec?.value as Partial<Settings>) ?? undefined);
   delete settings.pin;
   delete settings.voiceURI;
@@ -82,7 +91,9 @@ export function fromRecords(records: SyncRecord[], keep: Pick<Settings, 'pin' | 
     observations: live('observations').map((r) => r.value as Observation),
     settings,
     myDay: mergeMyDay((mydayRec?.value as Partial<MyDay>) ?? undefined),
-    stamps: { settings: settingsRec?.updatedAt ?? 0, myday: mydayRec?.updatedAt ?? 0 },
+    grow: mergeGrowPlan((growRec?.value as Partial<GrowPlan>) ?? undefined),
+    history: Array.isArray(historyRec?.value) ? (historyRec!.value as VocabEvent[]) : [],
+    stamps: { settings: settingsRec?.updatedAt ?? 0, myday: mydayRec?.updatedAt ?? 0, grow: growRec?.updatedAt ?? 0, history: historyRec?.updatedAt ?? 0 },
     tombstones: records
       .filter((r) => r.deleted && r.store !== 'kv')
       .map((r) => ({ store: r.store as TombstoneStore, id: r.id, deletedAt: r.updatedAt })),

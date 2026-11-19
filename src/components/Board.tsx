@@ -12,12 +12,14 @@ interface Props {
   mediaUrls: Record<string, string>;
   label: string;
   emptyMessage?: string;
+  /** false = pack words in order (Favorites); true = fixed slots (normal pages). */
+  slotted?: boolean;
 }
 
-export function Board({ tiles, grid, page, onPage, onTap, onSign, mediaUrls, label, emptyMessage }: Props) {
-  const pages = pageCount(tiles.length, grid);
+export function Board({ tiles, grid, page, onPage, onTap, onSign, mediaUrls, label, emptyMessage, slotted = true }: Props) {
+  const pages = pageCount(tiles, grid, slotted);
   const current = Math.min(page, pages - 1);
-  const cells = pageCells(tiles, grid, current);
+  const cells = pageCells(tiles, grid, current, slotted);
   const visibleCount = tiles.filter((t) => !t.hidden).length;
 
   return (

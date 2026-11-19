@@ -51,6 +51,21 @@ test('grid: pages always have rows × cols cells and hidden tiles keep their slo
   assert.deepEqual(pageCells(tiles, grid, 1).map((t) => t?.id ?? null), ['e', null, null, null]);
 });
 
+test('grid: empty slots stay empty — words never slide into gaps', () => {
+  const tiles = [tile('a', 0), tile('far', 5)];
+  const grid = { rows: 2, cols: 2 };
+  assert.equal(pageCount(tiles, grid), 2);
+  assert.deepEqual(pageCells(tiles, grid, 0).map((t) => t?.id ?? null), ['a', null, null, null]);
+  assert.deepEqual(pageCells(tiles, grid, 1).map((t) => t?.id ?? null), [null, 'far', null, null]);
+  assert.equal(nextOrder(tiles, 'c'), 1, 'a new word fills the first gap');
+});
+
+test('grid: moving into an empty slot moves only that word', () => {
+  const tiles = [tile('a', 0), tile('b', 2)];
+  const changed = moveTile(tiles, 'b', -1);
+  assert.deepEqual(changed.map((t) => [t.id, t.order]), [['b', 1]]);
+});
+
 test('grid: deleted tiles are excluded, order is respected', () => {
   const tiles = [tile('b', 1), tile('a', 0), tile('x', 2, { deletedAt: 1 }), tile('z', 0, { categoryId: 'other' })];
   assert.deepEqual(orderedTiles(tiles, 'c').map((t) => t.id), ['a', 'b']);

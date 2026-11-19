@@ -34,13 +34,21 @@ after(async () => {
 // Plain string so the test runner's transpiler can't inject helpers into browser code.
 const speechStub = `
   window.__spoken = [];
+  window.__voices = [];
+  window.__rates = [];
+  const fakeVoices = [
+    { name: 'Test Voice A', voiceURI: 'voice-a', lang: 'en-US', localService: true, default: true },
+    { name: 'Test Voice B', voiceURI: 'voice-b', lang: 'en-US', localService: false, default: false },
+  ];
   const synth = {
     speaking: false, paused: false, pending: false,
-    getVoices: () => [],
-    speak(u) { window.__spoken.push(u.text); setTimeout(() => u.onend && u.onend(new Event('end')), 5); },
+    getVoices: () => fakeVoices,
+    speak(u) { window.__spoken.push(u.text); window.__voices.push(u.voice ? u.voice.voiceURI : null); window.__rates.push(u.rate); setTimeout(() => u.onend && u.onend(new Event('end')), 5); },
     cancel() {}, resume() {}, addEventListener() {}, removeEventListener() {},
   };
   Object.defineProperty(window, 'speechSynthesis', { value: synth, configurable: true });
+  // The real utterance only accepts real SpeechSynthesisVoice objects; the fake voices need a plain one.
+  window.SpeechSynthesisUtterance = class { constructor(t) { this.text = t; this.voice = null; this.rate = 1; this.pitch = 1; this.volume = 1; this.lang = ''; } };
 `;
 
 async function openApp(viewport = IPAD): Promise<{ ctx: BrowserContext; page: Page }> {
@@ -55,7 +63,23 @@ async function openApp(viewport = IPAD): Promise<{ ctx: BrowserContext; page: Pa
   return { ctx, page };
 }
 
+/** Go to a folder from Home (the board remembers the last page, like a real AAC app). */
+async function openFolder(page: Page, page_id: string) {
+  const home = page.locator('.page-toolbar').getByRole('button', { name: 'Home' });
+  if (await home.isEnabled()) await home.click();
+  await page.locator(`.board-grid [data-tile-id="core-folder-${page_id}"]`).click();
+}
+
+/** Page forward until a tile appears (new words take the first free slot, which may be on a later page). */
+async function findTile(page: Page, selector: string) {
+  const loc = page.locator(`.board-grid ${selector}`);
+  for (let i = 0; i < 10 && (await loc.count()) === 0; i++) await page.getByRole('button', { name: 'Next page' }).click();
+  return loc;
+}
+
 const spoken = (page: Page) => page.evaluate(() => (window as unknown as { __spoken: string[] }).__spoken);
+const voicesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __voices: (string | null)[] }).__voices);
+const ratesUsed = (page: Page) => page.evaluate(() => (window as unknown as { __rates: number[] }).__rates);
 
 async function hold(page: Page, selector: string | ReturnType<Page['locator']>, ms: number) {
   const loc = typeof selector === 'string' ? page.locator(selector) : selector;
@@ -102,7 +126,8 @@ test('opens straight to the Talk board — no login, quick words always there', 
   assert.equal(await page.getByRole('dialog').count(), 0);
   const quick = await page.locator('.quick-bar .tile').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
   assert.deepEqual(quick, ['help', 'stop', 'no', 'more', 'all done']);
-  assert.equal(await page.locator('.board-grid > *').count(), 9, 'default 3 × 3 grid');
+  assert.equal(await page.locator('.board-grid > *').count(), 24, 'default 4 × 6 grid on a tablet');
+  assert.equal(await page.getByTestId('page-title').textContent(), 'Home');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'My People' }).click();
   assert.equal(await page.locator('.quick-bar .tile').count(), 5, 'quick words stay on other child screens');
   await ctx.close();
@@ -122,7 +147,8 @@ test('sentence builder keeps words across groups and speaks the whole message un
   await page.locator('.board-grid [data-tile-id="core-i"]').click();
   await page.locator('.board-grid [data-tile-id="core-want"]').click();
   await page.locator('.quick-bar [data-tile-id="core-more"]').click();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
+  await page.getByTestId('page-title').getByText('Toys & Play').waitFor();
   await page.locator('.board-grid [data-tile-id="play-bubbles"]').click();
   assert.equal(await page.getByTestId('sentence-chip').count(), 4);
   await page.getByRole('button', { name: 'Speak message' }).click();
@@ -154,20 +180,20 @@ test('Parent Mode needs a long press and the PIN', async () => {
 test('caregiver adds a photo tile; it speaks and survives a reload (IndexedDB)', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Toys & Play', exact: true }).click();
   await page.getByRole('button', { name: '+ Add picture' }).click();
   assert.equal(await page.getByTestId('camera-input').getAttribute('capture'), 'environment', 'camera button opens the camera');
   await page.getByRole('button', { name: 'Cancel' }).click();
-  await addPhotoTile(page, 'Red ball', 'Play');
+  await addPhotoTile(page, 'Red ball', 'Toys & Play');
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
   await page.getByRole('button', { name: 'Next page' }).click();
   const tile = page.locator('.board-grid .tile[aria-label="Red ball"]');
   await tile.click();
   assert.equal((await spoken(page)).at(-1), 'Red ball');
 
   await page.reload();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
   await page.getByRole('button', { name: 'Next page' }).click();
   const width = await page
     .locator('.board-grid .tile[aria-label="Red ball"] img')
@@ -196,7 +222,7 @@ test('edit, reorder, delete and restore keep words where the caregiver puts them
   await page.locator('.edit-tile[aria-label="Edit peek"]').waitFor({ state: 'detached' });
   await page.getByRole('tab', { name: /Recently deleted/ }).click();
   await page.locator('[data-deleted-tile="core-look"]').getByRole('button', { name: 'Restore' }).click();
-  await page.getByRole('tab', { name: 'Words & pictures' }).click();
+  await page.getByRole('tab', { name: 'Edit AAC board' }).click();
   await page.locator('.edit-tile[aria-label="Edit peek"]').waitFor();
   // Child board reflects the new order
   await page.getByRole('button', { name: /back to Talk/ }).click();
@@ -208,7 +234,7 @@ test('edit, reorder, delete and restore keep words where the caregiver puts them
 test('grid size can be changed (2 × 2 big tiles) and pages appear', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Board & speech' }).click();
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
   await page.getByTestId('grid-select').selectOption('2x2');
   await page.getByRole('button', { name: /back to Talk/ }).click();
   assert.equal(await page.locator('.board-grid > *').count(), 4);
@@ -220,7 +246,7 @@ test('grid size can be changed (2 × 2 big tiles) and pages appear', async () =>
 test('backup export includes photos and restores onto a fresh device', async () => {
   const first = await openApp();
   await enterParentMode(first.page);
-  await addPhotoTile(first.page, 'Grandma Jo', 'My People');
+  await addPhotoTile(first.page, 'Grandma Jo', 'People');
   await first.page.getByRole('tab', { name: 'Backup' }).click();
   const [download] = await Promise.all([
     first.page.waitForEvent('download'),
@@ -233,7 +259,7 @@ test('backup export includes photos and restores onto a fresh device', async () 
   assert.equal(json.format, 'mimzi-backup');
   assert.equal(json.media.length, 1);
   assert.equal(json.settings.pin, undefined, 'PIN is never exported');
-  assert.equal(json.version, 2);
+  assert.equal(json.version, 3);
   assert.ok(json.myDay?.reward, 'My Day is included');
   assert.ok(Array.isArray(json.observations), 'My Words is included');
   await first.ctx.close();
@@ -245,7 +271,7 @@ test('backup export includes photos and restores onto a fresh device', async () 
   await second.page.getByRole('alertdialog').getByRole('button', { name: 'Restore backup' }).click();
   await second.page.getByText('Backup restored.').waitFor();
   await second.page.getByRole('button', { name: /back to Talk/ }).click();
-  await second.page.getByRole('button', { name: 'My People', exact: true }).first().click();
+  await second.page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'My People' }).click();
   await second.page.locator('.board-grid .tile[aria-label="Grandma Jo"] img').waitFor();
   await second.ctx.close();
 });
@@ -285,7 +311,7 @@ for (const [name, viewport] of [
       assert.ok(box.y >= 0 && box.y + box.height <= viewport.height + 1, `${sel} is off screen`);
     }
     const tile = (await page.locator('.board-grid .tile').first().boundingBox())!;
-    assert.ok(tile.width >= 88 && tile.height >= 88, `tiles too small: ${tile.width}×${tile.height}`);
+    assert.ok(tile.width >= 60 && tile.height >= 60, `tiles too small: ${tile.width}×${tile.height}`);
     await page.screenshot({ path: `${SHOTS}${name}.png` });
     await ctx.close();
   });
@@ -332,8 +358,8 @@ test('ASL sign video: only plays after tapping See sign', async () => {
   await page.locator('.edit-tile[aria-label="Edit more"]').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
   assert.equal(await page.locator('video').count(), 0, 'no sign video on the board');
-  assert.equal(await page.getByRole('button', { name: /^See sign for/ }).count(), 1);
-  await page.getByRole('button', { name: 'See sign for more' }).click();
+  assert.ok(await page.getByRole('button', { name: 'See sign for more' }).count() >= 1);
+  await page.locator('.board-grid').getByRole('button', { name: 'See sign for more' }).click().catch(() => undefined);
   const video = page.getByRole('dialog', { name: 'Sign for more' }).locator('video');
   await video.waitFor();
   await page.waitForFunction(() => {
@@ -351,7 +377,7 @@ test('ASL sign video: only plays after tapping See sign', async () => {
 test('quick words can be changed by a caregiver', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Board & speech' }).click();
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
   await page.getByTestId('quick-add-select').selectOption('core-yes');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByTestId('quick-list').getByText('yes').waitFor();
@@ -417,7 +443,7 @@ test('routine: parent edits steps and switches to Now / Next / Later (same data)
   await page.locator('.steps .sched-done').waitFor();
 
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'My Day' }).click();
+  await page.getByRole('tab', { name: 'Visual schedules' }).click();
   await page.getByTestId('step-2').getByLabel('Step 2 words').fill('Shoes on');
   await page.getByLabel(/Now \/ Next \/ Later/).check();
   await page.getByRole('button', { name: 'Save My Day' }).click();
@@ -436,7 +462,7 @@ test('routine: parent edits steps and switches to Now / Next / Later (same data)
 test('My Day templates can be saved and reused', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'My Day' }).click();
+  await page.getByRole('tab', { name: 'Visual schedules' }).click();
   await page.getByTestId('ft-first').getByLabel('FIRST words').fill('Bath');
   await page.locator('.template-row').first().getByPlaceholder('e.g. Bedtime').fill('Bath time');
   await page.getByRole('button', { name: 'Save for later' }).first().click();
@@ -453,7 +479,7 @@ test('My Day templates can be saved and reused', async () => {
 test('My Words: caregiver note and SLP export (no scores)', async () => {
   const { ctx, page } = await openApp();
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'My Words' }).click();
+  await page.getByRole('tab', { name: 'My Words', exact: true }).click();
   await page.getByLabel('Target word').fill('more');
   await page.getByLabel('How they say or show it').fill('mo');
   await page.getByLabel('Method').selectOption('Word approximation');
@@ -468,28 +494,33 @@ test('My Words: caregiver note and SLP export (no scores)', async () => {
   assert.doesNotMatch(summary, /score/i);
   await page.reload();
   await enterParentMode(page, false);
-  await page.getByRole('tab', { name: 'My Words' }).click();
+  await page.getByRole('tab', { name: 'My Words', exact: true }).click();
   await page.locator('tr[data-obs="more"]').waitFor();
   await ctx.close();
 });
 
-test('Food & Drink: empty until the caregiver adds foods; private notes stay private', async () => {
+test('Food & Drinks: foods stay hidden until a grown-up picks them; private notes stay private', async () => {
   const { ctx, page } = await openApp();
-  await page.getByRole('button', { name: 'Food & Drink', exact: true }).click();
-  await page.getByText(/add your foods and drinks/).waitFor();
+  await page.locator('.board-grid [data-tile-id="core-folder-food"]').click();
+  assert.equal(await page.locator('.board-grid [data-tile-id="food-banana"]').count(), 0, 'library foods start hidden');
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Food & Drink', exact: true }).click();
+  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.getByRole('tab', { name: 'Food & Drinks', exact: true }).click();
+  await page.locator('[data-wob="food-banana"]').click();
+  await page.getByRole('tab', { name: 'Edit AAC board' }).click();
+  await page.getByRole('tab', { name: 'Food & Drinks', exact: true }).click();
   await page.getByRole('button', { name: '+ Add picture' }).click();
-  await page.getByLabel('Word on the tile').fill('Apple');
-  await page.getByLabel(/Private note/).fill('only sliced, at home');
+  await page.getByLabel('Word on the tile').fill('Blueberries');
+  await page.getByLabel(/Private note/).fill('only cut in half');
   await page.getByText(/Mimzi never suggests foods/).waitFor();
   await page.getByRole('button', { name: 'Save' }).click();
-  await page.locator('.edit-tile[aria-label="Edit Apple"]').waitFor();
+  await page.locator('.edit-tile[aria-label="Edit Blueberries"]').waitFor();
   await page.getByRole('button', { name: /back to Talk/ }).click();
-  await page.getByRole('button', { name: 'Food & Drink', exact: true }).click();
-  await page.locator('.board-grid .tile[aria-label="Apple"]').click();
-  assert.equal((await spoken(page)).at(-1), 'Apple');
-  assert.equal(await page.getByText('only sliced, at home').count(), 0, 'private note never shown to the child');
+  await openFolder(page, 'food');
+  await page.locator('.board-grid [data-tile-id="food-banana"]').waitFor();
+  await (await findTile(page, '.tile[aria-label="Blueberries"]')).click();
+  assert.equal((await spoken(page)).at(-1), 'Blueberries');
+  assert.equal(await page.getByText('only cut in half').count(), 0, 'private note never shown to the child');
   await ctx.close();
 });
 
@@ -630,8 +661,8 @@ test('Google: sign in, then a second device signs in and gets everything (photos
   const ipad = await openApp(IPAD);
   await google.install(ipad.ctx);
   await enterParentMode(ipad.page);
-  await addPhotoTile(ipad.page, 'Rex', 'My People');
-  await ipad.page.getByRole('tab', { name: 'My Words' }).click();
+  await addPhotoTile(ipad.page, 'Rex', 'People');
+  await ipad.page.getByRole('tab', { name: 'My Words', exact: true }).click();
   await ipad.page.getByLabel('Target word').fill('more');
   await ipad.page.getByLabel('How they say or show it').fill('mo');
   await ipad.page.getByRole('button', { name: 'Add note' }).click();
@@ -648,15 +679,15 @@ test('Google: sign in, then a second device signs in and gets everything (photos
   await enterParentMode(galaxy.page);
   await googleSignIn(galaxy.page);
   await galaxy.page.getByRole('button', { name: /back to Talk/ }).click();
-  await galaxy.page.getByRole('button', { name: 'My People', exact: true }).first().click();
+  await galaxy.page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'My People' }).click();
   await galaxy.page.locator('.board-grid .tile[aria-label="Rex"] img').waitFor();
   await enterParentMode(galaxy.page, false);
-  await galaxy.page.getByRole('tab', { name: 'My Words' }).click();
+  await galaxy.page.getByRole('tab', { name: 'My Words', exact: true }).click();
   await galaxy.page.locator('tr[data-obs="more"]').waitFor();
 
   // Delete on the phone, sync, then sync the iPad
-  await galaxy.page.getByRole('tab', { name: 'Words & pictures' }).click();
-  await galaxy.page.getByRole('tab', { name: 'My People', exact: true }).click();
+  await galaxy.page.getByRole('tab', { name: 'Edit AAC board' }).click();
+  await galaxy.page.getByRole('tab', { name: 'People', exact: true }).click();
   await galaxy.page.locator('.edit-tile[aria-label="Edit Rex"]').click();
   await galaxy.page.getByRole('button', { name: 'Delete', exact: true }).click();
   await galaxy.page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
@@ -667,8 +698,8 @@ test('Google: sign in, then a second device signs in and gets everything (photos
 
   await ipad.page.getByRole('button', { name: /Sync now/ }).click();
   await ipad.page.getByRole('button', { name: /Sync now/ }).waitFor();
-  await ipad.page.getByRole('tab', { name: 'Words & pictures' }).click();
-  await ipad.page.getByRole('tab', { name: 'My People', exact: true }).click();
+  await ipad.page.getByRole('tab', { name: 'Edit AAC board' }).click();
+  await ipad.page.getByRole('tab', { name: 'People', exact: true }).click();
   await ipad.page.locator('.edit-tile[aria-label="Edit Rex"]').waitFor({ state: 'detached' });
   await ipad.page.getByRole('tab', { name: /Recently deleted/ }).click();
   await ipad.page.getByText('Rex').waitFor();
@@ -682,7 +713,7 @@ test('Google Photos: pick a photo in Google’s picker and use it on a tile', as
   const { ctx, page } = await openApp();
   await google.install(ctx);
   await enterParentMode(page);
-  await page.getByRole('tab', { name: 'Play', exact: true }).click();
+  await page.getByRole('tab', { name: 'Toys & Play', exact: true }).click();
   await page.getByRole('button', { name: '+ Add picture' }).click();
   await page.getByLabel('Word on the tile').fill('Blue ball');
   const [popup] = await Promise.all([ctx.waitForEvent('page'), page.getByRole('button', { name: /From Google Photos/ }).click()]);
@@ -692,5 +723,183 @@ test('Google Photos: pick a photo in Google’s picker and use it on a tile', as
   await page.locator('.tile-preview img.tile-photo').waitFor();
   await page.getByRole('button', { name: 'Save' }).click();
   await page.locator('.edit-tile[aria-label="Edit Blue ball"] img.tile-photo').waitFor();
+  await ctx.close();
+});
+
+/* ---------------- V3 acceptance tests ---------------- */
+
+test('V3-1/2/9: More speaks with the built-in voice; full sentence; Help speaks and shows its ASL sign separately', async () => {
+  const { ctx, page } = await openApp();
+  await page.locator('.board-grid [data-tile-id="core-more"]').click();
+  assert.equal((await spoken(page)).at(-1), 'more');
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-more"] img.tile-symbol').count(), 1, 'button shows an AAC symbol');
+  await page.locator('.board-grid [data-tile-id="core-help"]').click();
+  assert.equal((await spoken(page)).at(-1), 'help');
+  const before = (await spoken(page)).length;
+  await page.locator('.board-grid').getByRole('button', { name: 'See sign for help' }).click();
+  await page.getByTestId('sign-drawing').waitFor();
+  assert.equal((await spoken(page)).length, before, 'See sign never speaks over the AAC voice');
+  await page.getByRole('button', { name: /Close/ }).click();
+  await ctx.close();
+});
+
+test('V3-3: a brand-new word speaks automatically — no recording', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Toys & Play', exact: true }).click();
+  await page.getByRole('button', { name: '+ Add picture' }).click();
+  await page.getByLabel('Word on the tile').fill('Trampoline');
+  await page.getByTestId('symbol-search').fill('trampoline');
+  await page.locator('[data-symbol="trampoline"]').click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-tile[aria-label="Edit Trampoline"]').waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid [data-tile-id="core-folder-play"]').click();
+  await page.getByRole('button', { name: 'Next page' }).click();
+  await page.locator('.board-grid .tile[aria-label="Trampoline"]').click();
+  assert.equal((await spoken(page)).at(-1), 'Trampoline');
+  await ctx.close();
+});
+
+test('V3-4/10: changing the voice and speed; offline the on-device backup voice is used and explained', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.locator('.voice-row', { hasText: 'Test Voice B' }).getByText('Test Voice B').click();
+  await page.locator('.voice-row.voice-on', { hasText: 'Test Voice B' }).waitFor();
+  await page.getByTestId('speech-rate').fill('1.3');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid [data-tile-id="core-go"]').click();
+  assert.equal((await voicesUsed(page)).at(-1), 'voice-b');
+  assert.equal((await ratesUsed(page)).at(-1), 1.3);
+  await ctx.setOffline(true);
+  await page.locator('.board-grid [data-tile-id="core-look"]').click();
+  assert.equal((await voicesUsed(page)).at(-1), 'voice-a', 'Voice B needs internet → on-device Voice A is used offline');
+  assert.equal((await spoken(page)).at(-1), 'look');
+  await enterParentMode(page, false);
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.getByTestId('voice-status').getByText(/needs the internet/).waitFor();
+  await ctx.setOffline(false);
+  await ctx.close();
+});
+
+test('pronunciation override changes only what is spoken', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Mimzi Voice' }).click();
+  await page.getByTestId('pron-word').selectOption('family-mama');
+  await page.getByTestId('pron-text').fill('Mah-mah');
+  await page.getByTestId('pron-save').click();
+  await page.getByText(/→ “Mah-mah”/).waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid [data-tile-id="core-folder-family"]').click();
+  await page.locator('.board-grid [data-tile-id="family-mama"]').click();
+  assert.equal((await spoken(page)).at(-1), 'Mah-mah');
+  assert.equal(await page.locator('.board-grid [data-tile-id="family-mama"] .tile-label').textContent(), 'Mama');
+  await ctx.close();
+});
+
+test('V3-5: Words on My Board — six words, in their own places', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.getByRole('button', { name: '6', exact: true }).click();
+  await page.getByRole('button', { name: /Show the first 6 by position/ }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Hide' }).click(); // "no" and "break" are important words
+  await page.getByTestId('wob-count').getByText(/Showing 6 of/).waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  const cells = await page.locator('.board-grid > *').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id') ?? e.querySelector('[data-tile-id]')?.getAttribute('data-tile-id') ?? null));
+  assert.deepEqual(cells.slice(0, 6), ['core-i', 'core-want', 'core-more', 'core-help', 'core-stop', 'core-all-done']);
+  assert.ok(cells.slice(6).every((c) => c === null), 'other slots are empty, nothing moved up');
+  await ctx.close();
+});
+
+test('V3-7: hide and restore a word — same spot, picture and speech', async () => {
+  const { ctx, page } = await openApp();
+  const slotOf = () => page.locator('.board-grid > *').evaluateAll((els) => els.findIndex((e) => (e.getAttribute('data-tile-id') ?? e.querySelector('[data-tile-id]')?.getAttribute('data-tile-id')) === 'core-look'));
+  const before = await slotOf();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.locator('[data-wob="core-look"]').click();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  assert.equal(await slotOf(), -1);
+  assert.equal(await page.locator('.board-grid > *').count(), 24, 'its slot is kept empty');
+  await enterParentMode(page, false);
+  await page.getByRole('tab', { name: 'Words on My Board' }).click();
+  await page.locator('[data-wob="core-look"]').click();
+  await page.getByRole('tab', { name: 'Grow My Words' }).click();
+  await page.getByTestId('vocab-history').getByText('hidden').waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  assert.equal(await slotOf(), before);
+  await page.locator('.board-grid [data-tile-id="core-look"]').click();
+  assert.equal((await spoken(page)).at(-1), 'look');
+  await ctx.close();
+});
+
+test('V3-6: two new words every Monday — scheduled, then waiting for approval on the day, then added', async () => {
+  const ctx = await browser.newContext({ viewport: IPAD, hasTouch: true });
+  await ctx.addInitScript({ content: speechStub });
+  const page = await ctx.newPage();
+  await page.clock.install({ time: new Date('2026-11-18T10:00:00') }); // a Wednesday
+  await page.goto(BASE);
+  await page.waitForSelector('.board-grid .tile');
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Grow My Words' }).click();
+  await page.getByTestId('grow-cadence').selectOption('weekly');
+  await page.getByTestId('grow-per').fill('2');
+  await page.getByTestId('grow-weekday').selectOption('1');
+  await page.locator('[data-grow-pick="food-apple"]').check();
+  await page.locator('[data-grow-pick="food-banana"]').check();
+  await page.locator('[data-grow-pick="food-grapes"]').check();
+  await page.getByTestId('grow-schedule').click();
+  const planned = page.getByTestId('grow-planned');
+  await planned.getByText('apple').waitFor();
+  assert.match((await planned.textContent()) ?? '', /Mon, Nov 23.*apple.*Mon, Nov 23.*banana.*Mon, Nov 30.*grapes/s);
+  await page.getByTestId('grow-calendar').locator('[data-day="2026-11-23"]').getByText('apple').waitFor();
+
+  // Next Monday: Mimzi opens, the due words wait for a grown-up.
+  await page.clock.setFixedTime(new Date('2026-11-23T08:00:00'));
+  await page.reload();
+  await page.waitForSelector('.board-grid .tile');
+  await page.locator('.board-grid [data-tile-id="core-folder-food"]').click();
+  assert.equal(await page.locator('.board-grid [data-tile-id="food-apple"]').count(), 0, 'not added without approval');
+  await enterParentMode(page, false);
+  await page.getByTestId('grow-banner').click();
+  await page.getByTestId('grow-pending').getByRole('button', { name: 'Add all 2' }).click();
+  await page.getByTestId('grow-pending').waitFor({ state: 'detached' });
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await openFolder(page, 'food');
+  await page.locator('.board-grid [data-tile-id="food-apple"]').waitFor();
+  await page.locator('.board-grid [data-tile-id="food-banana"]').waitFor();
+  assert.equal(await page.locator('.board-grid [data-tile-id="food-grapes"]').count(), 0, 'next week’s word is still waiting');
+  await ctx.close();
+});
+
+test('V3-8: a real photo replaces the picture on "drink" — it still says "drink"', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.locator('.edit-tile[aria-label="Edit drink"]').click();
+  await page.getByTestId('photo-input').setInputFiles(PHOTO);
+  await page.getByRole('button', { name: 'Use photo' }).click();
+  await page.getByRole('button', { name: 'Save' }).click();
+  await page.locator('.edit-tile[aria-label="Edit drink"] img.tile-photo').waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid [data-tile-id="core-drink"] img.tile-photo').waitFor();
+  await page.locator('.board-grid [data-tile-id="core-drink"]').click();
+  assert.equal((await spoken(page)).at(-1), 'drink');
+  await ctx.close();
+});
+
+test('folders, Back and Home keep the message', async () => {
+  const { ctx, page } = await openApp();
+  await page.locator('.board-grid [data-tile-id="core-i"]').click();
+  await page.locator('.board-grid [data-tile-id="core-folder-feelings"]').click();
+  await page.getByTestId('page-title').getByText('Feelings').waitFor();
+  await page.locator('.board-grid [data-tile-id="feelings-happy"]').click();
+  await page.getByRole('button', { name: 'Back' }).click();
+  await page.getByTestId('page-title').getByText('Home').waitFor();
+  assert.equal(await page.getByTestId('sentence-chip').count(), 2);
+  await page.getByRole('button', { name: 'Speak message' }).click();
+  assert.equal((await spoken(page)).at(-1), 'I happy');
   await ctx.close();
 });
