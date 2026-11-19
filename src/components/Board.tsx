@@ -89,7 +89,7 @@ export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, m
               tile ? (
                 <TileButton key={tile.id} tile={tile} photoUrl={tile.photoId ? mediaUrls[tile.photoId] : undefined} onTap={onTap} />
               ) : (
-                <div key={`empty-${i}`} className="tile-empty" aria-hidden="true" />
+                <div key={`empty-${i}`} aria-hidden="true" />
               ),
             )}
           </div>
