@@ -33,11 +33,13 @@ function Bundled({ symbol, label }: { symbol?: string; label: string }) {
 
 /** A downloaded library symbol; falls back to the bundled picture if it can't load (e.g. offline before it was saved). */
 function Remote({ shown, label }: { shown: Shown; label: string }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [shown.url]);
-  if (failed || !shown.url) return <Bundled symbol={shown.fallback} label={label} />;
+  // 0 = loading, 1 = one retry (a busy or slow device can drop a request), 2 = use the backup.
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setAttempt(0), [shown.url]);
+  if (attempt >= 2 || !shown.url) return <Bundled symbol={shown.fallback} label={label} />;
   return (
     <img
+      key={`${shown.url}#${attempt}`}
       className="tile-symbol"
       src={shown.url}
       alt=""
@@ -45,7 +47,10 @@ function Remote({ shown, label }: { shown: Shown; label: string }) {
       loading="lazy"
       referrerPolicy="no-referrer"
       data-library={shown.info?.library}
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (attempt === 0) setTimeout(() => setAttempt((a) => (a === 0 ? 1 : a)), 700);
+        else setAttempt(2);
+      }}
     />
   );
 }
