@@ -154,6 +154,21 @@ export async function applyNewDefaultsV5(tiles: Tile[], categories: Category[]):
   await db.setKv('migrated:defaults5', true);
 }
 
+/** Offer Like on existing boards without changing the caregiver's layout. */
+export async function migrateLikeWord(tiles: Tile[]): Promise<void> {
+  if (await db.getKv<boolean>('migrated:word-like')) return;
+  const seed = buildSeedTiles().find((tile) => tile.id === 'core-like');
+  if (seed && !tiles.some((tile) => tile.id === seed.id || (!tile.deletedAt && tile.label.trim().toLowerCase() === 'like'))) {
+    const page = tiles.filter((tile) => tile.categoryId === seed.categoryId && !tile.deletedAt);
+    const slots = slotMap(page);
+    const order = slots.has(seed.order) ? Math.max(...slots.keys()) + 1 : seed.order;
+    const tile = { ...seed, order };
+    await db.putMany('tiles', [tile]);
+    tiles.push(tile);
+  }
+  await db.setKv('migrated:word-like', true);
+}
+
 export function picksToForget(tiles: Tile[]): Tile[] {
   return tiles.filter((t) => {
     if (!t.symbolAuto || !t.autoArasaac) return false;
