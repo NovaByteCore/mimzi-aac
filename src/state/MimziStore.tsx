@@ -9,7 +9,7 @@ import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, Sym
 import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../lib/grow';
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
-import { applyNewDefaultsV5, fixArasaacPicksV2, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
+import { applyNewDefaultsV5, fixArasaacPicksV2, migrateLikeWord, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
 import defaultPictures from '../../public/symbols/defaultPictures.json';
 import { mergeMyDay, mergeSettings } from '../lib/defaults';
 import { moveTile as computeMove, nextOrder, slotMap } from '../lib/grid';
@@ -178,6 +178,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         await migrateVocabularyV3(tiles, categories);
         await migrateSymbolsV4(tiles);
         await applyNewDefaultsV5(tiles, categories);
+        await migrateLikeWord(tiles);
         await fixArasaacPicksV2(tiles);
         stamps.current = { settings: 0, myday: 0, grow: 0, history: 0, ...((await db.getKv<Partial<Stamps>>('sync:stamps')) ?? {}) };
         // Grow My Words: apply anything that became due while Mimzi was closed.
