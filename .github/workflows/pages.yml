@@ -34,9 +34,12 @@ jobs:
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           # No server on GitHub Pages: OpenSymbols search says so instead of failing.
           VITE_OPENSYMBOLS_URL: 'off'
-          # Optional: add a repository *variable* (not secret) VITE_GOOGLE_CLIENT_ID to turn on
-          # Google sync here, and add this site to the client's authorised JavaScript origins.
-          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID }}
+          # Google sign-in (Drive sync, Google Photos). An OAuth web client ID is public by design —
+          # it's in every page that uses Google sign-in — so it lives here, not in a secret.
+          # Google Cloud project "Mimzi" (mimzi-515301), client "Mimzi web app"; authorised origins:
+          # https://novabytecore.github.io and https://mimzi-aac.netlify.app. A repository variable
+          # VITE_GOOGLE_CLIENT_ID, if set, takes precedence.
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || '527349701354-utcfdgh696gnfd80fpfu8uo2tk6oh1d0.apps.googleusercontent.com' }}
         run: npm run build
 
       - name: Check the build uses the Pages folder
