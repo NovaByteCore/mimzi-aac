@@ -25,6 +25,7 @@ interface Props {
   onRetry?: () => void;
   /** Grown-ups only: opens the schedule editor (after the Parent Mode PIN). */
   onEdit?: (tool: MyDayTool) => void;
+  onPickFirstThen?: (slot: 'first' | 'then') => void;
 }
 
 const HOLD = 800;
@@ -42,7 +43,7 @@ export function routineTabLabel(layout: string, steps: number): string {
  * speaks it. Marking things done and adding tokens are grown-up actions (press and hold);
  * changing the schedule itself needs the Parent Mode PIN.
  */
-export function MyDayView({ say, onEdit, speech, onRetry }: Props) {
+export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Props) {
   const { myDay, updateMyDay, tiles, mediaUrls, settings } = useMimzi();
   const [tool, setTool] = useState<MyDayTool>('firstThen');
   // A quick tap on a grown-up control (they need a press-and-hold so a child can't trigger
@@ -74,8 +75,8 @@ export function MyDayView({ say, onEdit, speech, onRetry }: Props) {
     if (t) say(prefix ? `${prefix} ${t}` : t);
   };
 
-  const card = (item: ScheduleItem, heading: string | undefined, current: boolean, prefix = '', className?: string) => (
-    <ScheduleCard item={item} heading={heading} tiles={tileMap} mediaUrls={mediaUrls} onTap={() => sayItem(item, prefix)} current={current} className={className} />
+  const card = (item: ScheduleItem, heading: string | undefined, current: boolean, prefix = '', className?: string, onTap?: () => void) => (
+    <ScheduleCard item={item} heading={heading} tiles={tileMap} mediaUrls={mediaUrls} onTap={onTap ?? (() => sayItem(item, prefix))} current={current} className={className} />
   );
 
   return (
@@ -138,11 +139,11 @@ export function MyDayView({ say, onEdit, speech, onRetry }: Props) {
       {tool === 'firstThen' && (
         <div className="myday-body">
           <div className="first-then">
-            {card(myDay.firstThen.first, 'FIRST', !myDay.firstThen.first.done, 'First')}
+            {card(myDay.firstThen.first, 'FIRST', !myDay.firstThen.first.done, 'First', undefined, onPickFirstThen && (() => onPickFirstThen('first')))}
             <span className="ft-arrow" aria-hidden="true">
               <Icon name="arrowRight" size={44} />
             </span>
-            {card(myDay.firstThen.then, 'THEN', myDay.firstThen.first.done && !myDay.firstThen.then.done, 'Then')}
+            {card(myDay.firstThen.then, 'THEN', myDay.firstThen.first.done && !myDay.firstThen.then.done, 'Then', undefined, onPickFirstThen && (() => onPickFirstThen('then')))}
           </div>
           <div className="grownup-row">
             <button type="button" className="btn big-btn" onClick={() => say(firstThenSentence(myDay.firstThen.first, myDay.firstThen.then))}>

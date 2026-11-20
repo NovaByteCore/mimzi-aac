@@ -1,6 +1,7 @@
 import { compactBoardWords } from './lib/manageWords';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useMimzi } from './state/MimziStore';
+import { FavoritesEditor } from './parent/FavoritesEditor';
 import { Board } from './components/Board';
 import { getRecentPictures, onRecentPictures, pictureUrls, type RecentPicture } from './lib/recentPictures';
 import { everydayPictures } from './lib/pictureSets';
@@ -32,6 +33,8 @@ export function App() {
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [firstThenCard, setFirstThenCard] = useState<'first' | 'then' | null>(null);
   // "Edit schedule" on My Day: PIN first, then the schedule editor (grown-ups only).
   const [scheduleGate, setScheduleGate] = useState<MyDayTool | null>(null);
   /** After the PIN: the small quick editor for the board on screen (full editor via More options). */
@@ -211,7 +214,7 @@ export function App() {
       .sort((a, b) => (catOrder.get(a.categoryId) ?? 99) - (catOrder.get(b.categoryId) ?? 99) || a.order - b.order);
     boardLabel = 'Favorites';
     slotted = false;
-    emptyMessage = 'No favorites yet. A grown-up can add them in Parent Mode.';
+    emptyMessage = 'No favorites yet. Tap Edit favorites to add words.';
   } else {
     boardTiles = orderedTiles(tiles, 'family');
     boardLabel = 'My People';
@@ -275,7 +278,7 @@ export function App() {
 
       <main className="board-area">
         {view === 'myday' ? (
-          <MyDayView say={say} speech={speech} onRetry={() => speech && play(speech.utterance, speech.atTop)} onEdit={(tool) => setScheduleGate(tool)} />
+          <MyDayView say={say} speech={speech} onRetry={() => speech && play(speech.utterance, speech.atTop)} onEdit={(tool) => tool === 'firstThen' ? setFirstThenCard('first') : setScheduleGate(tool)} onPickFirstThen={setFirstThenCard} />
         ) : (
         <div className="board-wrap">
         {view === 'talk' && (
@@ -299,6 +302,12 @@ export function App() {
               </button>
             )}
             <h2 className="page-title" data-testid="page-title">{boardLabel}</h2>
+          </div>
+        )}
+        {view === 'favorites' && (
+          <div className="page-toolbar">
+            <h2 className="page-title">Favorites</h2>
+            <button type="button" className="page-btn" onClick={() => setFavoritesOpen(true)} aria-haspopup="dialog">Edit favorites</button>
           </div>
         )}
         <Board
@@ -366,6 +375,8 @@ export function App() {
           }}
         />
       )}
+      {favoritesOpen && <FavoritesEditor onClose={() => setFavoritesOpen(false)} />}
+      {firstThenCard && <QuickScheduleEditor tool="firstThen" initialCard={firstThenCard} onClose={() => setFirstThenCard(null)} />}
       {quickEdit && (
         <QuickScheduleEditor
           tool={quickEdit}

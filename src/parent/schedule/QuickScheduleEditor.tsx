@@ -26,14 +26,15 @@ const TITLES: Record<MyDayTool, string> = { firstThen: 'First / Then', reward: '
  * speech, colours, layouts, adding/removing steps and templates are under "More options".
  * Cancel goes straight back to the same My Day tab; the child's message is untouched.
  */
-export function QuickScheduleEditor({ tool, onClose, onMore }: { tool: MyDayTool; onClose: () => void; onMore: () => void }) {
+export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { tool: MyDayTool; initialCard?: 'first' | 'then'; onClose: () => void; onMore?: () => void }) {
   const { myDay, updateMyDay, tiles, mediaUrls } = useMimzi();
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<MyDay>(myDay);
   const [media, setMedia] = useState<MediaRecord[]>([]);
-  const [target, setTarget] = useState<'first' | 'then' | 'reward' | number | null>(tool === 'reward' ? 'reward' : null);
+  const [target, setTarget] = useState<'first' | 'then' | 'reward' | number | null>(initialCard ?? (tool === 'reward' ? 'reward' : null));
   const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
   const [switchTo, setSwitchTo] = useState<string | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
   const [recent, setRecent] = useState<RecentPicture[]>([]);
@@ -56,8 +57,9 @@ export function QuickScheduleEditor({ tool, onClose, onMore }: { tool: MyDayTool
     };
     for (const r of recent) add({ label: r.info.name, symbol: r.symbol, info: r.info });
     for (const p of everydayPictures()) add({ label: p.label, symbol: p.symbol, info: p.info });
-    return out.slice(0, 24);
-  }, [recent]);
+    return initialCard ? out : out.slice(0, 24);
+  }, [initialCard, recent]);
+  const matchingChoices = choices.filter((choice) => choice.label.toLowerCase().includes(query.trim().toLowerCase()));
 
   const itemFrom = (c: Choice, keep?: ScheduleItem): ScheduleItem => ({ label: c.label, speak: undefined, symbol: c.symbol, symbolInfo: c.info, color: keep?.color, done: false });
 
@@ -116,8 +118,14 @@ export function QuickScheduleEditor({ tool, onClose, onMore }: { tool: MyDayTool
         <PicturePicker inline suggest={currentItem()?.label ?? ''} onCancel={() => setSearching(false)} onUse={pickSearched} />
       ) : (
         <>
+          {initialCard && (
+            <label className="field">
+              Search activity cards
+              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
+            </label>
+          )}
           <div className="quick-grid" data-testid="quick-choices">
-            {choices.map((c) => (
+            {matchingChoices.map((c) => (
               <button key={c.symbol} type="button" className={`quick-choice${currentItem()?.symbol === c.symbol ? ' picker-on' : ''}`} onClick={() => pickChoice(c)} aria-label={c.label} data-quick-choice={c.label}>
                 <span className="picker-pic">
                   <TileFace symbol={c.symbol} symbolInfo={c.info} label={c.label} />
@@ -244,9 +252,7 @@ export function QuickScheduleEditor({ tool, onClose, onMore }: { tool: MyDayTool
         )}
 
         <div className="modal-actions quick-actions">
-          <button type="button" className="btn" onClick={onMore} data-testid="quick-more">
-            More options
-          </button>
+          {onMore && <button type="button" className="btn" onClick={onMore} data-testid="quick-more">More options</button>}
           <span className="spacer" />
           <button type="button" className="btn btn-primary big-btn" disabled={!dirty} onClick={() => void show()} data-testid="show-on-board">
             <Icon name="check" /> Show on board
