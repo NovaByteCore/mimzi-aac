@@ -7,6 +7,7 @@
  * makes no requests to Google otherwise.
  */
 import { config } from '../../config';
+import { nativeGoogleAvailable, nativeGoogleLogin, nativeGoogleLogout } from './native';
 
 export const SCOPES = {
   profile: ['openid', 'email', 'profile'],
@@ -95,6 +96,21 @@ export function currentToken(): string | null {
 export async function requestToken(scopes: string[], opts: { prompt?: '' | 'consent' | 'select_account'; loginHint?: string } = {}): Promise<string> {
   if (!googleConfigured()) throw new GoogleAuthError('Google sign-in isn’t set up for this copy of Mimzi yet.', 'not-configured');
   if (hasValidToken(scopes)) return token!.value;
+  // Android app: Android's own Google account picker (Google blocks web sign-in inside apps).
+  if (nativeGoogleAvailable()) {
+    const wantedNative = [...new Set([...(token ? [...token.scopes] : []), ...SCOPES.profile, ...scopes])];
+    try {
+      const r = await nativeGoogleLogin(wantedNative);
+      token = { value: r.token, expiresAt: Date.now() + 55 * 60_000, scopes: new Set(wantedNative) };
+      return r.token;
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      throw new GoogleAuthError(
+        /cancel/i.test(msg) ? 'Google sign-in was cancelled.' : /network|internet|offline/i.test(msg) ? 'Couldn’t reach Google. Check the internet connection.' : `Google sign-in failed: ${msg}`,
+        /cancel/i.test(msg) ? 'popup-closed' : /network|internet|offline/i.test(msg) ? 'network' : 'unknown',
+      );
+    }
+  }
   const oauth2 = await loadGis();
   const wanted = [...new Set([...(token ? [...token.scopes] : []), ...SCOPES.profile, ...scopes])];
   return new Promise((resolve, reject) => {
@@ -140,6 +156,10 @@ export async function fetchProfile(accessToken: string, fetchImpl: typeof fetch 
 export async function signOut(): Promise<void> {
   const t = token?.value;
   token = null;
+  if (nativeGoogleAvailable()) {
+    await nativeGoogleLogout();
+    return;
+  }
   if (t && window.google?.accounts?.oauth2) {
     await new Promise<void>((resolve) => window.google!.accounts!.oauth2!.revoke(t, resolve));
   }

@@ -37,11 +37,14 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
           # Saved into package.json on the build machine only: Capacitor finds plugins there.
-          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor-community/text-to-speech@6
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor-community/text-to-speech@6 @capgo/capacitor-social-login@7 @capacitor/browser@7
 
       - name: Build the web app for Android
         env:
           VITE_OPENSYMBOLS_URL: 'off'
+          # Google sign-in on Android: the web client ID (public by design) is what Android's
+          # Google sign-in uses to issue tokens; the Android OAuth client is matched by package + signing key.
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.VITE_GOOGLE_CLIENT_ID || '527349701354-utcfdgh696gnfd80fpfu8uo2tk6oh1d0.apps.googleusercontent.com' }}
         run: npm run build
 
       - name: Create the Android project
@@ -54,6 +57,8 @@ jobs:
           node android-app/prepare.mjs
           # Fail the build if the speech plugin isn't registered (Mimzi can't talk without it).
           grep -q "TextToSpeech" android/app/src/main/assets/capacitor.plugins.json || { cat android/app/src/main/assets/capacitor.plugins.json; exit 1; }
+          # Same for Google sign-in and the Google Photos browser tab.
+          for p in SocialLogin Browser; do grep -q "$p" android/app/src/main/assets/capacitor.plugins.json || { cat android/app/src/main/assets/capacitor.plugins.json; exit 1; }; done
 
       - name: Build the APK
         working-directory: android

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { inAndroidApp } from '../lib/google/native';
 import { googleConfigured, requestToken, SCOPES } from '../lib/google/auth';
 import { pickFromGooglePhotos } from '../lib/google/photosPicker';
 import { useMimzi } from '../state/MimziStore';
@@ -23,7 +24,7 @@ export function GooglePhotosButton({ onPicked, className }: Props) {
     setStatus('');
     setLink('');
     // Open the window during the tap so pop-up blockers allow it; it's pointed at Google once the session exists.
-    const popup = window.open('', 'mimzi-google-photos', 'width=900,height=800');
+    const popup = inAndroidApp() ? null : window.open('', 'mimzi-google-photos', 'width=900,height=800');
     abort.current = new AbortController();
     setBusy(true);
     try {
