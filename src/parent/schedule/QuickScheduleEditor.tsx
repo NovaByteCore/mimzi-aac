@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMimzi } from '../../state/MimziStore';
 import { useDialogFocus } from '../../lib/useDialogFocus';
-import { applyRewardTemplate, applyRoutineTemplate, ROUTINE_LAYOUTS } from '../../lib/myday';
+import { addStep, applyRewardTemplate, applyRoutineTemplate, blankItem, MAX_STEPS, ROUTINE_LAYOUTS } from '../../lib/myday';
 import { everydayPictures } from '../../lib/pictureSets';
 import { addRecentPicture, getRecentPictures, onRecentPictures, type RecentPicture } from '../../lib/recentPictures';
 import { ScheduleCard } from '../../components/ScheduleCard';
@@ -20,19 +20,19 @@ interface Choice {
 const TITLES: Record<MyDayTool, string> = { firstThen: 'First / Then', reward: 'I’m Working For', routine: 'My Steps' };
 
 /**
- * Quick editor: opened from "Edit schedule" on My Day (after the PIN) for the board on screen.
+ * Quick editor: opened from "Edit schedule" on My Day for the board on screen.
  * Recent and everyday pictures come first, with short labels, so a familiar activity takes a
  * tap — no typing. "Search pictures" finds anything else without leaving. Photos, custom
  * speech, colours, layouts, adding/removing steps and templates are under "More options".
  * Cancel goes straight back to the same My Day tab; the child's message is untouched.
  */
-export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { tool: MyDayTool; initialCard?: 'first' | 'then'; onClose: () => void; onMore?: () => void }) {
+export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { tool: MyDayTool; initialCard?: 'first' | 'then' | number; onClose: () => void; onMore?: () => void }) {
   const { myDay, updateMyDay, tiles, mediaUrls } = useMimzi();
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<MyDay>(myDay);
   const [media, setMedia] = useState<MediaRecord[]>([]);
-  const [target, setTarget] = useState<'first' | 'then' | 'reward' | number | null>(initialCard ?? (tool === 'reward' ? 'reward' : null));
+  const [target, setTarget] = useState<'first' | 'then' | 'reward' | number | null>(initialCard ?? (tool === 'reward' ? 'reward' : tool === 'firstThen' ? 'first' : 0));
   const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState('');
   const [switchTo, setSwitchTo] = useState<string | null>(null);
@@ -57,8 +57,8 @@ export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { to
     };
     for (const r of recent) add({ label: r.info.name, symbol: r.symbol, info: r.info });
     for (const p of everydayPictures()) add({ label: p.label, symbol: p.symbol, info: p.info });
-    return initialCard ? out : out.slice(0, 24);
-  }, [initialCard, recent]);
+    return out;
+  }, [recent]);
   const matchingChoices = choices.filter((choice) => choice.label.toLowerCase().includes(query.trim().toLowerCase()));
 
   const itemFrom = (c: Choice, keep?: ScheduleItem): ScheduleItem => ({ label: c.label, speak: undefined, symbol: c.symbol, symbolInfo: c.info, color: keep?.color, done: false });
@@ -102,6 +102,7 @@ export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { to
       onClick={() => {
         setTarget(key);
         setSearching(false);
+        setQuery('');
       }}
       data-quick-card={String(key)}
     >
@@ -118,12 +119,10 @@ export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { to
         <PicturePicker inline suggest={currentItem()?.label ?? ''} onCancel={() => setSearching(false)} onUse={pickSearched} />
       ) : (
         <>
-          {initialCard && (
-            <label className="field">
-              Search activity cards
-              <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
-            </label>
-          )}
+          <label className="field">
+            Search activity cards
+            <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </label>
           <div className="quick-grid" data-testid="quick-choices">
             {matchingChoices.map((c) => (
               <button key={c.symbol} type="button" className={`quick-choice${currentItem()?.symbol === c.symbol ? ' picker-on' : ''}`} onClick={() => pickChoice(c)} aria-label={c.label} data-quick-choice={c.label}>
@@ -245,8 +244,15 @@ export function QuickScheduleEditor({ tool, initialCard, onClose, onMore }: { to
             <h3>
               On the board{draft.routine.name ? `: ${draft.routine.name}` : ''} · {ROUTINE_LAYOUTS.find((l) => l.id === draft.routineLayout)?.label}
             </h3>
-            <p className="muted small">Tap a step to change its picture and words. Add, remove or reorder steps in More options.</p>
+            <p className="muted small">Tap a step to change it. Use More options to remove or reorder steps.</p>
             <div className="quick-cards quick-steps">{draft.routine.steps.map((s, i) => card(s, `Step ${i + 1}`, i, false))}</div>
+            <button type="button" className="btn" disabled={draft.routine.steps.length >= MAX_STEPS} onClick={() => {
+              const index = draft.routine.steps.length;
+              setDraft((d) => ({ ...d, routine: { ...d.routine, name: undefined, steps: addStep(d.routine.steps, blankItem(`Step ${index + 1}`)) } }));
+              setTarget(index);
+              setSearching(false);
+              setQuery('');
+            }}><Icon name="plus" /> Add step</button>
             {chooser}
           </>
         )}

@@ -1,3 +1,4 @@
+import { ArrangeWords } from './ArrangeWords';
 import { useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { orderedTiles, pageCount, slotMap } from '../lib/grid';
@@ -20,6 +21,7 @@ export function WordsOnBoardPanel() {
   const { tiles, categories, settings, mediaUrls, setTilesHidden, swapWord, updateSettings } = useMimzi();
   const pages = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const [pageId, setPageId] = useState(HOME_PAGE);
+  const [arranging, setArranging] = useState(false);
   const [countDraft, setCountDraft] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
@@ -102,7 +104,11 @@ export function WordsOnBoardPanel() {
 
   return (
     <section className="panel manage-words">
-      <h2>Manage words</h2>
+      <div className="panel-head">
+        <h2>Manage words</h2>
+        <button type="button" className="btn" onClick={() => setArranging(true)} disabled={applying}>Drag to rearrange</button>
+      </div>
+      {arranging && <ArrangeWords categoryId={pageId} onClose={() => setArranging(false)} />}
       <p className="muted">
         Choose which words your child sees. Tap a spot, then show, hide or swap that word. A swapped-in word goes exactly where you tapped; nothing else moves.
         Hidden words keep their picture, voice and recording, so you can bring them back later. Quick Words stay in their own bar.

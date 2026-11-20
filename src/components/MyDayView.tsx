@@ -23,9 +23,7 @@ interface Props {
   /** What Mimzi is saying / just said, shown right here on My Day. */
   speech?: SpeechState | null;
   onRetry?: () => void;
-  /** Grown-ups only: opens the schedule editor (after the Parent Mode PIN). */
-  onEdit?: (tool: MyDayTool) => void;
-  onPickFirstThen?: (slot: 'first' | 'then') => void;
+  onEdit?: (tool: MyDayTool, card?: 'first' | 'then' | number) => void;
 }
 
 const HOLD = 800;
@@ -41,16 +39,16 @@ export function routineTabLabel(layout: string, steps: number): string {
 /**
  * My Day — visual supports. Big pictures, few words, nothing else on screen. Tapping a picture
  * speaks it. Marking things done and adding tokens are grown-up actions (press and hold);
- * changing the schedule itself needs the Parent Mode PIN.
+ * tapping a card opens its editor when editing is available.
  */
-export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Props) {
+export function MyDayView({ say, onEdit, speech, onRetry }: Props) {
   const { myDay, updateMyDay, tiles, mediaUrls, settings } = useMimzi();
   const [tool, setTool] = useState<MyDayTool>('firstThen');
   // A quick tap on a grown-up control (they need a press-and-hold so a child can't trigger
   // them by accident) explains both ways to do it, so nothing depends on a sustained hold.
   const [hint, setHint] = useState('');
   const showHint = () =>
-    setHint(onEdit ? 'Grown-ups: press and hold that button, or tap “Edit schedule”, enter your PIN, then “More options” → Progress.' : 'Grown-ups: press and hold that button.');
+    setHint(onEdit ? 'Grown-ups: press and hold that button, or tap “Edit schedule”, then “More options” → Progress.' : 'Grown-ups: press and hold that button.');
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const steps = myDay.routine.steps;
   const tabs: { id: MyDayTool; label: string; icon: string }[] = [
@@ -107,8 +105,8 @@ export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Pro
           ))}
         </div>
         {onEdit && (
-          <button type="button" className="btn edit-schedule" onClick={() => onEdit(tool)} data-testid="edit-schedule" aria-label="Edit schedule (grown-ups)">
-            <Icon name="lock" /> <span className="edit-schedule-text">Edit schedule</span>
+          <button type="button" className="btn edit-schedule" onClick={() => onEdit(tool)} data-testid="edit-schedule" aria-label="Edit schedule">
+            <span className="edit-schedule-text">Edit schedule</span>
           </button>
         )}
       </div>
@@ -139,11 +137,11 @@ export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Pro
       {tool === 'firstThen' && (
         <div className="myday-body">
           <div className="first-then">
-            {card(myDay.firstThen.first, 'FIRST', !myDay.firstThen.first.done, 'First', undefined, onPickFirstThen && (() => onPickFirstThen('first')))}
+            {card(myDay.firstThen.first, 'FIRST', !myDay.firstThen.first.done, 'First', undefined, onEdit && (() => onEdit('firstThen', 'first')))}
             <span className="ft-arrow" aria-hidden="true">
               <Icon name="arrowRight" size={44} />
             </span>
-            {card(myDay.firstThen.then, 'THEN', myDay.firstThen.first.done && !myDay.firstThen.then.done, 'Then', undefined, onPickFirstThen && (() => onPickFirstThen('then')))}
+            {card(myDay.firstThen.then, 'THEN', myDay.firstThen.first.done && !myDay.firstThen.then.done, 'Then', undefined, onEdit && (() => onEdit('firstThen', 'then')))}
           </div>
           <div className="grownup-row">
             <button type="button" className="btn big-btn" onClick={() => say(firstThenSentence(myDay.firstThen.first, myDay.firstThen.then))}>
@@ -173,7 +171,7 @@ export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Pro
         </div>
       )}
 
-      {tool === 'reward' && <RewardBoardView say={say} showHint={showHint} />}
+      {tool === 'reward' && <RewardBoardView say={say} showHint={showHint} onEditGoal={onEdit && (() => onEdit('reward'))} />}
 
       {tool === 'routine' && (
         <div className="myday-body">
@@ -181,7 +179,7 @@ export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Pro
             <ol className={`steps steps-${steps.length}`}>
               {steps.map((s, i) => (
                 <li key={i} className="step">
-                  {card(s, `${i + 1}`, i === currentStepIndex(steps))}
+                  {card(s, `${i + 1}`, i === currentStepIndex(steps), '', undefined, onEdit && (() => onEdit('routine', i)))}
                 </li>
               ))}
             </ol>
@@ -259,11 +257,11 @@ export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Pro
     const upcoming = myDay.showUpcoming !== false ? steps.slice(i + 1) : [];
     return (
       <div className="one-step" data-testid="one-step">
-        <div className="one-step-main">{card(steps[i], `STEP ${i + 1} OF ${steps.length}`, true)}</div>
+        <div className="one-step-main">{card(steps[i], `STEP ${i + 1} OF ${steps.length}`, true, '', undefined, onEdit && (() => onEdit('routine', i)))}</div>
         {upcoming.length > 0 && (
           <div className="one-step-next" aria-label="Coming up">
             {upcoming.map((s, j) => (
-              <ScheduleCard key={j} item={s} tiles={tileMap} mediaUrls={mediaUrls} className="sched-mini" />
+              <ScheduleCard key={j} item={s} tiles={tileMap} mediaUrls={mediaUrls} className="sched-mini" onTap={onEdit && (() => onEdit('routine', i + j + 1))} />
             ))}
           </div>
         )}
@@ -272,7 +270,7 @@ export function MyDayView({ say, onEdit, onPickFirstThen, speech, onRetry }: Pro
   }
 }
 
-function RewardBoardView({ say, showHint }: { say: (t: string) => void; showHint: () => void }) {
+function RewardBoardView({ say, showHint, onEditGoal }: { say: (t: string) => void; showHint: () => void; onEditGoal?: () => void }) {
   const { myDay, updateMyDay, tiles, mediaUrls, settings } = useMimzi();
   const tileMap = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const { reward } = myDay;
@@ -283,9 +281,10 @@ function RewardBoardView({ say, showHint }: { say: (t: string) => void; showHint
       mediaUrls={mediaUrls}
       reducedMotion={settings.reducedMotion}
       defaultCelebrate={settings.celebrationVisual}
-      onSayGoal={() => say(`I'm working for ${spokenText(reward.item)}`)}
+      onSayGoal={onEditGoal ?? (() => say(`I'm working for ${spokenText(reward.item)}`))}
     >
       <div className="grownup-row">
+        {onEditGoal && <button type="button" className="btn" onClick={() => say(`I’m working for ${spokenText(reward.item)}`)}>Say the goal</button>}
         {!rewardComplete(reward) && (
           <HoldButton onTap={showHint}
             holdMs={HOLD}

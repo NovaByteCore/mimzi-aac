@@ -34,11 +34,7 @@ export function App() {
   const [gateOpen, setGateOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
-  const [firstThenCard, setFirstThenCard] = useState<'first' | 'then' | null>(null);
-  // "Edit schedule" on My Day: PIN first, then the schedule editor (grown-ups only).
-  const [scheduleGate, setScheduleGate] = useState<MyDayTool | null>(null);
-  /** After the PIN: the small quick editor for the board on screen (full editor via More options). */
-  const [quickEdit, setQuickEdit] = useState<MyDayTool | null>(null);
+  const [quickEdit, setQuickEdit] = useState<{ tool: MyDayTool; card?: 'first' | 'then' | number } | null>(null);
   const [scheduleEdit, setScheduleEdit] = useState<MyDayTool | null>(null);
   // Page navigation: a stack of page ids (Home at the bottom) for folders, Back and Home.
   const [stack, setStack] = useState<string[]>([HOME_PAGE]);
@@ -278,7 +274,7 @@ export function App() {
 
       <main className="board-area">
         {view === 'myday' ? (
-          <MyDayView say={say} speech={speech} onRetry={() => speech && play(speech.utterance, speech.atTop)} onEdit={(tool) => tool === 'firstThen' ? setFirstThenCard('first') : setScheduleGate(tool)} onPickFirstThen={setFirstThenCard} />
+          <MyDayView say={say} speech={speech} onRetry={() => speech && play(speech.utterance, speech.atTop)} onEdit={(tool, card) => setQuickEdit({ tool, card })} />
         ) : (
         <div className="board-wrap">
         {view === 'talk' && (
@@ -366,23 +362,14 @@ export function App() {
           }}
         />
       )}
-      {scheduleGate && (
-        <ParentGate
-          onCancel={() => setScheduleGate(null)}
-          onUnlock={() => {
-            setQuickEdit(scheduleGate);
-            setScheduleGate(null);
-          }}
-        />
-      )}
       {favoritesOpen && <FavoritesEditor onClose={() => setFavoritesOpen(false)} />}
-      {firstThenCard && <QuickScheduleEditor tool="firstThen" initialCard={firstThenCard} onClose={() => setFirstThenCard(null)} />}
       {quickEdit && (
         <QuickScheduleEditor
-          tool={quickEdit}
+          tool={quickEdit.tool}
+          initialCard={quickEdit.card}
           onClose={() => setQuickEdit(null)}
           onMore={() => {
-            setScheduleEdit(quickEdit);
+            setScheduleEdit(quickEdit.tool);
             setQuickEdit(null);
           }}
         />
