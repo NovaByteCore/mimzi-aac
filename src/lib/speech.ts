@@ -17,6 +17,7 @@
  * not a failure. error: the engine reported a failure, or nothing ever started playing.
  * unsupported: no speech on this device.
  */
+import { generateOfflineSpeech, offlineVoiceId, OFFLINE_VOICES, type OfflineVoice } from './offlineVoice';
 import { nativeSpeak, nativeStop, nativeTtsAvailable } from './nativeTts';
 export type SpeakResult = 'spoken' | 'recorded' | 'interrupted' | 'unsupported' | 'error';
 
@@ -201,7 +202,11 @@ function cancelWeb(): void {
   }
 }
 
+let offlineGeneration = 0;
+let offlineQueue: Promise<unknown> = Promise.resolve();
+
 export function stopAll(): void {
+  offlineGeneration++;
   stopAudio();
   nativeStop();
   webCurrent?.settle('interrupted');
@@ -218,10 +223,39 @@ export function resetSpeechForTests(): void {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function speakOffline(text: string, voice: OfflineVoice, opts: SpeakOptions): Promise<SpeakResult> {
+  if (opts.interrupt !== 'finish') stopAll();
+  const generation = offlineGeneration;
+  const request = offlineQueue.then(async (): Promise<SpeakResult> => {
+    if (generation !== offlineGeneration) return 'interrupted';
+    try {
+      const blob = await generateOfflineSpeech(text, voice, clamp(opts.rate, 0.5, 1.5));
+      if (generation !== offlineGeneration) return 'interrupted';
+      const url = URL.createObjectURL(blob);
+      try {
+        const result = await playAudio(url, 1, opts.volume ?? 1);
+        if (result !== 'recorded') return result;
+        lastUse = { requested: opts.voiceURI, used: opts.voiceURI, usedName: OFFLINE_VOICES[voice], at: Date.now() };
+        listeners.forEach((listener) => listener(lastUse!));
+        return 'spoken';
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      return generation === offlineGeneration ? 'error' : 'interrupted';
+    }
+  });
+  offlineQueue = request;
+  return request;
+}
+
 export function speakText(text: string, opts: SpeakOptions): Promise<SpeakResult> {
   const clean = text.trim();
   if (!clean) return Promise.resolve('spoken');
+  const offline = offlineVoiceId(opts.voiceURI);
+  if (offline) return speakOffline(clean, offline, opts);
   const interrupt = (opts.interrupt ?? 'interrupt') === 'interrupt';
+  if (interrupt) offlineGeneration++;
   if (nativeTtsAvailable()) {
     if (interrupt) stopAudio();
     return nativeSpeak(clean, {
@@ -358,6 +392,10 @@ function clamp(n: number, lo: number, hi: number) {
 
 export function playRecording(url: string, rate: number, volume = 1): Promise<SpeakResult> {
   stopAll();
+  return playAudio(url, rate, volume);
+}
+
+function playAudio(url: string, rate: number, volume: number): Promise<SpeakResult> {
   return new Promise((resolve) => {
     try {
       const audio = new Audio(url);

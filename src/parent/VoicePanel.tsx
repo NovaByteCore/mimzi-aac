@@ -1,3 +1,4 @@
+import { installOfflineVoices, offlinePackReady, offlineVoiceId, OFFLINE_VOICES, type OfflineVoice } from '../lib/offlineVoice';
 import { nativeTtsAvailable } from '../lib/nativeTts';
 import { useEffect, useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
@@ -22,6 +23,25 @@ export function VoicePanel() {
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [pronWord, setPronWord] = useState('');
   const [pronText, setPronText] = useState('');
+  const [pack, setPack] = useState<'checking' | 'missing' | 'downloading' | 'ready' | 'failed'>('checking');
+  const localVoice = offlineVoiceId(settings.voiceURI);
+  useEffect(() => {
+    void offlinePackReady().then((ready) => setPack(ready ? 'ready' : 'missing'));
+  }, []);
+
+  const downloadPack = async () => {
+    setPack('downloading');
+    try {
+      await installOfflineVoices();
+      setPack('ready');
+    } catch {
+      setPack('failed');
+    }
+  };
+
+  const chooseLocal = (voice: OfflineVoice) =>
+    updateSettings({ voiceURI: `mimzi:${voice}`, voiceName: OFFLINE_VOICES[voice], sharedVoiceName: undefined, speechLang: 'en-US' });
+
 
   useEffect(() => {
     setVoices(getVoices());
@@ -78,14 +98,29 @@ export function VoicePanel() {
   return (
     <section className="panel settings">
       <h2>Mimzi Voice</h2>
-      <p className="muted">
-        Every button speaks automatically with the voice below — no recordings needed, and every new word uses it too. Mimzi uses the voices built
-        into this device, so an iPad and an Android tablet sound different. Voices marked <strong>on this device</strong> also work without internet.
-      </p>
+      <h3>Downloadable voices</h3>
+      <p className="muted">Download Heart and Bella once. They speak new words and sentences on this device, even in Airplane Mode.</p>
+      {pack === 'ready' ? (
+        <div className="row">
+          {(Object.keys(OFFLINE_VOICES) as OfflineVoice[]).map((voice) => (
+            <button key={voice} type="button" className={localVoice === voice ? 'btn btn-primary' : 'btn btn-quiet'}
+              aria-pressed={localVoice === voice} onClick={() => void chooseLocal(voice)}>
+              {OFFLINE_VOICES[voice]}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <button type="button" className="btn btn-primary" disabled={!online || pack === 'checking' || pack === 'downloading'}
+          onClick={() => void downloadPack()}>
+          {pack === 'downloading' ? 'Downloading voices…' : 'Download Heart and Bella'}
+        </button>
+      )}
+      {pack === 'failed' && <p role="alert">The download didn’t finish. Check your connection and available storage, then try again.</p>}
+      {localVoice && pack === 'ready' && <p role="status">{OFFLINE_VOICES[localVoice]} is ready for offline speech.</p>}
 
-      {!speechSupported() && <p className="form-error">This browser has no built-in speech. Recorded words will still play, and words always show on screen.</p>}
+      {!localVoice && !speechSupported() && <p className="form-error">This browser has no built-in speech. Recorded words will still play, and words always show on screen.</p>}
 
-      <div className="voice-status" data-testid="voice-status">
+      {!localVoice && <div className="voice-status" data-testid="voice-status">
         <p>
           Mimzi is speaking with <strong data-testid="current-voice">{effective.voice?.name ?? 'the device’s default voice'}</strong>
           {effective.voice && (
@@ -122,7 +157,7 @@ export function VoicePanel() {
             : 'No voices reported yet (some browsers load them after the first word is spoken).'}
           {localCount === 0 && voices.length > 0 && ' No on-device voice was found — install one in the device’s text-to-speech settings for offline speech.'}
         </p>
-      </div>
+      </div>}
 
       <div className="row">
         <button type="button" className="btn btn-primary" onClick={() => void testVoice()} disabled={voiceTest === 'checking'}>
@@ -140,12 +175,12 @@ export function VoicePanel() {
 
       <p className="muted small">
         To verify offline speech, turn on Airplane Mode, make sure Wi-Fi is off, and tap Hear Mimzi’s voice.
-        {nativeTtsAvailable() && ' The Android app uses the tablet’s text-to-speech engine.'}
+        {!localVoice && nativeTtsAvailable() && ' The Android app uses the tablet’s text-to-speech engine.'}
       </p>
       <p role="status">
         {voiceTest === 'checking' && 'Testing speech…'}
         {voiceTest === 'spoken' && (online ? 'The speech test completed. Repeat in Airplane Mode to check offline speech.' : 'The speech test completed while offline. If you heard it, offline speech is working.')}
-        {voiceTest === 'failed' && 'Speech did not finish. Check your text-to-speech voice and media volume. For offline speech, download a voice in your device settings.'}
+        {voiceTest === 'failed' && 'Speech did not finish. Check that your voice is downloaded and your media volume is on.'}
       </p>
 
       <h3>Choose Mimzi’s voice</h3>

@@ -54,8 +54,8 @@ export function GoogleSyncPanel() {
             </button>
           </div>
           <p className="muted small">
-            Mimzi syncs automatically when you open or close Parent Mode (if you’ve signed in within the last hour). Token stars and checkmarks
-            your child earns are saved on this device and sync the next time you sync.
+            Mimzi syncs edits while it’s open and checks for changes from your other devices. Offline edits are saved here and sync when you reconnect.
+            If your Google session expires, use Sync now to reconnect.
           </p>
         </>
       )}

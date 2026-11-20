@@ -504,6 +504,10 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     if (syncing.current) return;
     const account = justSignedIn ?? dataRef.current.sync.account;
     if (!account) return;
+    if (!navigator.onLine) {
+      setSync({ phase: 'idle', message: 'Offline. Changes are saved here and will sync when you reconnect.' });
+      return;
+    }
     syncing.current = true;
     setSync({ phase: 'syncing', message: 'Connecting to Google…' });
     try {
@@ -579,6 +583,41 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       syncing.current = false;
     }
   }, []);
+
+  // Push local edits after a short pause, and pull changes while Mimzi is open.
+  // Offline edits are already persisted in the local database, including after a restart.
+  const accountEmail = data.sync.account?.email;
+  const lastAutomaticRevision = useRef('');
+  const { tiles, categories, settings, myDay, observations, grow, history } = data;
+  useEffect(() => {
+    if (!accountEmail || !currentToken()) return;
+    const revision = JSON.stringify([accountEmail, stamps.current, tombstones.current]);
+    if (revision === lastAutomaticRevision.current) return;
+    const timer = window.setTimeout(() => {
+      if (!navigator.onLine || syncing.current) return;
+      lastAutomaticRevision.current = revision;
+      void syncNow();
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [accountEmail, tiles, categories, settings, myDay, observations, grow, history, syncNow]);
+
+  useEffect(() => {
+    if (!accountEmail) return;
+    const check = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && currentToken()) void syncNow();
+    };
+    const reconnect = () => {
+      if (navigator.onLine) void syncNow();
+    };
+    window.addEventListener('online', reconnect);
+    document.addEventListener('visibilitychange', check);
+    const interval = window.setInterval(check, 30_000);
+    return () => {
+      window.removeEventListener('online', reconnect);
+      document.removeEventListener('visibilitychange', check);
+      window.clearInterval(interval);
+    };
+  }, [accountEmail, syncNow]);
 
   const googleSignIn = useCallback(async () => {
     setSync({ phase: 'syncing', message: 'Opening Google…' });

@@ -14,7 +14,8 @@
  * symbol a grown-up picks from another library) are kept in their own cache, so once the
  * app has asked for them they work without internet.
  */
-const CACHE = 'mimzi-shell-v4';
+const CACHE = 'mimzi-shell-v5';
+const VOICES = 'mimzi-voice-pack-v1';
 const SYMBOLS = 'mimzi-symbols-v1';
 // Hosts often send `Vary: Origin` / `Vary: Accept-Encoding`; the page's module script
 // request carries an Origin header the precache request didn't, so match by URL only.
@@ -53,11 +54,7 @@ async function cacheShell() {
   const assets = assetUrlsFrom(html);
   await cache.addAll(assets);
   await cache.put(INDEX_URL, res);
-  // Remove assets from older builds.
-  const keep = new Set([...assets, INDEX_URL, ...STATIC_FILES]);
-  for (const req of await cache.keys()) {
-    if (req.url.includes('/assets/') && !keep.has(req.url)) await cache.delete(req);
-  }
+  // Previously loaded lazy assets, including speech code, are available offline.
 }
 
 self.addEventListener('install', (event) => {
@@ -83,7 +80,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
       for (const key of await caches.keys()) {
-        if (key !== CACHE && key !== SYMBOLS && key.startsWith('mimzi-')) await caches.delete(key);
+        if (key !== CACHE && key !== SYMBOLS && key !== VOICES && key.startsWith('mimzi-')) await caches.delete(key);
       }
       await self.clients.claim();
     })(),
