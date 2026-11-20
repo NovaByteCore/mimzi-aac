@@ -6,12 +6,11 @@ jobs:
     steps:
       - run: |
           mkdir x && cd x && npm init -y >/dev/null
-          npm view @capgo/capacitor-social-login versions --json | tail -15
-          npm view @capgo/capacitor-social-login@7 version peerDependencies --json | tail -20
-          npm install --silent @capgo/capacitor-social-login@7 @capacitor/browser@7 >/dev/null
-          d=node_modules/@capgo/capacitor-social-login
-          echo "===== definitions"; sed -n '1,400p' $d/dist/esm/definitions.d.ts
-          echo "===== README google"; grep -n -i -A60 "^## Google" $d/README.md | head -200
-          echo "===== android files"; find $d/android -name "*.java" -o -name "*.kt" | head
-          f=$(grep -rl "class GoogleProvider" $d/android | head -1); echo "===== $f"; grep -n "scopes\|accessToken\|AuthorizationRequest\|webClientId\|mode\|getString(\|put(\"" $f | head -80
-          echo "===== browser"; sed -n '1,80p' node_modules/@capacitor/browser/dist/esm/definitions.d.ts
+          npm install --silent @capgo/capacitor-social-login@7 >/dev/null
+          d=node_modules/@capgo/capacitor-social-login/android/src/main/java/ee/forgr/capacitor/social/login
+          echo "===== modified"; cat $d/ModifiedMainActivityForSocialLoginPlugin.java
+          echo "===== consts"; grep -n "REQUEST_\|public static final\|handleGoogleLoginIntent" $d/GoogleProvider.java $d/SocialLoginPlugin.java | head -30
+          echo "===== plugin annotations"; grep -n "@CapacitorPlugin\|name =\|@PluginMethod\|public void [a-zA-Z]*(PluginCall" $d/SocialLoginPlugin.java | head -30
+          echo "===== initialize google"; grep -n -A25 "public void initialize(PluginCall" $d/SocialLoginPlugin.java | head -60
+          echo "===== gradle"; cat node_modules/@capgo/capacitor-social-login/android/build.gradle | grep -n "implementation\|minSdk\|compileSdk" | head -20
+          echo "===== capconfig"; grep -rn "providers\|getConfig" $d/SocialLoginPlugin.java | head -20
