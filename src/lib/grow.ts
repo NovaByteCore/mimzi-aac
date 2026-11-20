@@ -111,6 +111,51 @@ export function processDue(plan: GrowPlan, today: string): ProcessResult {
   return { plan: { ...plan, items }, show, newlyPending };
 }
 
+const CONNECTIONS: Record<string, string[]> = {
+  again: ['go', 'play', 'bubbles', 'stop'],
+  wait: ['go', 'stop', 'open'],
+  look: ['play', 'go', 'open'],
+  get: ['want', 'help', 'water'],
+  give: ['want', 'help', 'play'],
+  put: ['open', 'close', 'play'],
+  up: ['go', 'help'], down: ['go', 'help'],
+  in: ['put', 'open', 'close'], out: ['go', 'open'],
+  on: ['put', 'open'], off: ['stop', 'close'],
+  break: ['stop', 'all done', 'help'],
+  like: ['i', 'want', 'play'], that: ['want', 'like', 'look'], this: ['want', 'like', 'look'],
+  come: ['go', 'play'], mine: ['play', 'want'],
+  'my turn': ['play', 'you'], 'your turn': ['play', 'you'],
+  puzzle: ['play', 'help', 'open'], crayons: ['play', 'want', 'open'],
+  teddy: ['play', 'want'], doll: ['play', 'want'],
+};
+
+export function suggestWeeklyWords(plan: GrowPlan, tiles: Tile[], today: string): GrowPlan {
+  if (!plan.suggestWeekly || plan.paused) return plan;
+
+  const monday = addDays(today, -((parseDay(today).getDay() + 6) % 7));
+  if (plan.items.some((item) => item.id.startsWith(`suggest-${monday}-`))) return plan;
+
+  const label = (tile: Tile) => tile.label.trim().toLowerCase();
+  const available = tiles.filter((tile) => !tile.deletedAt && !tile.linkTo);
+  const known = new Set(available.filter((tile) => !tile.hidden && tile.categoryId === 'core').map(label));
+  const excluded = new Set(plan.items.filter((item) => !item.id.startsWith('suggest-') || item.status !== 'canceled').map((item) => item.tileId));
+  const selected = new Set<string>();
+  const options = available.filter((tile) => tile.hidden && (tile.categoryId === 'core' || tile.categoryId === 'play') && !known.has(label(tile)) && !excluded.has(tile.id))
+    .map((tile) => ({ tile, score: (CONNECTIONS[label(tile)] ?? []).filter((word) => known.has(word)).length }))
+    .filter(({ score }) => score > 0)
+    .sort((a, b) => b.score - a.score || a.tile.order - b.tile.order || a.tile.id.localeCompare(b.tile.id));
+  const items: GrowItem[] = [];
+  for (const { tile } of options) {
+    const word = label(tile);
+    if (selected.has(word)) continue;
+    selected.add(word);
+    items.push({ id: `suggest-${monday}-${tile.id}`, tileId: tile.id, dueDate: today, status: 'pending' });
+    if (items.length === 2) break;
+  }
+
+  return items.length ? { ...plan, items: [...plan.items, ...items] } : plan;
+}
+
 export function setStatus(plan: GrowPlan, ids: string[], status: GrowItem['status'], today: string): GrowPlan {
   const set = new Set(ids);
   return {

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { googleConfigured } from '../lib/google/auth';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from '../components/Icon';
 
 export function GoogleSyncPanel() {
   const { sync, googleSignIn, googleSignOut, syncNow } = useMimzi();
@@ -32,7 +33,7 @@ export function GoogleSyncPanel() {
             still works with no internet; it syncs when you’re online.
           </p>
           <button type="button" className="btn btn-primary big-btn" onClick={() => googleSignIn()} disabled={busy}>
-            <span aria-hidden="true">🔐</span> Sign in with Google
+            <Icon name="lock" /> Sign in with Google
           </button>
         </>
       ) : (
@@ -46,15 +47,15 @@ export function GoogleSyncPanel() {
           </p>
           <div className="row">
             <button type="button" className="btn btn-primary big-btn" onClick={() => syncNow(true)} disabled={busy}>
-              {busy ? 'Syncing…' : '🔄 Sync now'}
+              {busy ? 'Syncing…' : <><Icon name="reset" /> Sync now</>}
             </button>
             <button type="button" className="btn btn-quiet" onClick={() => setConfirmOut(true)} disabled={busy}>
               Sign out
             </button>
           </div>
           <p className="muted small">
-            Mimzi syncs automatically when you open or close Parent Mode (if you’ve signed in within the last hour). Token stars and checkmarks
-            your child earns are saved on this device and sync the next time you sync.
+            Mimzi syncs edits while it’s open and checks for changes from your other devices. Offline edits are saved here and sync when you reconnect.
+            If your Google session expires, use Sync now to reconnect.
           </p>
         </>
       )}

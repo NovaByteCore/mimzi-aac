@@ -3,6 +3,7 @@ import { useMimzi } from '../state/MimziStore';
 import { backupFileName, BackupError, parseBackup } from '../lib/backup';
 import { storageEstimate, requestPersistentStorage } from '../lib/db';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from '../components/Icon';
 
 function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -68,10 +69,10 @@ export function BackupPanel() {
       </p>
       <div className="row">
         <button type="button" className="btn btn-primary" onClick={doExport} disabled={busy}>
-          ⬇️ Make a backup file
+          <Icon name="download" /> Make a backup file
         </button>
         <button type="button" className="btn" onClick={() => fileInput.current?.click()} disabled={busy}>
-          ⬆️ Restore from backup
+          <Icon name="upload" /> Restore from backup
         </button>
         <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={onFile} data-testid="restore-input" />
       </div>

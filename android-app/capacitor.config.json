@@ -1,0 +1,11 @@
+{
+  "appId": "io.github.novabytecore.mimzi",
+  "appName": "Mimzi",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {}
+}

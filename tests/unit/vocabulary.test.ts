@@ -93,15 +93,10 @@ test('Food & Drinks: every food starts hidden — the caregiver chooses which ap
   assert.ok(foods.every((t) => t.hidden), 'no food is shown until a grown-up picks it');
 });
 
-test('ASL drawings: every mapped word exists and points at a real drawing with a reference', async () => {
-  const { ASL_BY_LABEL } = await import('../../src/data/vocabulary.ts');
-  const { ASL_SIGNS } = await import('../../src/data/aslSigns.tsx');
-  for (const sign of Object.values(ASL_BY_LABEL)) assert.ok(ASL_SIGNS[sign], `no drawing ${sign}`);
-  for (const t of tiles) if (t.aslSign) assert.ok(ASL_SIGNS[t.aslSign], `${t.id} → ${t.aslSign}`);
-  for (const [k, s] of Object.entries(ASL_SIGNS)) {
-    assert.match(s.source, /^https:\/\//, `${k} needs a reference`);
-    assert.ok(s.how.length > 20, `${k} needs a description`);
+test('ASL is removed: no starter word has a sign, every word keeps an AAC picture and label', () => {
+  for (const t of tiles) {
+    assert.equal(t.aslSign, undefined, `${t.id} has no sign`);
+    assert.ok(t.symbol, `${t.id} has an AAC picture`);
+    assert.ok(t.label.trim(), `${t.id} has a label`);
   }
-  assert.equal(tiles.find((t) => t.id === 'core-want')?.aslSign, 'want');
-  assert.equal(tiles.find((t) => t.id === 'core-more')?.aslSign, 'more');
 });

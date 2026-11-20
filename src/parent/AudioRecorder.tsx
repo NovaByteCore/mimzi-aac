@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { pickRecordingMime } from '../lib/media';
+import { Icon } from '../components/Icon';
 
 interface Props {
   /** URL of the current recording, if any. */
@@ -83,11 +84,11 @@ export function AudioRecorder({ url, onRecorded, onRemove, maxSeconds = 10, labe
       <div className="row">
         {state === 'recording' ? (
           <button type="button" className="btn btn-danger" onClick={stop}>
-            ⏹ Stop ({seconds}s)
+            <Icon name="close" /> Stop ({seconds}s)
           </button>
         ) : (
           <button type="button" className="btn" onClick={start} disabled={state === 'starting'}>
-            🎙️ {url ? 'Record again' : label}
+            <Icon name="mic" /> {url ? 'Record again' : label}
           </button>
         )}
         {url && state === 'idle' && (

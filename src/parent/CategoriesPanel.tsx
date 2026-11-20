@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
+import { PicturePicker } from './PicturePicker';
 import { useMimzi } from '../state/MimziStore';
 import { TileFace } from '../components/TileFace';
 import { ConfirmDialog } from './ConfirmDialog';
 import { newId } from '../lib/id';
 import type { Category } from '../types';
+import { Icon } from '../components/Icon';
 
 export function CategoriesPanel() {
   const { categories, tiles, saveCategory, saveCategories, deleteCategory } = useMimzi();
@@ -31,7 +33,7 @@ export function CategoriesPanel() {
     await saveCategory({
       id: newId('cat'),
       name: clean,
-      symbol: emoji.trim() || '⭐',
+      symbol: emoji || 'mul:star',
       color: 'cream',
       order: sorted.length,
       hidden: false,
@@ -67,10 +69,10 @@ export function CategoriesPanel() {
               <span className="muted small">{count} words</span>
               <span className="spacer" />
               <button type="button" className="icon-btn small" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`Move ${c.name} up`}>
-                ▲
+                <Icon name="up" />
               </button>
               <button type="button" className="icon-btn small" onClick={() => move(i, 1)} disabled={i === sorted.length - 1} aria-label={`Move ${c.name} down`}>
-                ▼
+                <Icon name="down" />
               </button>
               <button type="button" className="btn btn-quiet small" onClick={() => saveCategory({ ...c, hidden: !c.hidden })}>
                 {c.hidden ? 'Show' : 'Hide'}
@@ -94,14 +96,14 @@ export function CategoriesPanel() {
           <span>New group</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Bath time" maxLength={24} />
         </label>
-        <label className="field inline">
-          <span>Emoji</span>
-          <input value={emoji} onChange={(e) => setEmoji(e.target.value.slice(0, 8))} placeholder="🛁" className="emoji-input" />
-        </label>
         <button type="button" className="btn btn-primary" onClick={add}>
           Add group
         </button>
       </div>
+      <details className="field">
+        <summary>Page picture (optional — a star if you skip this)</summary>
+        <PicturePicker inline showBack={false} allowPhoto={false} suggest={name} onCancel={() => undefined} onUse={(p) => p.kind === 'symbol' && setEmoji(p.symbol)} />
+      </details>
       {error && (
         <p className="form-error" role="alert">
           {error}

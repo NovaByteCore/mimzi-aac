@@ -55,9 +55,11 @@ VITE_GOOGLE_CLIENT_ID = 1234567890-abc...apps.googleusercontent.com
 
 For a local test, put the same line in `.env.local`. The Client ID is public by design. It's fine for it to be in the web page.
 
+**Already done (Nov 2026):** Google Cloud project **Mimzi** (`mimzi-515301`), client **Mimzi web app**, authorised origins `https://novabytecore.github.io` and `https://mimzi-aac.netlify.app`, Drive API and Photos Picker API on, sign-in screen in *Testing* with two test users. The GitHub Pages build uses this client automatically (`.github/workflows/pages.yml`). To let another Google account sign in, add it under Google Auth Platform → Audience → Test users. The Android APK can't use Google sign-in (Google blocks it inside apps built this way), and Google Photos import needs the `/api/photo` function, which GitHub Pages can't run — Drive sync works there.
+
 ## 7. Use it
-- **First device (iPad):** Parent Mode → **Google & sync** → **Sign in with Google**. Mimzi uploads everything.
-- **Next device (Galaxy):** install Mimzi → Parent Mode (create a PIN for this device) → Google & sync → sign in with the **same** account. Everything comes down: words, photos, recordings, sign videos, My Day and My Words.
+- **First device (onn tablet, Chrome web link):** Parent Mode → **Google & sync** → **Sign in with Google**. Mimzi uploads everything.
+- **Next device (Galaxy or your phone):** install Mimzi → Parent Mode (create a PIN for this device) → Google & sync → sign in with the **same** account. Everything comes down: words, photos, recordings My Day and My Words.
 - After that, Mimzi syncs whenever you open or close Parent Mode (within an hour of signing in) or tap **Sync now**.
 
 ## Good to know

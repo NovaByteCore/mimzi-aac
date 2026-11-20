@@ -16,7 +16,7 @@ export const HOME_PAGE = 'core';
 
 export const CATEGORY_SEED: (Omit<Category, 'order' | 'hidden' | 'builtIn'> & { folderSymbol: string })[] = [
   { id: 'core', name: 'Home', symbol: 'mul:I', folderSymbol: 'mul:I', color: 'sun' },
-  { id: 'needs', name: 'Needs', symbol: 'mul:toilet', folderSymbol: 'mul:toilet', color: 'blue', parentId: 'core' },
+  { id: 'needs', name: 'Needs', symbol: 'svg:needs', folderSymbol: 'svg:needs', color: 'blue', parentId: 'core' },
   { id: 'food', name: 'Food & Drinks', symbol: 'mul:plate', folderSymbol: 'mul:plate', color: 'peach', parentId: 'core' },
   { id: 'family', name: 'People', symbol: 'mul:family', folderSymbol: 'mul:family', color: 'lavender', parentId: 'core' },
   { id: 'play', name: 'Toys & Play', symbol: 'mul:toy_box', folderSymbol: 'mul:toy_box', color: 'sage', parentId: 'core' },
@@ -52,27 +52,27 @@ const folder = (pageId: string): W => {
 const PAGES: Record<string, (W | null)[]> = {
   core: [
     // page 1
-    w('I', 'mul:I', 'pronoun'), w('want', 'mul:want_,_to', 'verb'), w('more', 'mul:more', 'little'), w('help', 'mul:help_,_to', 'verb'), w('stop', 'svg:stop', 'important'), w('all done', 'mul:finish', 'important'),
+    w('I', 'mul:I', 'pronoun'), w('want', 'mul:want_,_to', 'verb'), w('more', 'svg:more-bubbles', 'little'), w('help', 'mul:help_,_to', 'verb'), w('stop', 'svg:stop', 'important'), w('all done', 'svg:all-done-hands', 'important'),
     w('you', 'svg:you', 'pronoun'), w('go', 'mul:go_,_to', 'verb'), w('play', 'mul:play_,_to', 'verb'), w('eat', 'mul:eat_,_to', 'verb'), w('drink', 'mul:drink', 'verb'), w('no', 'svg:no', 'important'),
     w('yes', 'svg:yes', 'social'), w('open', 'mul:open', 'verb'), w('look', 'mul:look_,_to', 'verb'), w('get', 'mul:get_,_to', 'verb'), w('again', 'svg:again', 'little'), w('wait', 'svg:wait', 'little'),
     folder('food'), folder('family'), folder('play'), folder('feelings'), folder('needs'), folder('questions'),
     // page 2
     w('me', 'svg:me', 'pronoun'), w('mine', 'svg:mine', 'pronoun'), w('this', 'svg:this', 'little'), w('that', 'svg:that', 'little'), w('come', 'mul:come_,_to', 'verb'), w('give', 'mul:give_,_to', 'verb'),
     w('put', 'mul:put_,_to', 'verb'), w('close', 'mul:close_,_to', 'verb'), w('up', 'mul:up', 'little'), w('down', 'mul:down', 'little'), w('in', 'mul:in', 'little'), w('out', 'mul:out', 'little'),
-    w('on', 'mul:on', 'little'), w('off', 'mul:off', 'little'), w('break', 'svg:break', 'important'), null, null, folder('phrases'),
+    w('on', 'mul:on', 'little'), w('off', 'mul:off', 'little'), w('break', 'svg:break', 'important'), w('like', 'svg:like', 'verb', { hidden: true }), null, folder('phrases'),
     folder('actions'), folder('body'), folder('places'), folder('social'), folder('safety'), folder('describe'),
   ],
   needs: [
     w('eat', 'mul:eat_,_to', 'verb'), w('drink', 'mul:drink', 'verb'), w('hungry', 'mul:hungry', 'describe'), w('thirsty', 'mul:thirsty', 'describe'), w('milk', 'mul:milk', 'noun'), w('water', 'mul:water', 'noun'),
     w('snack', 'mul:biscuits', 'noun'), w('potty', 'mul:potty_chair', 'noun'), w('pee', 'svg:pee', 'noun'), w('poop', 'svg:poop', 'noun'), w('diaper', 'mul:nappy', 'noun'), w('sleep', 'mul:sleep_female_,_to', 'verb'),
-    w('tired', 'mul:yawn_,_to', 'describe'), w('hurt', 'mul:plaster', 'important'), w('break', 'svg:break', 'important'), w('help', 'mul:help_,_to', 'verb'), w('all done', 'mul:finish', 'important'), w('more', 'mul:more', 'little'),
+    w('tired', 'mul:yawn_,_to', 'describe'), w('hurt', 'mul:plaster', 'important'), w('break', 'svg:break', 'important'), w('help', 'mul:help_,_to', 'verb'), w('all done', 'svg:all-done-hands', 'important'), w('more', 'svg:more-bubbles', 'little'),
   ],
   // The caregiver chooses which foods appear — all start hidden. Mimzi never suggests foods.
   food: [
     w('milk', 'mul:milk', 'noun', { hidden: true }), w('water', 'mul:water', 'noun', { hidden: true }), w('juice', 'mul:apple_juice', 'noun', { hidden: true }), w('apple', 'mul:apple', 'noun', { hidden: true }), w('banana', 'mul:banana', 'noun', { hidden: true }), w('grapes', 'mul:grapes', 'noun', { hidden: true }),
     w('strawberry', 'mul:strawberry', 'noun', { hidden: true }), w('bread', 'mul:bread', 'noun', { hidden: true }), w('cheese', 'mul:cheese', 'noun', { hidden: true }), w('crackers', 'mul:cracker', 'noun', { hidden: true }), w('yogurt', 'mul:yogurt', 'noun', { hidden: true }), w('cereal', 'mul:cereal_bowl', 'noun', { hidden: true }),
     w('pasta', 'mul:pasta', 'noun', { hidden: true }), w('chicken', 'mul:chicken_nuggets', 'noun', { hidden: true }), w('cookie', 'mul:biscuits', 'noun', { hidden: true }), w('cup', 'mul:cup_non_spill', 'noun', { hidden: true }), w('plate', 'mul:plate', 'noun', { hidden: true }), w('spoon', 'mul:spoon', 'noun', { hidden: true }),
-    w('eat', 'mul:eat_,_to', 'verb'), w('drink', 'mul:drink', 'verb'), w('more', 'mul:more', 'little'), w('all done', 'mul:finish', 'important'), w('yummy', 'mul:yummy', 'describe'), w('yucky', 'mul:yucky', 'describe'),
+    w('eat', 'mul:eat_,_to', 'verb'), w('drink', 'mul:drink', 'verb'), w('more', 'svg:more-bubbles', 'little'), w('all done', 'svg:all-done-hands', 'important'), w('yummy', 'mul:yummy', 'describe'), w('yucky', 'mul:yucky', 'describe'),
   ],
   family: [
     w('Mama', 'mul:mum_parent', 'pronoun'), w('Dada', 'mul:dad_parent', 'pronoun'), w('Grandma', 'mul:grandmother', 'pronoun'), w('Grandpa', 'mul:grandfather', 'pronoun'), w('brother', 'mul:brother', 'pronoun', { hidden: true }), w('sister', 'mul:sister', 'pronoun', { hidden: true }),
@@ -82,7 +82,7 @@ const PAGES: Record<string, (W | null)[]> = {
     w('ball', 'mul:ball', 'noun'), w('bubbles', 'mul:bubbles', 'noun'), w('cars', 'mul:toy_car', 'noun'), w('blocks', 'mul:bricks', 'noun'), w('books', 'mul:read_,_to', 'noun'), w('music', 'mul:music', 'noun'),
     w('dance', 'mul:dance_,_to', 'verb'), w('outside', 'mul:outside', 'noun'), w('slide', 'mul:slide', 'noun'), w('swing', 'mul:swing', 'noun'), w('jump', 'mul:jump_,_to', 'verb'), w('run', 'mul:run_,_to', 'verb'),
     w('my turn', 'svg:my-turn', 'social'), w('your turn', 'svg:your-turn', 'social'), w('teddy', 'mul:teddy_bear', 'noun', { hidden: true }), w('doll', 'mul:doll', 'noun', { hidden: true }), w('puzzle', 'mul:jigsaw_puzzle', 'noun', { hidden: true }), w('crayons', 'mul:crayon', 'noun', { hidden: true }),
-    w('playdough', 'mul:playdough', 'noun', { hidden: true }), w('trampoline', 'mul:trampoline', 'noun', { hidden: true }), w('again', 'svg:again', 'little'), w('more', 'mul:more', 'little'), w('all done', 'mul:finish', 'important'), w('play', 'mul:play_,_to', 'verb'),
+    w('playdough', 'mul:playdough', 'noun', { hidden: true }), w('trampoline', 'mul:trampoline', 'noun', { hidden: true }), w('again', 'svg:again', 'little'), w('more', 'svg:more-bubbles', 'little'), w('all done', 'svg:all-done-hands', 'important'), w('play', 'mul:play_,_to', 'verb'),
   ],
   feelings: [
     w('happy', 'mul:happy_lady', 'describe'), w('sad', 'mul:sad_lady', 'describe'), w('mad', 'mul:angry_lady', 'describe'), w('scared', 'mul:afraid_lady', 'describe'), w('excited', 'mul:excited_lady', 'describe'), w('frustrated', 'mul:angry_man', 'describe'),
@@ -112,7 +112,7 @@ const PAGES: Record<string, (W | null)[]> = {
   safety: [
     w('stop', 'svg:stop', 'important'), w('no', 'svg:no', 'important'), w('help', 'mul:help_,_to', 'verb'), w('hurt', 'mul:plaster', 'important'), w('hot', 'mul:hot', 'describe'), w('cold', 'mul:snow', 'describe'),
     w('scared', 'mul:afraid_lady', 'describe'), w('too loud', 'mul:loud', 'describe'), w('too bright', 'mul:bright', 'describe'), w('break', 'svg:break', 'important'), w('safe', 'svg:safe', 'describe'), w('not safe', 'svg:not-safe', 'important'),
-    w('quiet', 'mul:quiet', 'describe'), w('hug', 'mul:hug_,_to', 'social'), w('all done', 'mul:finish', 'important'),
+    w('quiet', 'mul:quiet', 'describe'), w('hug', 'mul:hug_,_to', 'social'), w('all done', 'svg:all-done-hands', 'important'),
   ],
   describe: [
     w('big', 'mul:large', 'describe'), w('little', 'mul:little', 'describe'), w('wet', 'mul:wet', 'describe'), w('dry', 'mul:dry', 'describe'), w('dirty', 'mul:dirty', 'describe'), w('clean', 'mul:clean_hands', 'describe'),
@@ -120,34 +120,10 @@ const PAGES: Record<string, (W | null)[]> = {
     w('soft', 'mul:soft', 'describe'), w('loud', 'mul:loud', 'describe'), w('quiet', 'mul:quiet', 'describe'), w('broken', 'mul:broken', 'describe'),
   ],
   phrases: [
-    w('More please', 'mul:more', 'social'), w('Help me', 'mul:help_,_to', 'social'), w('I want that', 'svg:that', 'social'), w('Open it', 'mul:open', 'social'), w('Go outside', 'mul:go_outside_,_to', 'social'), w('More bubbles', 'mul:bubbles', 'social'),
-    w('My turn', 'svg:my-turn', 'social'), w('All done', 'mul:finish', 'important'), w('No thank you', 'svg:no', 'important'), w("I don't want it", 'svg:no', 'important'), w('It hurts', 'mul:plaster', 'important'), w('Where is Mama?', 'mul:where', 'question'),
+    w('More please', 'svg:more-bubbles', 'social'), w('Help me', 'mul:help_,_to', 'social'), w('I want that', 'svg:that', 'social'), w('Open it', 'mul:open', 'social'), w('Go outside', 'mul:go_outside_,_to', 'social'), w('More bubbles', 'mul:bubbles', 'social'),
+    w('My turn', 'svg:my-turn', 'social'), w('All done', 'svg:all-done-hands', 'important'), w('No thank you', 'svg:no', 'important'), w("I don't want it", 'svg:no', 'important'), w('It hurts', 'mul:plaster', 'important'), w('Where is Mama?', 'mul:where', 'question'),
     w('Read book', 'mul:read_,_to', 'social'), w('Play cars', 'mul:toy_car', 'social'), w('Look at that', 'mul:look_,_to', 'social'), w("I don't like that", 'svg:no', 'important'),
   ],
-};
-
-/** Words that show an ASL sign drawing under "See sign" (each checked against an ASL reference). */
-export const ASL_BY_LABEL: Record<string, string> = {
-  more: 'more',
-  want: 'want',
-  help: 'help',
-  stop: 'stop',
-  'all done': 'all-done',
-  yes: 'yes',
-  no: 'no',
-  play: 'play',
-  eat: 'eat',
-  drink: 'drink',
-  milk: 'milk',
-  sleep: 'sleep',
-  hurt: 'hurt',
-  please: 'please',
-  'thank you': 'thank-you',
-  Mama: 'mom',
-  Dada: 'dad',
-  'Help me': 'help',
-  'All done': 'all-done',
-  'It hurts': 'hurt',
 };
 
 /** Communication that should stay reachable — Mimzi warns before these are hidden. */
@@ -182,7 +158,9 @@ export function buildSeedTiles(): Tile[] {
         categoryId,
         order,
         symbol: word.symbol,
-        aslSign: ASL_BY_LABEL[word.label],
+        // Mimzi picks starter pictures: ARASAAC by default, this bundled one until it's downloaded.
+        symbolAuto: true,
+        fallbackSymbol: word.symbol,
         wordType: word.type,
         linkTo: word.link,
         color: CATEGORY_COLOR[categoryId] ?? 'cream',
