@@ -26,7 +26,16 @@ await writeFile(manifestPath, manifest);
 const gradlePath = 'android/app/build.gradle';
 let gradle = await readFile(gradlePath, 'utf8');
 gradle = gradle.replace(/versionCode \d+/, `versionCode ${run}`).replace(/versionName "[^"]*"/, `versionName "0.1.${run}"`);
+// The Google Photos browser tab library's newest release needs a newer Android toolchain than
+// Capacitor 7 uses; pin the previous release, which works the same here.
+if (!gradle.includes("androidx.browser:browser:1.8.0")) {
+  gradle += `\nconfigurations.all {\n    resolutionStrategy {\n        force 'androidx.browser:browser:1.8.0'\n    }\n}\n`;
+}
 await writeFile(gradlePath, gradle);
+const varsPath = 'android/variables.gradle';
+let vars = await readFile(varsPath, 'utf8');
+if (!vars.includes('androidxBrowserVersion')) vars = vars.replace(/ext\s*\{/, "ext {\n    androidxBrowserVersion = '1.8.0'");
+await writeFile(varsPath, vars);
 
 // Icons: Mimzi's own icon at every density (replaces the Capacitor placeholder).
 const sizes = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
