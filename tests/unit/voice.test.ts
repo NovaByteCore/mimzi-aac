@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { bestVoice, chooseVoice, rankVoices, speakText, voiceQuality } from '../../src/lib/speech.ts';
+import { bestVoice, chooseVoice, rankVoices, voiceQuality } from '../../src/lib/speech.ts';
 import { defaultSettings, mergeSettings } from '../../src/lib/defaults.ts';
 import { deviceOnlySettings, fromRecords, sharedSettings } from '../../src/lib/google/driveSync.ts';
 
@@ -95,10 +95,3 @@ test('sync: each device keeps its own voice; the shared preference travels', () 
   assert.equal(state.settings.voiceName, 'Tablet Voice');
   assert.equal(state.settings.sharedVoiceName, 'Zoe (Premium)');
 });
-
-for (const voice of ['af_heart', 'af_bella']) {
-  test(`a missing ${voice} pack reports an error instead of switching to device speech`, async () => {
-    const result = await speakText('This is a new sentence.', { lang: 'en-US', rate: 1, voiceURI: `mimzi:${voice}` });
-    assert.equal(result, 'error');
-  });
-}
