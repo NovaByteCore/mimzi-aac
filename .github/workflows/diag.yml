@@ -1,0 +1,17 @@
+name: diag
+on: { push: { branches: [diag/social-login] } }
+jobs:
+  src:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          mkdir x && cd x && npm init -y >/dev/null
+          npm view @capgo/capacitor-social-login versions --json | tail -15
+          npm view @capgo/capacitor-social-login@7 version peerDependencies --json | tail -20
+          npm install --silent @capgo/capacitor-social-login@7 @capacitor/browser@7 >/dev/null
+          d=node_modules/@capgo/capacitor-social-login
+          echo "===== definitions"; sed -n '1,400p' $d/dist/esm/definitions.d.ts
+          echo "===== README google"; grep -n -i -A60 "^## Google" $d/README.md | head -200
+          echo "===== android files"; find $d/android -name "*.java" -o -name "*.kt" | head
+          f=$(grep -rl "class GoogleProvider" $d/android | head -1); echo "===== $f"; grep -n "scopes\|accessToken\|AuthorizationRequest\|webClientId\|mode\|getString(\|put(\"" $f | head -80
+          echo "===== browser"; sed -n '1,80p' node_modules/@capacitor/browser/dist/esm/definitions.d.ts
