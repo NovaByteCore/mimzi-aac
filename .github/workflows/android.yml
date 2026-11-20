@@ -37,7 +37,7 @@ jobs:
         run: |
           if [ -f package-lock.json ]; then npm ci; else npm install; fi
           # Saved into package.json on the build machine only: Capacitor finds plugins there.
-          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor-community/text-to-speech@6 @capgo/capacitor-social-login@7 @capacitor/browser@7
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 @capacitor-community/text-to-speech@6 @capgo/capacitor-social-login@7 @capacitor/browser@7 @capacitor/local-notifications@7
 
       - name: Build the web app for Android
         env:
@@ -58,7 +58,7 @@ jobs:
           # Fail the build if the speech plugin isn't registered (Mimzi can't talk without it).
           grep -q "TextToSpeech" android/app/src/main/assets/capacitor.plugins.json || { cat android/app/src/main/assets/capacitor.plugins.json; exit 1; }
           # Same for Google sign-in and the Google Photos browser tab.
-          for p in SocialLogin Browser; do grep -q "$p" android/app/src/main/assets/capacitor.plugins.json || { cat android/app/src/main/assets/capacitor.plugins.json; exit 1; }; done
+          for p in SocialLogin Browser LocalNotifications; do grep -q "$p" android/app/src/main/assets/capacitor.plugins.json || { cat android/app/src/main/assets/capacitor.plugins.json; exit 1; }; done
 
       - name: Build the APK
         working-directory: android

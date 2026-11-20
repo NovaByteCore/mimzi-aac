@@ -29,7 +29,8 @@ type View = 'talk' | 'myday' | 'favorites' | 'people' | 'parent';
 
 export function App() {
   const store = useMimzi();
-  const { tiles, categories, settings, mediaUrls } = store;
+  const { tiles, categories, settings, mediaUrls, grow } = store;
+  const wordsToReview = grow.remind && grow.items.some((item) => item.status === 'pending');
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -347,7 +348,7 @@ export function App() {
           onHold={() => setGateOpen(true)}
           onTap={() => setGateOpen(true)}
         >
-          <Icon name="lock" size={26} /> Grown-ups
+          <Icon name="lock" size={26} /> {wordsToReview ? 'Grown-ups · Words ready' : 'Grown-ups'}
         </HoldButton>
       </nav>
 

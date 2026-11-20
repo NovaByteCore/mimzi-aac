@@ -6,7 +6,7 @@ import { allScheduleItems } from '../lib/myday';
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, SymbolInfo, Tile, VocabEvent } from '../types';
-import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../lib/grow';
+import { dayString, mergeGrowPlan, processDue, setStatus, suggestWeeklyWords, vocabEvent } from '../lib/grow';
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
 import { applyNewDefaultsV5, fixArasaacPicksV2, migrateLikeWord, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
@@ -436,6 +436,31 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     setStamp('grow');
     setData((d) => ({ ...d, grow: plan }));
   }, []);
+
+  const checkingSuggestions = useRef(false);
+  useEffect(() => {
+    if (data.status !== 'ready' || !data.grow.suggestWeekly || data.grow.paused) return;
+    const check = async () => {
+      if (checkingSuggestions.current) return;
+      const { grow, tiles } = dataRef.current;
+      const next = suggestWeeklyWords(grow, tiles, dayString());
+      if (next === grow) return;
+      checkingSuggestions.current = true;
+      try {
+        await updateGrow(next);
+      } finally {
+        checkingSuggestions.current = false;
+      }
+    };
+    const run = () => void check().catch((error) => console.error('Could not queue weekly words', error));
+    run();
+    const timer = window.setInterval(run, 60_000);
+    window.addEventListener('focus', run);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', run);
+    };
+  }, [data.status, data.grow.suggestWeekly, data.grow.paused, data.tiles, updateGrow]);
 
   const resolveGrow = useCallback(
     async (itemIds: string[], action: 'approve' | 'skip' | 'cancel') => {

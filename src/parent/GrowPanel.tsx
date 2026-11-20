@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { addDays, dayString, moveItem, parseDay, pendingItems, reschedule, scheduleWords } from '../lib/grow';
 import type { GrowItem, GrowPlan } from '../types';
+import { scheduleWeeklyWordReminder } from '../lib/wordReminder';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from '../components/Icon';
 
@@ -23,6 +24,8 @@ export function GrowPanel() {
   const [filter, setFilter] = useState('');
   const [month, setMonth] = useState(today.slice(0, 7));
   const [confirmAuto, setConfirmAuto] = useState(false);
+  const [reminderStatus, setReminderStatus] = useState('');
+  const [settingReminder, setSettingReminder] = useState(false);
   const tileById = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? '';
   const label = (id: string) => tileById.get(id)?.label ?? '(deleted word)';
@@ -118,7 +121,30 @@ export function GrowPanel() {
         />
         Pause the schedule {grow.paused && <span className="muted small">(resuming re-plans upcoming words from today)</span>}
       </label>
-      <p className="muted small">Mimzi can’t send notifications; reminders appear here and at the top of Parent Mode when you open it.</p>
+      <label className="field inline">
+        <input type="checkbox" checked={Boolean(grow.suggestWeekly)} onChange={(event) => {
+          const suggestWeekly = event.target.checked;
+          save({ ...grow, suggestWeekly });
+          if (!suggestWeekly) void scheduleWeeklyWordReminder(false).catch(() => setReminderStatus('Could not cancel the tablet reminder.'));
+        }} />
+        Suggest up to two words each week
+      </label>
+      <p className="muted small">Mimzi looks at the words on the Home board and suggests words they can go with. You approve each suggestion before it appears.</p>
+      {grow.suggestWeekly && (
+        <button type="button" className="btn" disabled={settingReminder} onClick={async () => {
+          setSettingReminder(true);
+          try {
+            setReminderStatus(await scheduleWeeklyWordReminder(true)
+              ? 'Tablet reminder set for Mondays at 9:00 a.m.'
+              : 'Tablet notifications are unavailable here or turned off. Mimzi shows a reminder inside the app.');
+          } catch {
+            setReminderStatus('Could not set the tablet reminder. Try again.');
+          } finally {
+            setSettingReminder(false);
+          }
+        }}>Enable weekly tablet reminder</button>
+      )}
+      {reminderStatus && <p role="status">{reminderStatus}</p>}
 
       <h3>Choose words to add</h3>
       <div className="add-row">

@@ -326,6 +326,7 @@ export interface GrowItem {
 }
 
 export interface GrowPlan {
+  suggestWeekly?: boolean;
   cadence: 'daily' | 'weekly';
   /** Words per day / per week. */
   perPeriod: number;
