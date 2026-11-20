@@ -86,6 +86,7 @@ export const SYMBOLS: Record<string, () => ReactElement> = {
       <Cross />
     </g>
   ),
+  like: () => <Heart />,
   want: () => (
     <g>
       <Heart x={40} y={50} s={1.15} />
