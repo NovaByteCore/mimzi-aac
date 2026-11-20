@@ -38,7 +38,6 @@ export function TileButton({ tile, photoUrl, onTap, compact }: Props) {
         <TileFace tile={tile} photoUrl={photoUrl} label={tile.label} />
       </span>
       <span className="tile-label">
-        {isFolder && <span className="folder-tab" aria-hidden="true" />}
         {tile.label}
       </span>
     </button>
