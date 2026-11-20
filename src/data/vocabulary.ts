@@ -59,7 +59,7 @@ const PAGES: Record<string, (W | null)[]> = {
     // page 2
     w('me', 'svg:me', 'pronoun'), w('mine', 'svg:mine', 'pronoun'), w('this', 'svg:this', 'little'), w('that', 'svg:that', 'little'), w('come', 'mul:come_,_to', 'verb'), w('give', 'mul:give_,_to', 'verb'),
     w('put', 'mul:put_,_to', 'verb'), w('close', 'mul:close_,_to', 'verb'), w('up', 'mul:up', 'little'), w('down', 'mul:down', 'little'), w('in', 'mul:in', 'little'), w('out', 'mul:out', 'little'),
-    w('on', 'mul:on', 'little'), w('off', 'mul:off', 'little'), w('break', 'svg:break', 'important'), null, null, folder('phrases'),
+    w('on', 'mul:on', 'little'), w('off', 'mul:off', 'little'), w('break', 'svg:break', 'important'), w('like', 'svg:like', 'verb', { hidden: true }), null, folder('phrases'),
     folder('actions'), folder('body'), folder('places'), folder('social'), folder('safety'), folder('describe'),
   ],
   needs: [
