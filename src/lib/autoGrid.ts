@@ -15,6 +15,8 @@ export interface AutoGridInput {
   textScale: number;
   /** Parent Mode "space between pictures" (px) — the most spacing auto layout will use. */
   maxGap: number;
+  /** Prefer the smallest grid that fits this vocabulary count. */
+  wordCount?: number;
 }
 
 export interface AutoGridResult {
@@ -38,7 +40,7 @@ export function gapFor(width: number, height: number, maxGap: number): number {
   return Math.max(4, Math.min(maxGap, Math.round(Math.min(width, height) * 0.02)));
 }
 
-export function autoGrid({ width, height, textScale, maxGap }: AutoGridInput): AutoGridResult {
+export function autoGrid({ width, height, textScale, maxGap, wordCount }: AutoGridInput): AutoGridResult {
   const W = Math.max(0, width);
   const H = Math.max(0, height);
   const gap = gapFor(W, H, maxGap);
@@ -47,8 +49,10 @@ export function autoGrid({ width, height, textScale, maxGap }: AutoGridInput): A
   const minTile = Math.min(minTileFor(textScale), Math.floor(Math.min(W, H) * 0.42));
   let best: (AutoGridResult & { score: number }) | null = null;
   let biggest: (AutoGridResult & { side: number }) | null = null;
-  for (let cols = 2; cols <= MAX_COLS; cols++) {
-    for (let rows = 2; rows <= MAX_ROWS; rows++) {
+  const target = wordCount && wordCount > 0 ? wordCount : undefined;
+  const minRows = target && target <= 3 ? 1 : 2;
+  for (let cols = minRows; cols <= MAX_COLS; cols++) {
+    for (let rows = minRows; rows <= MAX_ROWS; rows++) {
       const w = (W - (cols - 1) * gap) / cols;
       const h = (H - (rows - 1) * gap) / rows;
       if (w <= 0 || h <= 0) continue;
@@ -56,9 +60,11 @@ export function autoGrid({ width, height, textScale, maxGap }: AutoGridInput): A
       if (!biggest || side > biggest.side) biggest = { grid: { rows, cols }, gap, tile: { w, h }, side };
       const ratio = w / h;
       // Tiles must be big enough and roughly square (a picture above a label).
-      if (rows * cols > 30 || side < minTile || ratio < 0.7 || ratio > 1.8) continue;
+      if (rows * cols > 30 || side < minTile || ratio < (target === undefined ? 0.7 : 0.6) || ratio > 1.8) continue;
       // Most words per page, then the squarest tiles.
-      const score = rows * cols * 1000 - Math.abs(Math.log(ratio)) * 100;
+      const capacity = rows * cols;
+      const rank = target !== undefined && capacity >= target ? 100 - (capacity - target) : capacity;
+      const score = rank * 1000 - Math.abs(Math.log(ratio)) * 100;
       if (!best || score > best.score) best = { grid: { rows, cols }, gap, tile: { w, h }, score };
     }
   }

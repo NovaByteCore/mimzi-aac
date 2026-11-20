@@ -96,3 +96,17 @@ export function swapCandidates(tiles: Tile[], categoryId: string): { hiddenHere:
     .sort((a, b) => a.label.localeCompare(b.label));
   return { hiddenHere, otherPages };
 }
+
+/** Keep words already shown when possible; reveal or hide in board order. Folders are unaffected. */
+export function wordCountChanges(pageTiles: Tile[], count: number): { ids: string[]; hidden: boolean } {
+  const words = pageTiles.filter((tile) => !tile.linkTo && !tile.deletedAt);
+  const shown = words.filter((tile) => !tile.hidden);
+  if (count < shown.length) return { ids: shown.slice(count).map((tile) => tile.id), hidden: true };
+  return { ids: words.filter((tile) => tile.hidden).slice(0, count - shown.length).map((tile) => tile.id), hidden: false };
+}
+
+/** Visible vocabulary first, then folder shortcuts, preserving order within each group. */
+export function compactBoardWords(pageTiles: Tile[]): Tile[] {
+  const shown = pageTiles.filter((tile) => !tile.hidden);
+  return [...shown.filter((tile) => !tile.linkTo), ...shown.filter((tile) => tile.linkTo)];
+}

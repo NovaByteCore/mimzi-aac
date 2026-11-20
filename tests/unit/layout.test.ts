@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { autoGrid, pageForAnchor, minTileFor } from '../../src/lib/autoGrid.ts';
-import { swapWordInto, swapCandidates } from '../../src/lib/manageWords.ts';
+import { swapWordInto, swapCandidates, wordCountChanges, compactBoardWords } from '../../src/lib/manageWords.ts';
 import { draftChanges, draftFor, moveInDraft, tileAt } from '../../src/lib/arrange.ts';
 import { pageCount, slotMap, orderedTiles } from '../../src/lib/grid.ts';
 import { buildSeedTiles } from '../../src/data/vocabulary.ts';
@@ -125,4 +125,19 @@ test('arrange: dropping on a word swaps the two; dropping on an empty spot moves
   assert.equal(tileAt(d2, want), undefined, 'old spot is empty; nobody slid into it');
   assert.deepEqual(draftChanges(tiles, 'core', d2), [{ id: 'core-want', order: empty }]);
   assert.deepEqual(draftChanges(tiles, 'core', d0), [], 'no changes → nothing to save');
+});
+
+test('custom counts keep existing words and folders, and resize the grid to the count', () => {
+  const home = orderedTiles(seed, 'core');
+  const ten = wordCountChanges(home, 10);
+  assert.equal(ten.hidden, true);
+  const board = home.map((tile) => ten.ids.includes(tile.id) ? { ...tile, hidden: true } : tile);
+  assert.equal(compactBoardWords(board).filter((tile) => !tile.linkTo).length, 10);
+  assert.deepEqual(compactBoardWords(board).filter((tile) => tile.linkTo), home.filter((tile) => tile.linkTo && !tile.hidden));
+  const twenty = wordCountChanges(board, 20);
+  assert.equal(twenty.hidden, false);
+  assert.equal(twenty.ids.length, 10);
+  const size = (wordCount: number) => autoGrid({ width: 1048, height: 660, textScale: 1, maxGap: 12, wordCount }).grid;
+  assert.equal(size(10).rows * size(10).cols, 10);
+  assert.equal(size(20).rows * size(20).cols, 20);
 });

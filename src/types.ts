@@ -151,6 +151,8 @@ export interface Settings {
   grid: GridSize;
   /** 'auto' (default) = fit tile size and spacing to the screen; 'fixed' = always `grid`. */
   layoutMode?: 'auto' | 'fixed';
+  /** Pages whose visible words are packed after applying a custom count. */
+  compactWordPages?: string[];
   showSentenceBar: boolean;
   /** 0.5 – 1.5, 1 = normal. */
   speechRate: number;

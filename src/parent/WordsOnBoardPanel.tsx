@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { orderedTiles, pageCount, slotMap } from '../lib/grid';
 import { lastBoardGrid } from '../lib/autoGrid';
-import { swapCandidates } from '../lib/manageWords';
+import { compactBoardWords, swapCandidates, wordCountChanges } from '../lib/manageWords';
 import { ESSENTIAL_TILE_IDS, HOME_PAGE } from '../data/vocabulary';
 import { TileFace } from '../components/TileFace';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -17,9 +17,11 @@ import { Icon } from '../components/Icon';
  * (Help, Stop, No, More, All done) stay in their own bar.
  */
 export function WordsOnBoardPanel() {
-  const { tiles, categories, settings, mediaUrls, setTilesHidden, swapWord } = useMimzi();
+  const { tiles, categories, settings, mediaUrls, setTilesHidden, swapWord, updateSettings } = useMimzi();
   const pages = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const [pageId, setPageId] = useState(HOME_PAGE);
+  const [countDraft, setCountDraft] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [swapOpen, setSwapOpen] = useState(false);
   const [filter, setFilter] = useState('');
@@ -27,12 +29,16 @@ export function WordsOnBoardPanel() {
   const [confirm, setConfirm] = useState<{ title: string; message: string; run: () => void } | null>(null);
 
   // Preview with the same rows × columns the child's board uses right now.
-  const grid = settings.layoutMode === 'fixed' ? settings.grid : lastBoardGrid(settings.grid);
+  const compact = settings.compactWordPages?.includes(pageId) ?? false;
+  const grid = settings.layoutMode === 'fixed' && !compact ? settings.grid : lastBoardGrid(settings.grid);
   const pageTiles = orderedTiles(tiles, pageId);
-  const visible = pageTiles.filter((t) => !t.hidden);
+  const vocabulary = pageTiles.filter((tile) => !tile.linkTo);
+  const visible = vocabulary.filter((t) => !t.hidden);
   const perPage = grid.rows * grid.cols;
   const map = slotMap(pageTiles);
-  const nPages = Math.max(pageCount(pageTiles, grid, true, true), selected != null ? Math.floor(selected / perPage) + 1 : 1);
+  const byId = new Map([...map].map(([slot, tile]) => [tile.id, slot]));
+  const compactSlots = compact ? [...compactBoardWords(pageTiles), ...pageTiles.filter((tile) => tile.hidden)].map((tile) => byId.get(tile.id)!) : [];
+  const nPages = compact ? Math.max(1, Math.ceil(compactSlots.length / perPage)) : Math.max(pageCount(pageTiles, grid, true, true), selected != null ? Math.floor(selected / perPage) + 1 : 1);
   const pageName = pages.find((p) => p.id === pageId)?.name ?? '';
   const selTile = selected != null ? map.get(selected) : undefined;
   const { hiddenHere, otherPages } = useMemo(() => swapCandidates(tiles, pageId), [tiles, pageId]);
@@ -40,9 +46,29 @@ export function WordsOnBoardPanel() {
 
   const choosePage = (id: string) => {
     setPageId(id);
+    setCountDraft(null);
     setSelected(null);
     setSwapOpen(false);
     setStatus(null);
+  };
+
+  const applyCount = async (count: number) => {
+    if (!Number.isInteger(count) || count < 0 || count > vocabulary.length || applying) return;
+    setApplying(true);
+    setStatus(null);
+    try {
+      const change = wordCountChanges(pageTiles, count);
+      await setTilesHidden(change.ids, change.hidden);
+      if (!compact) await updateSettings({ compactWordPages: [...(settings.compactWordPages ?? []), pageId] });
+      setCountDraft(null);
+      setSelected(null);
+      setSwapOpen(false);
+      setStatus({ text: `Showing ${count} ${count === 1 ? 'word' : 'words'}. Tap a word to swap it.` });
+    } catch {
+      setStatus({ text: 'Could not finish updating the board. Try applying the word count again.' });
+    } finally {
+      setApplying(false);
+    }
   };
 
   const setHidden = (t: Tile, hidden: boolean) => {
@@ -84,15 +110,24 @@ export function WordsOnBoardPanel() {
 
       <div className="chip-row" role="tablist" aria-label="Pages">
         {pages.map((c) => (
-          <button key={c.id} type="button" role="tab" aria-selected={c.id === pageId} className={`chip-btn${c.id === pageId ? ' chip-btn-on' : ''}`} onClick={() => choosePage(c.id)}>
+          <button key={c.id} type="button" role="tab" aria-selected={c.id === pageId} className={`chip-btn${c.id === pageId ? ' chip-btn-on' : ''}`} onClick={() => choosePage(c.id)} disabled={applying}>
             {c.name}
           </button>
         ))}
       </div>
 
+      <form className="row" onSubmit={(e) => { e.preventDefault(); void applyCount(Number(countDraft ?? visible.length)); }}>
+        <label className="field inline">
+          <span>How many words?</span>
+          <input type="number" inputMode="numeric" min={0} max={vocabulary.length} step={1} required value={countDraft ?? String(visible.length)} onChange={(e) => setCountDraft(e.target.value)} disabled={applying} />
+        </label>
+        <button type="submit" className="btn btn-primary" disabled={applying}>Apply word count</button>
+      </form>
+      <p className="muted small">Choose up to {vocabulary.length} words on this board. Folders and Quick Words are separate.</p>
+
       <div className="wob-summary" data-testid="wob-count" aria-live="polite">
         <strong>{visible.length}</strong> word{visible.length === 1 ? '' : 's'} visible on “{pageName}”
-        {pageTiles.length > visible.length && <span className="muted"> · {pageTiles.length - visible.length} hidden</span>}
+        {vocabulary.length > visible.length && <span className="muted"> · {vocabulary.length - visible.length} hidden</span>}
       </div>
 
       {Array.from({ length: nPages }, (_, page) => (
@@ -100,7 +135,9 @@ export function WordsOnBoardPanel() {
           {nPages > 1 && <h3>Page {page + 1}</h3>}
           <div className="wob-grid" style={{ gridTemplateColumns: `repeat(${grid.cols}, minmax(0, 1fr))` }}>
             {Array.from({ length: perPage }, (_, i) => {
-              const slot = page * perPage + i;
+              const index = page * perPage + i;
+              const slot = compact ? compactSlots[index] : index;
+              if (slot === undefined) return null;
               const t = map.get(slot);
               const isSel = selected === slot;
               if (!t)
@@ -158,9 +195,9 @@ export function WordsOnBoardPanel() {
                 <Icon name={selTile.hidden ? 'eye' : 'eye-off'} /> {selTile.hidden ? 'Show' : 'Hide'}
               </button>
             )}
-            <button type="button" className="btn btn-primary" onClick={() => setSwapOpen((o) => !o)} aria-expanded={swapOpen} data-testid="wob-swap">
+            {(!compact || !selTile?.linkTo) && <button type="button" className="btn btn-primary" onClick={() => setSwapOpen((o) => !o)} aria-expanded={swapOpen} data-testid="wob-swap">
               <Icon name="swap" /> {selTile ? 'Swap for another word…' : 'Put a word here…'}
-            </button>
+            </button>}
             <button type="button" className="btn btn-ghost" onClick={() => setSelected(null)}>
               Done
             </button>

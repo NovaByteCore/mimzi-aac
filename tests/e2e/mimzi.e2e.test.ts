@@ -1176,6 +1176,31 @@ test('V3-5: Manage words — hide words one by one; the count updates and nothin
   await ctx.close();
 });
 
+test('custom Home word count stays exact after swapping a visible word', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Manage words' }).click();
+  const count = page.getByRole('spinbutton', { name: 'How many words?' });
+  const summary = page.getByTestId('wob-count');
+  await count.fill('20');
+  await page.getByRole('button', { name: 'Apply word count' }).click();
+  await summary.getByText(/^20 words visible/).waitFor();
+  await count.fill('10');
+  await page.getByRole('button', { name: 'Apply word count' }).click();
+  await summary.getByText(/^10 words visible/).waitFor();
+  await page.getByTestId('wob-status').getByText(/Showing 10 words/).waitFor();
+  await page.locator('[data-wob="core-go"]').click();
+  await page.getByTestId('wob-swap').click();
+  await page.getByTestId('wob-swap-list').locator('[data-cand="core-wait"]').click();
+  await page.getByTestId('wob-status').getByText(/“wait” is now in “go”’s spot/).waitFor();
+  await summary.getByText(/^10 words visible/).waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid [data-tile-id="core-wait"]').waitFor();
+  assert.equal(await page.locator('.board-grid [data-tile-id="core-go"]').count(), 0);
+  assert.equal(await page.locator('.quick-bar [data-tile-id]').count(), 5);
+  await ctx.close();
+});
+
 test('V3-7: hide and restore a word — same spot, picture and speech', async () => {
   const { ctx, page } = await openApp();
   const slotOf = () => page.locator('.board-grid > *').evaluateAll((els) => els.findIndex((e) => (e.getAttribute('data-tile-id') ?? e.querySelector('[data-tile-id]')?.getAttribute('data-tile-id')) === 'core-look'));

@@ -43,6 +43,7 @@ export function mergeSettings(saved: Partial<Settings> | undefined): Settings {
   const base = defaultSettings();
   if (!saved) return base;
   const merged: Settings = { ...base, ...saved, grid: { ...base.grid, ...(saved.grid ?? {}) } };
+  merged.compactWordPages = Array.isArray(saved.compactWordPages) ? saved.compactWordPages.filter((id) => typeof id === 'string') : undefined;
   if ((saved.voiceDefaults ?? 1) < 2) {
     // New friendlier voice defaults — only where the grown-up never changed them.
     if (saved.speechPitch === undefined || saved.speechPitch === 1) merged.speechPitch = base.speechPitch;

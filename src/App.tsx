@@ -1,3 +1,4 @@
+import { compactBoardWords } from './lib/manageWords';
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useMimzi } from './state/MimziStore';
 import { Board } from './components/Board';
@@ -189,9 +190,15 @@ export function App() {
   let boardLabel = '';
   let emptyMessage: string | undefined;
   let slotted = true;
+  let wordCount: number | undefined;
   const pageKey = view === 'talk' ? `cat:${categoryId}` : view;
   if (view === 'talk') {
     boardTiles = orderedTiles(tiles, categoryId);
+    if (settings.compactWordPages?.includes(categoryId)) {
+      boardTiles = compactBoardWords(boardTiles);
+      wordCount = boardTiles.filter((tile) => !tile.linkTo).length;
+      slotted = false;
+    }
     boardLabel = categories.find((c) => c.id === categoryId)?.name ?? 'Words';
     emptyMessage =
       categoryId === 'food'
@@ -298,7 +305,7 @@ export function App() {
           slotted={slotted}
           tiles={boardTiles}
           grid={settings.grid}
-          auto={settings.layoutMode === 'fixed' ? undefined : { textScale: settings.textScale, maxGap: settings.tileGap }}
+          auto={settings.layoutMode === 'fixed' && wordCount === undefined ? undefined : { textScale: settings.textScale, maxGap: settings.tileGap, wordCount }}
           anchor={pages[pageKey] ?? 0}
           onAnchor={(slot) => setPages((s) => ({ ...s, [pageKey]: slot }))}
           onTap={onTap}
