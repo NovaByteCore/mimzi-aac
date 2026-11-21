@@ -16,6 +16,7 @@ import { moveTile as computeMove, nextOrder, slotMap } from '../lib/grid';
 import { createBackup, type BackupFile, type RestoredData } from '../lib/backup';
 import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
+import { pictureCopies } from '../lib/samePicture';
 import { swapWordInto, type SwapResult } from '../lib/manageWords';
 import { currentToken, fetchProfile, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
 import { createDriveClient } from '../lib/google/drive';
@@ -271,13 +272,26 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /** Save a tile; when its picture changed, give every other copy of the same word that picture too. */
+  const putWithPictureCopies = async (prev: Tile | undefined, next: Tile) => {
+    const copies = next.deletedAt ? [] : pictureCopies(prev, next, dataRef.current.tiles);
+    await db.put('tiles', next);
+    for (const c of copies) await db.put('tiles', c);
+    const changed = new Map([next, ...copies].map((t) => [t.id, t]));
+    setData((d) => ({ ...d, tiles: d.tiles.map((x) => changed.get(x.id) ?? x) }));
+  };
+
   const saveTile = useCallback(
     async (input: Tile, newMedia: MediaRecord[] = []) => {
       const tile = { ...input, updatedAt: Date.now() };
+      const copies = pictureCopies(dataRef.current.tiles.find((t) => t.id === tile.id), tile, dataRef.current.tiles);
       await db.put('tiles', tile);
-      const tiles = [...dataRef.current.tiles.filter((t) => t.id !== tile.id), tile];
+      for (const c of copies) await db.put('tiles', c);
+      const changed = new Map([tile, ...copies].map((t) => [t.id, t]));
+      const merge = (list: Tile[]) => [...list.filter((t) => !changed.has(t.id)), ...changed.values()];
+      const tiles = merge(dataRef.current.tiles);
       const applyUrls = await commitMedia(newMedia, { ...dataRef.current, tiles });
-      setData((d) => ({ ...d, tiles: [...d.tiles.filter((t) => t.id !== tile.id), tile], ...applyUrls(d) }));
+      setData((d) => ({ ...d, tiles: merge(d.tiles), ...applyUrls(d) }));
     },
     [commitMedia],
   );
@@ -286,9 +300,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     const t = dataRef.current.tiles.find((x) => x.id === id);
     if (!t) return;
     const next = { ...t, ...patch, updatedAt: Date.now() };
-    await db.put('tiles', next);
-    setData((d) => ({ ...d, tiles: d.tiles.map((x) => (x.id === id ? next : x)) }));
-  }, []);
+    await putWithPictureCopies(t, next);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const softDeleteTile = useCallback((id: string) => patchTile(id, { deletedAt: Date.now() }), [patchTile]);
 
@@ -677,10 +690,9 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         choice === 'auto'
           ? { ...t, symbol: t.fallbackSymbol ?? t.symbol, symbolInfo: undefined, symbolAuto: true, updatedAt: Date.now() }
           : { ...t, symbol: choice.symbol, symbolInfo: choice.symbolInfo, symbolAuto: false, fallbackSymbol: t.fallbackSymbol ?? (t.symbol && /^(mul|svg):/.test(t.symbol) ? t.symbol : undefined), updatedAt: Date.now() };
-      await db.put('tiles', next);
-      setData((d) => ({ ...d, tiles: d.tiles.map((x) => (x.id === id ? next : x)) }));
+      await putWithPictureCopies(undefined, next); // a chosen picture always lines up every copy of the word
     },
-    [],
+    [], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   const setTilePicture = useCallback(
@@ -700,8 +712,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         fallbackSymbol: t.fallbackSymbol ?? (t.symbol && /^(mul|svg):/.test(t.symbol) ? t.symbol : undefined),
         updatedAt: Date.now(),
       };
-      await db.put('tiles', next);
-      setData((d) => ({ ...d, tiles: d.tiles.map((x) => (x.id === id ? next : x)) }));
+      await putWithPictureCopies(undefined, next); // a chosen picture always lines up every copy of the word
     },
     [], // eslint-disable-line react-hooks/exhaustive-deps
   );

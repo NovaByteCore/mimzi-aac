@@ -1042,7 +1042,7 @@ test('Google: sign in, then a second device signs in and gets everything (photos
   await googleSignIn(galaxy.page);
   await galaxy.page.getByRole('button', { name: /back to Talk/ }).click();
   await galaxy.page.getByRole('navigation', { name: 'Main' }).getByRole('button', { name: 'My People' }).click();
-  await galaxy.page.locator('.board-grid .tile[aria-label="Rex"] img').waitFor();
+  await (await findTile(galaxy.page, '.tile[aria-label="Rex"]')).locator('img').waitFor();
   await enterParentMode(galaxy.page, false);
   await galaxy.page.getByRole('tab', { name: 'My Words', exact: true }).click();
   await galaxy.page.locator('tr[data-obs="more"]').waitFor();
@@ -2720,5 +2720,46 @@ for (const c of COMPACT) test(`pictures and Arrange words on a compact tablet ($
   await page.reload();
   await page.waitForSelector('.board-grid .tile');
   assert.deepEqual(await homeOrder(), saved, 'same order after reopening');
+  await ctx.close();
+});
+
+test('same word, same picture: changing milk on Needs updates the Food milk in Quick Words; Edit buttons open the right words', async () => {
+  const { ctx, page } = await openApp();
+  await enterParentMode(page);
+  // Put the Food page's "milk" on the quick bar (Needs has its own "milk").
+  await page.getByRole('tab', { name: 'Quick words' }).click();
+  await page.getByTestId('quick-add-select').selectOption('food-milk');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  // Change the Needs "milk" picture.
+  await page.getByRole('tab', { name: 'Edit AAC board' }).click();
+  await page.getByRole('tab', { name: 'Needs', exact: true }).click();
+  await page.locator('[data-change-picture="needs-milk"]').click();
+  await choosePictureFromSearch(page, 'trampoline', 'mul:trampoline');
+  await page.getByTestId('picture-picker').waitFor({ state: 'detached' });
+  // The quick-bar view in the Words editor shows the same new picture.
+  await page.getByTestId('words-view-quick').click();
+  await page.locator('[data-change-picture="food-milk"] img[src*="trampoline"]').waitFor();
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.quick-bar [data-tile-id="food-milk"] img[src*="trampoline"]').waitFor({ state: 'attached' });
+  // After a reload it's still the same picture.
+  await page.reload();
+  await page.locator('.quick-bar [data-tile-id="food-milk"] img[src*="trampoline"]').waitFor({ state: 'attached' });
+
+  // My People has its own Edit button: PIN, then straight to the People words.
+  await page.locator('.main-nav').getByRole('button', { name: /My People/ }).click();
+  await page.getByTestId('edit-people-btn').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByRole('heading', { name: /Parent Mode/ }).waitFor();
+  assert.equal(await page.locator('.chip-btn-on').first().textContent(), 'People');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+
+  // Favorites: "Pictures & names" opens every favorite word for editing.
+  await page.locator('.main-nav').getByRole('button', { name: /Favorites/ }).click();
+  await page.getByTestId('edit-favorite-words-btn').click();
+  await typePin(page, PIN);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.locator('[data-change-picture="needs-milk"]').waitFor();
+  assert.ok(await page.getByTestId('words-view-favorites').getAttribute('aria-selected') === 'true');
   await ctx.close();
 });

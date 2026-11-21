@@ -30,6 +30,7 @@ export function QuickWordsPanel() {
         {quick.map((id, i) => (
           <li key={id} className="cat-row">
             <strong>{tileById.get(id)?.label}</strong>
+            <small className="muted">{categories.find((c) => c.id === tileById.get(id)?.categoryId)?.name}</small>
             <span className="spacer" />
             <button type="button" className="icon-btn small" onClick={() => moveQuick(i, -1)} disabled={i === 0} aria-label={`Move ${tileById.get(id)?.label} up`}>
               <Icon name="up" />

@@ -20,6 +20,7 @@ import { remoteSymbolUrls } from './lib/symbols';
 import { scheduleSymbolUrls } from './lib/myday';
 import type { MyDayTool, SpeechState, Tile, Utterance } from './types';
 import { ParentGate } from './parent/ParentGate';
+import type { ParentStart } from './parent/ParentMode';
 import { ParentMode } from './parent/ParentMode';
 import { MyDayView } from './components/MyDayView';
 import { ScheduleEditor } from './parent/schedule/ScheduleEditor';
@@ -33,6 +34,12 @@ export function App() {
   const wordsToReview = grow.remind && grow.items.some((item) => item.status === 'pending');
   const [view, setView] = useState<View>('talk');
   const [gateOpen, setGateOpen] = useState(false);
+  /** Where Parent Mode opens after the PIN (an "Edit" button opens it right at that page's words). */
+  const [parentStart, setParentStart] = useState<ParentStart | undefined>(undefined);
+  const editInParent = (start: ParentStart) => {
+    setParentStart(start);
+    setGateOpen(true);
+  };
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [quickEdit, setQuickEdit] = useState<{ tool: MyDayTool; card?: 'first' | 'then' | number } | null>(null);
@@ -177,7 +184,15 @@ export function App() {
   }
 
   if (view === 'parent') {
-    return <ParentMode onExit={() => setView('talk')} />;
+    return (
+      <ParentMode
+        start={parentStart}
+        onExit={() => {
+          setParentStart(undefined);
+          setView('talk');
+        }}
+      />
+    );
   }
 
   // Quick words are chosen on their own: hiding a word on its vocabulary page never removes
@@ -299,12 +314,26 @@ export function App() {
               </button>
             )}
             <h2 className="page-title" data-testid="page-title">{boardLabel}</h2>
+            <button type="button" className="page-btn" onClick={() => editInParent({ tab: 'words', categoryId })} data-testid="edit-page-btn" aria-label="Edit this page’s words (grown-ups)">
+              <Icon name="edit" /> Edit
+            </button>
+          </div>
+        )}
+        {view === 'people' && (
+          <div className="page-toolbar">
+            <h2 className="page-title">My People</h2>
+            <button type="button" className="page-btn" onClick={() => editInParent({ tab: 'words', categoryId: 'family' })} data-testid="edit-people-btn" aria-label="Edit My People (grown-ups)">
+              <Icon name="edit" /> Edit people
+            </button>
           </div>
         )}
         {view === 'favorites' && (
           <div className="page-toolbar">
             <h2 className="page-title">Favorites</h2>
             <button type="button" className="page-btn" onClick={() => setFavoritesOpen(true)} aria-haspopup="dialog">Edit favorites</button>
+            <button type="button" className="page-btn" onClick={() => editInParent({ tab: 'words', categoryId: '__favorites' })} data-testid="edit-favorite-words-btn" aria-label="Change the favorite words' pictures and names (grown-ups)">
+              <Icon name="edit" /> Pictures & names
+            </button>
           </div>
         )}
         <Board
@@ -379,7 +408,10 @@ export function App() {
 
       {gateOpen && (
         <ParentGate
-          onCancel={() => setGateOpen(false)}
+          onCancel={() => {
+            setGateOpen(false);
+            setParentStart(undefined);
+          }}
           onUnlock={() => {
             setGateOpen(false);
             setView('parent');

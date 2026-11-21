@@ -16,7 +16,7 @@ import { PhotoLibraryPanel, SymbolLibraryPanel } from './LibraryPanels';
 import { pendingItems } from '../lib/grow';
 import { useEffect, useState } from 'react';
 
-type Tab =
+export type Tab =
   | 'words'
   | 'wob'
   | 'grow'
@@ -64,10 +64,16 @@ const SECTIONS: { title: string; tabs: { id: Tab; label: string }[] }[] = [
   },
 ];
 
-export function ParentMode({ onExit }: { onExit: () => void }) {
+/** Where Parent Mode opens: a tab, and for Words, the page to show (e.g. "Edit" on My People). */
+export interface ParentStart {
+  tab: Tab;
+  categoryId?: string;
+}
+
+export function ParentMode({ onExit, start }: { onExit: () => void; start?: ParentStart }) {
   const { settings, tiles, sync, syncNow, grow } = useMimzi();
   const waiting = grow.remind ? pendingItems(grow).length : 0;
-  const [tab, setTab] = useState<Tab>('words');
+  const [tab, setTab] = useState<Tab>(start?.tab ?? 'words');
   // Quietly sync when Parent Mode opens and closes, if a recent Google sign-in is still valid.
   useEffect(() => {
     void syncNow(false);
@@ -127,7 +133,7 @@ export function ParentMode({ onExit }: { onExit: () => void }) {
         </button>
       )}
       <main className="parent-main" role="tabpanel">
-        {tab === 'words' && <WordsPanel />}
+        {tab === 'words' && <WordsPanel initialCategoryId={start?.categoryId} />}
         {tab === 'wob' && <WordsOnBoardPanel />}
         {tab === 'grow' && <GrowPanel />}
         {tab === 'groups' && <CategoriesPanel />}
