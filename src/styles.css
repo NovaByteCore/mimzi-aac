@@ -102,7 +102,7 @@ button:disabled {
 
 @media (orientation: landscape) {
   .child-view {
-    grid-template-columns: 148px minmax(0, 1fr) 124px;
+    grid-template-columns: 148px minmax(0, 1fr) calc(124px * var(--quick-scale, 1));
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       'top top top'
@@ -373,7 +373,7 @@ button:disabled {
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  height: 92px;
+  height: calc(92px * var(--quick-scale, 1));
 }
 
 @media (orientation: landscape) {
@@ -979,7 +979,7 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 }
 @media (orientation: portrait) and (max-width: 520px) {
   .child-view { gap: 6px; padding-left: 6px; padding-right: 6px; }
-  .quick-bar { height: 72px; gap: 5px; }
+  .quick-bar { height: calc(72px * var(--quick-scale, 1)); gap: 5px; }
   .tile { padding: 4px; gap: 2px; }
   .page-toolbar { margin-bottom: 2px; }
 }
@@ -988,7 +988,7 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
    the page list is redundant with folder buttons + Home/Back, so give the space to words. */
 @media (orientation: landscape) and (max-height: 700px) {
   .child-view {
-    grid-template-columns: minmax(0, 1fr) 104px;
+    grid-template-columns: minmax(0, 1fr) calc(104px * var(--quick-scale, 1));
     grid-template-rows: auto minmax(0, 1fr) auto;
     grid-template-areas:
       'top top'
@@ -1263,7 +1263,7 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
   .nav-btn .ui-icon { width: 20px; height: 20px; }
   .tile { padding: 3px; gap: 1px; }
   .tile-label { font-size: calc(13px * var(--text-scale)); line-height: 1.1; }
-  .quick-bar .tile-label { font-size: calc(12px * var(--text-scale)); }
+  .quick-bar .tile-label { font-size: calc(12px * var(--text-scale) * min(var(--quick-scale, 1), 1.4)); }
 }
 
 /* Short landscape phones, My Day: tabs on one slim row, and the panel scrolls
@@ -1409,3 +1409,6 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 
 /* Folder names can need a third line when text is enlarged. */
 .board-grid .tile-folder .tile-label { -webkit-line-clamp: 3; overflow-wrap: anywhere; word-break: normal; }
+
+/* Parent setting "Quick Words size": bigger labels with bigger quick pictures. */
+.quick-bar .tile-compact .tile-label { font-size: calc(clamp(12px, 1.9vmin, 18px) * var(--text-scale) * min(var(--quick-scale, 1), 1.4)); }

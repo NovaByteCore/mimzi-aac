@@ -10,7 +10,7 @@ interface Props {
   /** Fixed grid (Parent Mode "fixed size"), or the starting guess for auto layout. */
   grid: GridSize;
   /** Auto layout: fit rows × columns to the space (default). */
-  auto?: { textScale: number; maxGap: number; wordCount?: number };
+  auto?: { textScale: number; tileScale?: number; maxGap: number; wordCount?: number };
   /**
    * The first slot that was on screen. Pages are worked out from it, so when the tablet
    * rotates and the grid changes, the child stays on the page with the same words.
@@ -43,7 +43,7 @@ export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, m
     const measure = () => {
       const r = el.getBoundingClientRect();
       if (r.width < 40 || r.height < 40) return;
-      const next = autoGrid({ width: r.width, height: r.height, textScale: auto.textScale, maxGap: auto.maxGap, wordCount: auto.wordCount });
+      const next = autoGrid({ width: r.width, height: r.height, textScale: auto.textScale, tileScale: auto.tileScale, maxGap: auto.maxGap, wordCount: auto.wordCount });
       setFit((cur) => (cur && same(cur.grid, next.grid) && cur.gap === next.gap ? cur : { grid: next.grid, gap: next.gap }));
     };
     measure();
@@ -54,7 +54,7 @@ export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, m
       ro?.disconnect();
       window.removeEventListener('orientationchange', measure);
     };
-  }, [auto?.textScale, auto?.maxGap, auto?.wordCount, Boolean(auto)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auto?.textScale, auto?.tileScale, auto?.maxGap, auto?.wordCount, Boolean(auto)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     onGrid?.(grid);

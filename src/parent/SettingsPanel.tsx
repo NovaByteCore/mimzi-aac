@@ -58,6 +58,15 @@ export function SettingsPanel() {
         <input type="range" min={0.8} max={1.6} step={0.1} value={settings.textScale} onChange={(e) => updateSettings({ textScale: Number(e.target.value) })} />
       </label>
       <label className="field">
+        <span>Board picture size ({sizeName(settings.tileScale ?? 1)})</span>
+        <input type="range" min={0.75} max={1.75} step={0.25} value={settings.tileScale ?? 1} onChange={(e) => updateSettings({ tileScale: Number(e.target.value) })} data-testid="tile-scale" aria-label="Board picture size" />
+        <small className="muted">Bigger shows fewer, larger pictures on each page (the rest move to the next page). Used with Auto layout.</small>
+      </label>
+      <label className="field">
+        <span>Quick Words size ({sizeName(settings.quickScale ?? 1)})</span>
+        <input type="range" min={0.75} max={2} step={0.25} value={settings.quickScale ?? 1} onChange={(e) => updateSettings({ quickScale: Number(e.target.value) })} data-testid="quick-scale" aria-label="Quick Words size" />
+      </label>
+      <label className="field">
         <span>Space between pictures ({settings.tileGap}px)</span>
         <input type="range" min={4} max={28} step={2} value={settings.tileGap} onChange={(e) => updateSettings({ tileGap: Number(e.target.value) })} />
       </label>
@@ -142,4 +151,13 @@ export function SettingsPanel() {
       )}
     </section>
   );
+}
+
+function sizeName(v: number): string {
+  if (v <= 0.75) return 'smaller';
+  if (v < 1) return 'a bit smaller';
+  if (v === 1) return 'normal';
+  if (v <= 1.25) return 'bigger';
+  if (v <= 1.5) return 'much bigger';
+  return 'biggest';
 }

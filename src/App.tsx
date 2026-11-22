@@ -236,7 +236,7 @@ export function App() {
   return (
     <div
       className={`app child-view${settings.highContrast ? ' high-contrast' : ''}${settings.reducedMotion ? ' reduced-motion' : ''}`}
-      style={{ ['--text-scale' as string]: settings.textScale, ['--tile-gap' as string]: `${settings.tileGap}px` }}
+      style={{ ['--text-scale' as string]: settings.textScale, ['--quick-scale' as string]: settings.quickScale ?? 1, ['--tile-gap' as string]: `${settings.tileGap}px` }}
     >
       <header className="top-bar">
         {settings.showSentenceBar ? (
@@ -340,7 +340,7 @@ export function App() {
           slotted={slotted}
           tiles={boardTiles}
           grid={settings.grid}
-          auto={settings.layoutMode === 'fixed' && wordCount === undefined ? undefined : { textScale: settings.textScale, maxGap: settings.tileGap, wordCount }}
+          auto={settings.layoutMode === 'fixed' && wordCount === undefined ? undefined : { textScale: settings.textScale, tileScale: settings.tileScale ?? 1, maxGap: settings.tileGap, wordCount }}
           anchor={pages[pageKey] ?? 0}
           onAnchor={(slot) => setPages((s) => ({ ...s, [pageKey]: slot }))}
           onTap={onTap}

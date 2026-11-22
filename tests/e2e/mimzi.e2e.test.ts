@@ -2763,3 +2763,25 @@ test('same word, same picture: changing milk on Needs updates the Food milk in Q
   assert.ok(await page.getByTestId('words-view-favorites').getAttribute('aria-selected') === 'true');
   await ctx.close();
 });
+
+test('Settings: Board picture size and Quick Words size change the Talk board and are kept', async () => {
+  const { ctx, page } = await openApp({ width: 960, height: 600 });
+  const quickH = () => page.locator('.quick-bar .tile').first().evaluate((e) => e.getBoundingClientRect().width * e.getBoundingClientRect().height);
+  const count = () => page.locator('.board-grid .tile').count();
+  const q0 = await quickH();
+  const c0 = await count();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  await page.getByTestId('tile-scale').fill('1.5');
+  await page.getByTestId('quick-scale').fill('1.75');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid .tile').first().waitFor();
+  await page.waitForTimeout(300);
+  assert.ok((await quickH()) > q0 * 1.5, 'quick words bigger');
+  assert.ok((await count()) < c0, 'fewer, bigger board pictures');
+  await page.reload();
+  await page.locator('.board-grid .tile').first().waitFor();
+  await page.waitForTimeout(300);
+  assert.ok((await quickH()) > q0 * 1.5, 'kept after reload');
+  await ctx.close();
+});

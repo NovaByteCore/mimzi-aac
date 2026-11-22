@@ -170,6 +170,10 @@ export interface Settings {
   speechLang: string;
   /** Multiplier for label text size. */
   textScale: number;
+  /** Board picture size: 1 = normal; bigger = fewer, larger pictures per page (auto layout). */
+  tileScale?: number;
+  /** Quick Words bar size relative to normal (1). */
+  quickScale?: number;
   /** Space between tiles in px. */
   tileGap: number;
   highContrast: boolean;

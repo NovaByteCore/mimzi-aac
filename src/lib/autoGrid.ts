@@ -13,6 +13,8 @@ export interface AutoGridInput {
   height: number;
   /** Parent Mode text size (0.8 – 1.6). Larger text → larger tiles. */
   textScale: number;
+  /** Parent Mode "Board picture size" (0.75 – 1.75): bigger → fewer, larger pictures. */
+  tileScale?: number;
   /** Parent Mode "space between pictures" (px) — the most spacing auto layout will use. */
   maxGap: number;
   /** Prefer the smallest grid that fits this vocabulary count. */
@@ -40,13 +42,14 @@ export function gapFor(width: number, height: number, maxGap: number): number {
   return Math.max(4, Math.min(maxGap, Math.round(Math.min(width, height) * 0.02)));
 }
 
-export function autoGrid({ width, height, textScale, maxGap, wordCount }: AutoGridInput): AutoGridResult {
+export function autoGrid({ width, height, textScale, tileScale = 1, maxGap, wordCount }: AutoGridInput): AutoGridResult {
   const W = Math.max(0, width);
   const H = Math.max(0, height);
   const gap = gapFor(W, H, maxGap);
   // On very short screens (a phone on its side) two rows must still fit: the minimum follows
   // the screen, so the board doesn't collapse to four giant tiles and dozens of pages.
-  const minTile = Math.min(minTileFor(textScale), Math.floor(Math.min(W, H) * 0.42));
+  const scale = Math.min(1.75, Math.max(0.6, tileScale));
+  const minTile = Math.min(Math.round(minTileFor(textScale) * scale), Math.floor(Math.min(W, H) * (scale > 1 ? 0.48 : 0.42)));
   let best: (AutoGridResult & { score: number }) | null = null;
   let biggest: (AutoGridResult & { side: number }) | null = null;
   const target = wordCount && wordCount > 0 ? wordCount : undefined;
