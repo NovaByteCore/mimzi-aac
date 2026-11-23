@@ -21,6 +21,7 @@ import { scheduleSymbolUrls } from './lib/myday';
 import type { MyDayTool, SpeechState, Tile, Utterance } from './types';
 import { ParentGate } from './parent/ParentGate';
 import type { ParentStart } from './parent/ParentMode';
+import { isPreview, listenForChanges, previewPage } from './lib/preview';
 import { ParentMode } from './parent/ParentMode';
 import { MyDayView } from './components/MyDayView';
 import { ScheduleEditor } from './parent/schedule/ScheduleEditor';
@@ -45,7 +46,9 @@ export function App() {
   const [quickEdit, setQuickEdit] = useState<{ tool: MyDayTool; card?: 'first' | 'then' | number } | null>(null);
   const [scheduleEdit, setScheduleEdit] = useState<MyDayTool | null>(null);
   // Page navigation: a stack of page ids (Home at the bottom) for folders, Back and Home.
-  const [stack, setStack] = useState<string[]>([HOME_PAGE]);
+  const [stack, setStack] = useState<string[]>(previewPage && previewPage !== HOME_PAGE ? [HOME_PAGE, previewPage] : [HOME_PAGE]);
+  // Board preview inside Parent Mode: reload when the grown-up changes something.
+  useEffect(() => (isPreview ? listenForChanges(() => location.reload()) : undefined), []);
   const categoryId = stack[stack.length - 1];
   const setCategoryId = (id: string) => setStack(id === HOME_PAGE ? [HOME_PAGE] : [HOME_PAGE, id]);
   const lastTap = useRef<{ id: string; at: number }>({ id: '', at: 0 });
@@ -235,7 +238,8 @@ export function App() {
 
   return (
     <div
-      className={`app child-view${settings.highContrast ? ' high-contrast' : ''}${settings.reducedMotion ? ' reduced-motion' : ''}`}
+      className={`app child-view${settings.highContrast ? ' high-contrast' : ''}${settings.reducedMotion ? ' reduced-motion' : ''}${isPreview ? ' is-preview' : ''}`}
+      inert={isPreview || undefined}
       style={{ ['--text-scale' as string]: settings.textScale, ['--quick-scale' as string]: settings.quickScale ?? 1, ['--tile-gap' as string]: `${settings.tileGap}px` }}
     >
       <header className="top-bar">
@@ -340,7 +344,7 @@ export function App() {
           slotted={slotted}
           tiles={boardTiles}
           grid={settings.grid}
-          auto={settings.layoutMode === 'fixed' && wordCount === undefined ? undefined : { textScale: settings.textScale, tileScale: settings.tileScale ?? 1, maxGap: settings.tileGap, wordCount }}
+          auto={settings.layoutMode === 'fixed' && wordCount === undefined ? undefined : { textScale: settings.textScale, tileScale: settings.tileScale ?? 1, maxGap: settings.tileGap, wordCount, onePage: settings.onePage ?? true }}
           anchor={pages[pageKey] ?? 0}
           onAnchor={(slot) => setPages((s) => ({ ...s, [pageKey]: slot }))}
           onTap={onTap}
@@ -352,7 +356,7 @@ export function App() {
         )}
       </main>
 
-      <aside className="quick-bar" aria-label="Quick words">
+      <aside className="quick-bar" aria-label="Quick words" data-count={quickTiles.length} style={{ ['--quick-count' as string]: Math.max(1, quickTiles.length) }}>
         {quickTiles.map((t) => (
           <TileButton key={t.id} tile={t} photoUrl={t.photoId ? mediaUrls[t.photoId] : undefined} onTap={onTap} compact />
         ))}

@@ -15,7 +15,8 @@ createRoot(document.getElementById('root')!).render(
 // Offline support: only in production builds (the dev server changes files constantly).
 // The Android app already has every file inside the APK, so it skips the service worker.
 const inAndroidApp = Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
-if (import.meta.env?.PROD && 'serviceWorker' in navigator && !inAndroidApp) {
+const isBoardPreview = new URLSearchParams(location.search).has('preview');
+if (import.meta.env?.PROD && 'serviceWorker' in navigator && !inAndroidApp && !isBoardPreview) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch((err) => {
       console.warn('Mimzi offline support could not start:', err);

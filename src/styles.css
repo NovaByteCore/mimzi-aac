@@ -372,12 +372,18 @@ button:disabled {
 .quick-bar {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  height: calc(92px * var(--quick-scale, 1));
+  /* 1–6 quick words share the whole bar equally — no empty space. */
+  --quick-h: calc(92px * var(--quick-scale, 1));
+  grid-template-columns: repeat(var(--quick-count, 5), minmax(0, 1fr));
+  height: var(--quick-h);
 }
 
 @media (orientation: landscape) {
-  .quick-bar { grid-template-columns: 1fr; grid-template-rows: repeat(5, minmax(0, 1fr)); height: auto; }
+  .quick-bar {
+    grid-template-columns: 1fr;
+    grid-template-rows: repeat(var(--quick-count, 5), minmax(0, 1fr));
+    height: auto;
+  }
 }
 
 .tile-compact { padding: 4px; border-radius: 16px; }
@@ -979,7 +985,7 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 }
 @media (orientation: portrait) and (max-width: 520px) {
   .child-view { gap: 6px; padding-left: 6px; padding-right: 6px; }
-  .quick-bar { height: calc(72px * var(--quick-scale, 1)); gap: 5px; }
+  .quick-bar { --quick-h: calc(72px * var(--quick-scale, 1)); gap: 5px; }
   .tile { padding: 4px; gap: 2px; }
   .page-toolbar { margin-bottom: 2px; }
 }
@@ -1412,3 +1418,14 @@ button.sync-status { border: 0; cursor: pointer; min-height: 40px; }
 
 /* Parent setting "Quick Words size": bigger labels with bigger quick pictures. */
 .quick-bar .tile-compact .tile-label { font-size: calc(clamp(12px, 1.9vmin, 18px) * var(--text-scale) * min(var(--quick-scale, 1), 1.4)); }
+
+/* Board preview in Parent Mode */
+.board-preview { border: 2px solid #e2ddd3; border-radius: 14px; background: #fff; padding: 8px; margin-bottom: 12px; }
+.board-preview-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.board-preview-bar strong { margin-right: auto; }
+.board-preview-box { position: relative; overflow: hidden; margin-top: 8px; border-radius: 10px; background: var(--bg, #fdf8ee); }
+.board-preview-box iframe { position: absolute; top: 0; left: 0; border: 0; pointer-events: none; }
+.seg { display: inline-flex; border: 2px solid #cfd8e3; border-radius: 10px; overflow: hidden; }
+.seg-btn { border: 0; background: #fff; padding: 6px 10px; min-height: 36px; font: inherit; }
+.seg-on { background: #dbe8f5; font-weight: 700; }
+.is-preview { pointer-events: none; }

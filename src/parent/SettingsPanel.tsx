@@ -57,10 +57,14 @@ export function SettingsPanel() {
         <span>Text size ({Math.round(settings.textScale * 100)}%)</span>
         <input type="range" min={0.8} max={1.6} step={0.1} value={settings.textScale} onChange={(e) => updateSettings({ textScale: Number(e.target.value) })} />
       </label>
+      <label className="check">
+        <input type="checkbox" checked={settings.onePage ?? true} onChange={(e) => updateSettings({ onePage: e.target.checked })} data-testid="one-page" />
+        Everything on one page — pictures shrink so all of a page’s words fit on one screen (no page arrows)
+      </label>
       <label className="field">
         <span>Board picture size ({sizeName(settings.tileScale ?? 1)})</span>
         <input type="range" min={0.75} max={1.75} step={0.25} value={settings.tileScale ?? 1} onChange={(e) => updateSettings({ tileScale: Number(e.target.value) })} data-testid="tile-scale" aria-label="Board picture size" />
-        <small className="muted">Bigger shows fewer, larger pictures on each page (the rest move to the next page). Used with Auto layout.</small>
+        <small className="muted">Bigger shows fewer, larger pictures on each page (the rest move to the next page). Used with Auto layout when “Everything on one page” is off.</small>
       </label>
       <label className="field">
         <span>Quick Words size ({sizeName(settings.quickScale ?? 1)})</span>

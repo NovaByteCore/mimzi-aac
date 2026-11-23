@@ -1,5 +1,6 @@
 import { useMimzi } from '../state/MimziStore';
 import { WordsPanel } from './WordsPanel';
+import { BoardPreview } from './BoardPreview';
 import { CategoriesPanel } from './CategoriesPanel';
 import { SettingsPanel } from './SettingsPanel';
 import { QuickWordsPanel } from './QuickWordsPanel';
@@ -74,6 +75,7 @@ export function ParentMode({ onExit, start }: { onExit: () => void; start?: Pare
   const { settings, tiles, sync, syncNow, grow } = useMimzi();
   const waiting = grow.remind ? pendingItems(grow).length : 0;
   const [tab, setTab] = useState<Tab>(start?.tab ?? 'words');
+  const [previewPage, setPreviewPage] = useState<string | undefined>(start?.categoryId);
   // Quietly sync when Parent Mode opens and closes, if a recent Google sign-in is still valid.
   useEffect(() => {
     void syncNow(false);
@@ -133,7 +135,10 @@ export function ParentMode({ onExit, start }: { onExit: () => void; start?: Pare
         </button>
       )}
       <main className="parent-main" role="tabpanel">
-        {tab === 'words' && <WordsPanel initialCategoryId={start?.categoryId} />}
+        {(tab === 'words' || tab === 'wob' || tab === 'groups' || tab === 'quick' || tab === 'settings') && (
+          <BoardPreview page={tab === 'words' && previewPage && !previewPage.startsWith('__') ? previewPage : undefined} />
+        )}
+        {tab === 'words' && <WordsPanel initialCategoryId={start?.categoryId} onCategory={setPreviewPage} />}
         {tab === 'wob' && <WordsOnBoardPanel />}
         {tab === 'grow' && <GrowPanel />}
         {tab === 'groups' && <CategoriesPanel />}

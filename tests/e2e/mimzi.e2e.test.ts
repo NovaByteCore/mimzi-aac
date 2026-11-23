@@ -1828,7 +1828,7 @@ for (const [name, viewport] of [
     for (let p = 0; p < 3; p++) {
       folders.push(...(await page.locator('.board-grid .tile-folder').evaluateAll((els) => els.map((e) => e.getAttribute('data-tile-id')!))));
       const next = page.getByRole('button', { name: 'Next page' });
-      if (!(await next.isEnabled())) break;
+      if (!(await next.count()) || !(await next.isEnabled())) break; // one-page boards have no arrows
       await next.click();
     }
     assert.equal(new Set(folders).size, 13, 'all 13 pages have a folder on Home');
@@ -2768,9 +2768,16 @@ test('Settings: Board picture size and Quick Words size change the Talk board an
   const { ctx, page } = await openApp({ width: 960, height: 600 });
   const quickH = () => page.locator('.quick-bar .tile').first().evaluate((e) => e.getBoundingClientRect().width * e.getBoundingClientRect().height);
   const count = () => page.locator('.board-grid .tile').count();
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Board & accessibility' }).click();
+  await page.getByTestId('one-page').click();
+  await expectEventually(async () => !(await page.getByTestId('one-page').isChecked()), 'one page off');
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  await page.locator('.board-grid .tile').first().waitFor();
+  await page.waitForTimeout(300);
   const q0 = await quickH();
   const c0 = await count();
-  await enterParentMode(page);
+  await enterParentMode(page, false);
   await page.getByRole('tab', { name: 'Board & accessibility' }).click();
   await page.getByTestId('tile-scale').fill('1.5');
   await page.getByTestId('quick-scale').fill('1.75');
@@ -2785,3 +2792,41 @@ test('Settings: Board picture size and Quick Words size change the Talk board an
   assert.ok((await quickH()) > q0 * 1.5, 'kept after reload');
   await ctx.close();
 });
+
+test('one page: every word of a page fits on one screen (no arrows); quick words fill the bar; Parent Mode shows a live board preview', async () => {
+  const { ctx, page } = await openApp({ width: 960, height: 600 });
+  await page.locator('.board-grid .tile').first().waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Next page' }).count(), 0, 'no page arrows');
+  const visibleHome = await page.locator('.board-grid .tile').count();
+  assert.ok(visibleHome > 20, `all Home words on one page (${visibleHome})`);
+  // Quick words share the whole bar: the last one ends where the bar ends.
+  const bar = (await page.locator('.quick-bar').boundingBox())!;
+  const last = (await page.locator('.quick-bar .tile').last().boundingBox())!;
+  assert.ok(Math.abs(bar.y + bar.height - (last.y + last.height)) < 4, 'no empty space at the end of the quick bar');
+  await enterParentMode(page);
+  await page.getByTestId('board-preview-frame').waitFor();
+  const frame = page.frameLocator('[data-testid="board-preview-frame"]');
+  await page.getByRole('tab', { name: 'Quick words' }).click();
+  await frame.locator('.quick-bar .tile').first().waitFor();
+  await page.waitForTimeout(1000);
+  const before = await frame.locator('.quick-bar .tile').count();
+  // Remove a quick word: the preview updates by itself.
+  const listBefore = await page.getByTestId('quick-list').locator('li').count();
+  await page.getByTestId('quick-list').getByRole('button', { name: /^Remove/ }).first().click();
+  await expectEventually(async () => (await page.getByTestId('quick-list').locator('li').count()) === listBefore - 1, 'removed from the list');
+  await expectEventually(async () => (await frame.locator('.quick-bar .tile').count()) === before - 1, 'preview follows the change');
+  await ctx.close();
+});
+
+async function expectEventually(check: () => Promise<boolean>, message: string, ms = 8000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    try {
+      if (await check()) return;
+    } catch {
+      /* frame reloading */
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  assert.fail(message);
+}

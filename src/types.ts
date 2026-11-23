@@ -172,6 +172,8 @@ export interface Settings {
   textScale: number;
   /** Board picture size: 1 = normal; bigger = fewer, larger pictures per page (auto layout). */
   tileScale?: number;
+  /** Board on one page: pictures shrink so every word on a page fits on one screen (default on). */
+  onePage?: boolean;
   /** Quick Words bar size relative to normal (1). */
   quickScale?: number;
   /** Space between tiles in px. */

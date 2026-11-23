@@ -17,6 +17,11 @@ export interface AutoGridInput {
   tileScale?: number;
   /** Parent Mode "space between pictures" (px) — the most spacing auto layout will use. */
   maxGap: number;
+  /**
+   * One page: every one of this many words must fit on a single page; pictures shrink as
+   * needed (the largest squares that still fit them all).
+   */
+  fitAll?: number;
   /** Prefer the smallest grid that fits this vocabulary count. */
   wordCount?: number;
 }
@@ -42,10 +47,14 @@ export function gapFor(width: number, height: number, maxGap: number): number {
   return Math.max(4, Math.min(maxGap, Math.round(Math.min(width, height) * 0.02)));
 }
 
-export function autoGrid({ width, height, textScale, tileScale = 1, maxGap, wordCount }: AutoGridInput): AutoGridResult {
+export function autoGrid({ width, height, textScale, tileScale = 1, maxGap, wordCount, fitAll }: AutoGridInput): AutoGridResult {
   const W = Math.max(0, width);
   const H = Math.max(0, height);
   const gap = gapFor(W, H, maxGap);
+  if (fitAll !== undefined) {
+    const one = onePageGrid(W, H, Math.max(1, fitAll), gap);
+    if (one) return one;
+  }
   // On very short screens (a phone on its side) two rows must still fit: the minimum follows
   // the screen, so the board doesn't collapse to four giant tiles and dozens of pages.
   const scale = Math.min(1.75, Math.max(0.6, tileScale));
@@ -100,4 +109,34 @@ export function lastBoardGrid(fallback: GridSize): GridSize {
     /* ignore */
   }
   return fallback;
+}
+
+const ONE_PAGE_MAX_COLS = 14;
+const ONE_PAGE_MAX_ROWS = 10;
+/** Smallest picture one-page layout may shrink to before it gives up and uses pages (CSS px). */
+export const ONE_PAGE_MIN_TILE_PX = 44;
+
+/**
+ * Everything on one page: the rows × columns that fit `count` words with the largest
+ * (roughly square) pictures. null when even the smallest pictures can't fit them all.
+ */
+export function onePageGrid(W: number, H: number, count: number, maxGap: number): AutoGridResult | null {
+  let best: (AutoGridResult & { score: number }) | null = null;
+  for (let cols = 1; cols <= ONE_PAGE_MAX_COLS; cols++) {
+    const rows = Math.ceil(count / cols);
+    if (rows > ONE_PAGE_MAX_ROWS) continue;
+    // Gaps shrink with the pictures so small pictures aren't separated by wide gutters.
+    const gap = Math.max(3, Math.min(maxGap, Math.round(Math.min(W / cols, H / rows) * 0.08)));
+    const w = (W - (cols - 1) * gap) / cols;
+    const h = (H - (rows - 1) * gap) / rows;
+    if (w <= 0 || h <= 0) continue;
+    const ratio = w / h;
+    if (ratio < 0.55 || ratio > 1.9) continue;
+    const side = Math.min(w, h);
+    // Biggest pictures; then fewest empty cells; then the squarest.
+    const score = side * 1000 - (rows * cols - count) * 10 - Math.abs(Math.log(ratio));
+    if (!best || score > best.score) best = { grid: { rows, cols }, gap, tile: { w, h }, score };
+  }
+  if (!best || Math.min(best.tile.w, best.tile.h) < ONE_PAGE_MIN_TILE_PX) return null;
+  return { grid: best.grid, gap: best.gap, tile: best.tile };
 }

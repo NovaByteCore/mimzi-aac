@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GridSize, Tile } from '../types';
-import { pageCells, pageCount } from '../lib/grid';
+import { pageCells, pageCount, slotMap } from '../lib/grid';
 import { autoGrid, pageForAnchor, rememberBoardGrid } from '../lib/autoGrid';
 import { Icon } from './Icon';
 import { TileButton } from './TileButton';
@@ -10,7 +10,7 @@ interface Props {
   /** Fixed grid (Parent Mode "fixed size"), or the starting guess for auto layout. */
   grid: GridSize;
   /** Auto layout: fit rows × columns to the space (default). */
-  auto?: { textScale: number; tileScale?: number; maxGap: number; wordCount?: number };
+  auto?: { textScale: number; tileScale?: number; maxGap: number; wordCount?: number; onePage?: boolean };
   /**
    * The first slot that was on screen. Pages are worked out from it, so when the tablet
    * rotates and the grid changes, the child stays on the page with the same words.
@@ -29,7 +29,15 @@ interface Props {
 
 const same = (a: GridSize, b: GridSize) => a.rows === b.rows && a.cols === b.cols;
 
-export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, mediaUrls, label, emptyMessage, slotted = true, onGrid }: Props) {
+export function Board({ tiles: allTiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, mediaUrls, label, emptyMessage, slotted: slottedProp = true, onGrid }: Props) {
+  // One page: show every visible word, in board order, packed with no empty gaps, and let the
+  // pictures shrink until they all fit on one screen.
+  const onePage = Boolean(auto?.onePage);
+  const tiles = onePage
+    ? (slottedProp ? [...slotMap(allTiles).entries()].sort((a, b) => a[0] - b[0]).map(([, t]) => t) : allTiles).filter((t) => !t.hidden)
+    : allTiles;
+  const slotted = onePage ? false : slottedProp;
+  const fitAll = onePage ? tiles.length : undefined;
   const areaRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState<{ grid: GridSize; gap: number } | null>(null);
   const grid = auto && fit ? fit.grid : fixedGrid;
@@ -43,7 +51,7 @@ export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, m
     const measure = () => {
       const r = el.getBoundingClientRect();
       if (r.width < 40 || r.height < 40) return;
-      const next = autoGrid({ width: r.width, height: r.height, textScale: auto.textScale, tileScale: auto.tileScale, maxGap: auto.maxGap, wordCount: auto.wordCount });
+      const next = autoGrid({ width: r.width, height: r.height, textScale: auto.textScale, tileScale: auto.tileScale, maxGap: auto.maxGap, wordCount: auto.wordCount, fitAll });
       setFit((cur) => (cur && same(cur.grid, next.grid) && cur.gap === next.gap ? cur : { grid: next.grid, gap: next.gap }));
     };
     measure();
@@ -54,7 +62,7 @@ export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, m
       ro?.disconnect();
       window.removeEventListener('orientationchange', measure);
     };
-  }, [auto?.textScale, auto?.tileScale, auto?.maxGap, auto?.wordCount, Boolean(auto)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [auto?.textScale, auto?.tileScale, auto?.maxGap, auto?.wordCount, fitAll, Boolean(auto)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useLayoutEffect(() => {
     onGrid?.(grid);
@@ -97,7 +105,7 @@ export function Board({ tiles, grid: fixedGrid, auto, anchor, onAnchor, onTap, m
       )}
       {/* The pager's space is always kept (hidden on one-page boards), so hiding or swapping a
           word never changes the board's size — and auto layout never re-flows the other words. */}
-      {pages <= 1 && auto && (
+      {pages <= 1 && auto && !onePage && (
         <div className="pager pager-idle" aria-hidden="true">
           <span className="pager-btn" />
           <span className="pager-dots" />

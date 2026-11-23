@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { orderedTiles, slotMap } from '../lib/grid';
 import { lastBoardGrid } from '../lib/autoGrid';
@@ -19,7 +19,7 @@ import { Icon } from '../components/Icon';
 export const FAVORITES_VIEW = '__favorites';
 export const QUICK_VIEW = '__quick';
 
-export function WordsPanel({ initialCategoryId }: { initialCategoryId?: string } = {}) {
+export function WordsPanel({ initialCategoryId, onCategory }: { initialCategoryId?: string; onCategory?: (id: string) => void } = {}) {
   const { tiles, categories, mediaUrls, settings, setTilePicture } = useMimzi();
   const sortedCats = useMemo(() => [...categories].sort((a, b) => a.order - b.order), [categories]);
   const [categoryId, setCategoryId] = useState(
@@ -30,6 +30,7 @@ export function WordsPanel({ initialCategoryId }: { initialCategoryId?: string }
   const [arranging, setArranging] = useState(false);
   const grid = settings.layoutMode === 'fixed' ? settings.grid : lastBoardGrid(settings.grid);
   const perPage = grid.rows * grid.cols;
+  useEffect(() => onCategory?.(categoryId), [categoryId]); // eslint-disable-line react-hooks/exhaustive-deps
   const special = categoryId === FAVORITES_VIEW || categoryId === QUICK_VIEW;
   const live = tiles.filter((t) => !t.deletedAt);
   const specialTiles: Tile[] =

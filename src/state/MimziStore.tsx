@@ -17,6 +17,7 @@ import { createBackup, type BackupFile, type RestoredData } from '../lib/backup'
 import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
 import { pictureCopies } from '../lib/samePicture';
+import { isPreview, notifyPreview } from '../lib/preview';
 import { swapWordInto, type SwapResult } from '../lib/manageWords';
 import { canSyncQuietly, currentToken, fetchProfile, quietToken, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
 import { createDriveClient } from '../lib/google/drive';
@@ -628,8 +629,13 @@ export function MimziProvider({ children }: { children: ReactNode }) {
   const accountEmail = data.sync.account?.email;
   const lastAutomaticRevision = useRef('');
   const { tiles, categories, settings, myDay, observations, grow, history } = data;
+  // Tell an open board preview (Parent Mode) to refresh after any change.
   useEffect(() => {
-    if (!accountEmail || !canSyncQuietly(SCOPES.drive)) return;
+    notifyPreview();
+  }, [tiles, categories, settings, myDay, data.mediaUrls]);
+
+  useEffect(() => {
+    if (isPreview || !accountEmail || !canSyncQuietly(SCOPES.drive)) return;
     const revision = JSON.stringify([accountEmail, stamps.current, tombstones.current]);
     if (revision === lastAutomaticRevision.current) return;
     const timer = window.setTimeout(() => {
@@ -641,7 +647,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
   }, [accountEmail, tiles, categories, settings, myDay, observations, grow, history, syncNow]);
 
   useEffect(() => {
-    if (!accountEmail) return;
+    if (isPreview || !accountEmail) return;
     const check = () => {
       if (document.visibilityState === 'visible' && navigator.onLine && canSyncQuietly(SCOPES.drive)) void syncNow();
     };
