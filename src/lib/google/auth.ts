@@ -7,7 +7,7 @@
  * makes no requests to Google otherwise.
  */
 import { config } from '../../config';
-import { nativeGoogleAvailable, nativeGoogleLogin, nativeGoogleLogout } from './native';
+import { nativeGoogleAvailable, nativeGoogleLogin, nativeGoogleLogout, nativeGoogleSilent } from './native';
 
 export const SCOPES = {
   profile: ['openid', 'email', 'profile'],
@@ -102,6 +102,7 @@ export async function requestToken(scopes: string[], opts: { prompt?: '' | 'cons
     try {
       const r = await nativeGoogleLogin(wantedNative);
       token = { value: r.token, expiresAt: Date.now() + 55 * 60_000, scopes: new Set(wantedNative) };
+      quietFailed = false;
       return r.token;
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
@@ -163,4 +164,30 @@ export async function signOut(): Promise<void> {
   if (t && window.google?.accounts?.oauth2) {
     await new Promise<void>((resolve) => window.google!.accounts!.oauth2!.revoke(t, resolve));
   }
+}
+
+let quietFailed = false;
+/**
+ * Android app only: get access again without any screen (after Mimzi was closed, or the hourly
+ * token ran out), so automatic backup keeps going. Returns null when that isn't possible; then a
+ * grown-up taps Sync now once. After one failure it doesn't keep retrying until a tap succeeds.
+ */
+export async function quietToken(scopes: string[], email?: string): Promise<string | null> {
+  if (hasValidToken(scopes)) return token!.value;
+  if (!nativeGoogleAvailable() || quietFailed) return null;
+  const wanted = [...new Set([...SCOPES.profile, ...scopes])];
+  try {
+    const r = await nativeGoogleSilent(wanted);
+    if (email && r.email && r.email.toLowerCase() !== email.toLowerCase()) throw new Error('Different account.');
+    token = { value: r.token, expiresAt: Date.now() + 55 * 60_000, scopes: new Set(wanted) };
+    return r.token;
+  } catch {
+    quietFailed = true;
+    return null;
+  }
+}
+
+/** Can Mimzi sync right now without a tap? (a live token, or the Android app can reconnect quietly) */
+export function canSyncQuietly(scopes: string[]): boolean {
+  return hasValidToken(scopes) || (nativeGoogleAvailable() && !quietFailed);
 }

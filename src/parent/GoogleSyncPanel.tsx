@@ -11,7 +11,7 @@ export function GoogleSyncPanel() {
 
   return (
     <section className="panel">
-      <h2>Google account & sync</h2>
+      <h2>Back up & sync with Google</h2>
 
       {!googleConfigured() ? (
         <div className="notice" data-testid="google-not-configured">
@@ -24,12 +24,13 @@ export function GoogleSyncPanel() {
       ) : !sync.account ? (
         <>
           <p>
-            Sign in with Google to keep Mimzi the same on every device. Your words, photos, voice recordings, sign videos, My Day and My Words
+            <strong>Signing in is the backup.</strong> Sign in with Google and Mimzi backs itself up automatically and stays the same on every device. Your words, photos, voice recordings, sign videos, My Day and My Words
             are saved in a <strong>hidden Mimzi folder in your own Google Drive</strong> that only Mimzi can open. Nothing is shared or made
             public.
           </p>
           <p className="muted">
-            On a new iPad or phone: install Mimzi, open Parent Mode, and sign in with the same Google account — everything comes back. Mimzi
+            On a new or reset tablet or phone: install Mimzi, open Grown-ups, and sign in with the same Google account — the board from the last
+            backup comes back by itself. Mimzi
             still works with no internet; it syncs when you’re online.
           </p>
           <button type="button" className="btn btn-primary big-btn" onClick={() => googleSignIn()} disabled={busy}>
@@ -43,7 +44,7 @@ export function GoogleSyncPanel() {
             {sync.account.name && <span className="muted"> ({sync.account.email})</span>}
           </p>
           <p className="muted" data-testid="sync-last">
-            {sync.lastSyncedAt ? `Last synced ${new Date(sync.lastSyncedAt).toLocaleString()}.` : 'Not synced yet.'}
+            {sync.lastSyncedAt ? `Backed up and synced ${new Date(sync.lastSyncedAt).toLocaleString()}.` : 'Not backed up yet.'}
           </p>
           <div className="row">
             <button type="button" className="btn btn-primary big-btn" onClick={() => syncNow(true)} disabled={busy}>
@@ -54,8 +55,8 @@ export function GoogleSyncPanel() {
             </button>
           </div>
           <p className="muted small">
-            Mimzi syncs edits while it’s open and checks for changes from your other devices. Offline edits are saved here and sync when you reconnect.
-            If your Google session expires, use Sync now to reconnect.
+            Every change is backed up to Google a moment after you make it, and changes from your other devices come in while Mimzi is open.
+            Offline changes are kept here and back up when you reconnect. Sync now does it right away.
           </p>
         </>
       )}

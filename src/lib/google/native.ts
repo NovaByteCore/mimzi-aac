@@ -80,6 +80,21 @@ export async function nativeGoogleLogin(scopes: string[]): Promise<NativeToken> 
   return { token, email: r.result?.profile?.email ?? '', name: r.result?.profile?.name ?? '' };
 }
 
+/**
+ * Reconnect without showing anything: only an account that already allowed Mimzi, picked
+ * automatically. Fails quietly (NoCredential) instead of showing the account picker.
+ */
+export async function nativeGoogleSilent(scopes: string[]): Promise<NativeToken> {
+  await init();
+  const r = await call<LoginResult>('SocialLogin', 'login', {
+    provider: 'google',
+    options: { scopes, filterByAuthorizedAccounts: true, autoSelectEnabled: true },
+  });
+  const token = r?.result?.accessToken?.token;
+  if (!token) throw new Error('No saved Google access.');
+  return { token, email: r.result?.profile?.email ?? '', name: r.result?.profile?.name ?? '' };
+}
+
 export async function nativeGoogleLogout(): Promise<void> {
   try {
     await init();

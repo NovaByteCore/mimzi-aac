@@ -1015,7 +1015,7 @@ async function googleSignIn(page: Page) {
   await page.getByRole('tab', { name: 'Google & sync' }).click();
   await page.getByRole('button', { name: /Sign in with Google/ }).click();
   await page.getByTestId('google-account').waitFor();
-  await page.getByText(/Last synced/).waitFor({ timeout: 15000 });
+  await page.getByText(/Backed up and synced/).waitFor({ timeout: 15000 });
 }
 
 test('Google: sign in, then a second device signs in and gets everything (photos, notes) — and deletes sync back', async () => {

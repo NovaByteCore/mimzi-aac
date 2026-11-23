@@ -4,6 +4,7 @@ import { backupFileName, BackupError, parseBackup } from '../lib/backup';
 import { storageEstimate, requestPersistentStorage } from '../lib/db';
 import { ConfirmDialog } from './ConfirmDialog';
 import { Icon } from '../components/Icon';
+import { GoogleSyncPanel } from './GoogleSyncPanel';
 
 function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
@@ -60,15 +61,16 @@ export function BackupPanel() {
   };
 
   return (
+    <>
+    <GoogleSyncPanel />
     <section className="panel">
-      <h2>Backup & restore</h2>
-      <p>
-        Mimzi keeps everything <strong>only on this device</strong>. Browsers can clear website data — for example if storage runs very
-        low, if Safari’s website data is cleared, or if Mimzi is deleted from the Home Screen. Make a backup after adding photos, and keep it
-        somewhere safe (Files, Google Drive, a computer).
+      <h2>Backup file (optional)</h2>
+      <p className="muted">
+        Only needed without Google: saves everything as one file you keep yourself (for example on a computer), and puts a saved file back.
+        With Google sign-in above, you don’t need this.
       </p>
       <div className="row">
-        <button type="button" className="btn btn-primary" onClick={doExport} disabled={busy}>
+        <button type="button" className="btn" onClick={doExport} disabled={busy}>
           <Icon name="download" /> Make a backup file
         </button>
         <button type="button" className="btn" onClick={() => fileInput.current?.click()} disabled={busy}>
@@ -124,5 +126,6 @@ export function BackupPanel() {
         />
       )}
     </section>
+    </>
   );
 }

@@ -18,7 +18,7 @@ import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
 import { pictureCopies } from '../lib/samePicture';
 import { swapWordInto, type SwapResult } from '../lib/manageWords';
-import { currentToken, fetchProfile, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
+import { canSyncQuietly, currentToken, fetchProfile, quietToken, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
 import { createDriveClient } from '../lib/google/drive';
 import { runSync, sharedSettings, type Stamps, type Tombstone, type TombstoneStore } from '../lib/google/driveSync';
 
@@ -553,7 +553,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       const getToken = async () => {
         // Non-interactive syncs only run while a token from an earlier tap is still valid.
         if (!interactive) {
-          const t = currentToken();
+          const t = currentToken() ?? (await quietToken(SCOPES.drive, account.email));
           if (!t) throw Object.assign(new Error('Tap “Sync now” to reconnect to Google.'), { needsTap: true });
           return t;
         }
@@ -629,7 +629,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
   const lastAutomaticRevision = useRef('');
   const { tiles, categories, settings, myDay, observations, grow, history } = data;
   useEffect(() => {
-    if (!accountEmail || !currentToken()) return;
+    if (!accountEmail || !canSyncQuietly(SCOPES.drive)) return;
     const revision = JSON.stringify([accountEmail, stamps.current, tombstones.current]);
     if (revision === lastAutomaticRevision.current) return;
     const timer = window.setTimeout(() => {
@@ -643,11 +643,13 @@ export function MimziProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!accountEmail) return;
     const check = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine && currentToken()) void syncNow();
+      if (document.visibilityState === 'visible' && navigator.onLine && canSyncQuietly(SCOPES.drive)) void syncNow();
     };
     const reconnect = () => {
       if (navigator.onLine) void syncNow();
     };
+    // On opening Mimzi (Android app): reconnect quietly and bring in the latest board.
+    check();
     window.addEventListener('online', reconnect);
     document.addEventListener('visibilitychange', check);
     const interval = window.setInterval(check, 30_000);
