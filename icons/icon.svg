@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Mimzi">
+  <rect width="512" height="512" rx="112" fill="#DCECF8"/>
+  <!-- back bubble: the listener -->
+  <path d="M300 150h88c35 0 62 27 62 62v52c0 35-27 62-62 62h-6l8 46-52-46h-38c-35 0-62-27-62-62v-52c0-35 27-62 62-62z"
+        fill="#F8E1D2" stroke="#28384A" stroke-width="14" stroke-linejoin="round"/>
+  <!-- front bubble: the speaker -->
+  <path d="M120 112h150c42 0 74 32 74 74v88c0 42-32 74-74 74h-78l-64 58 10-58h-18c-42 0-74-32-74-74v-88c0-42 32-74 74-74z"
+        fill="#FFF9ED" stroke="#28384A" stroke-width="14" stroke-linejoin="round"/>
+  <circle cx="142" cy="230" r="20" fill="#28384A"/>
+  <circle cx="196" cy="230" r="20" fill="#7A9FC4"/>
+  <circle cx="250" cy="230" r="20" fill="#8DBF8A"/>
+</svg>
