@@ -2804,6 +2804,7 @@ test('one page: every word of a page fits on one screen (no arrows); quick words
   const last = (await page.locator('.quick-bar .tile').last().boundingBox())!;
   assert.ok(Math.abs(bar.y + bar.height - (last.y + last.height)) < 4, 'no empty space at the end of the quick bar');
   await enterParentMode(page);
+  await page.getByTestId('board-preview-toggle').click(); // off until a grown-up opens it
   await page.getByTestId('board-preview-frame').waitFor();
   const frame = page.frameLocator('[data-testid="board-preview-frame"]');
   await page.getByRole('tab', { name: 'Quick words' }).click();
@@ -2830,3 +2831,58 @@ async function expectEventually(check: () => Promise<boolean>, message: string, 
   }
   assert.fail(message);
 }
+
+test('Android app: signed in with Google, closing and reopening Mimzi stays responsive (no freeze)', async () => {
+  const google = fakeGoogle();
+  const ctx = await browser.newContext({ viewport: { width: 960, height: 600 }, hasTouch: true });
+  await ctx.addInitScript({
+    content: `
+      window.__social = [];
+      window.Capacitor = {
+        isNativePlatform: () => true,
+        getPlatform: () => 'android',
+        Plugins: {
+          TextToSpeech: { speak: () => Promise.resolve(), stop: () => Promise.resolve() },
+          SocialLogin: {
+            initialize: () => Promise.resolve(),
+            login: (o) => { window.__social.push(o); return Promise.resolve({ provider: 'google', result: { accessToken: { token: 'test-token' }, profile: { email: 'parent@example.com', name: 'Test Parent' } } }); },
+            logout: () => Promise.resolve(),
+          },
+          Browser: { open: () => Promise.resolve(), close: () => Promise.resolve() },
+        },
+      };
+    `,
+  });
+  await mockSymbolServices(ctx);
+  await google.install(ctx);
+  const page = await ctx.newPage();
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(BASE);
+  await page.waitForSelector('.board-grid .tile');
+  await enterParentMode(page);
+  await page.getByRole('tab', { name: 'Backup' }).click();
+  await page.getByRole('button', { name: /Sign in with Google/ }).click();
+  await page.getByText(/Backed up and synced/).waitFor({ timeout: 15000 });
+  await page.getByRole('button', { name: /back to Talk/ }).click();
+  // "Reopen" the app.
+  await page.reload();
+  await page.waitForSelector('.board-grid .tile', { timeout: 15000 });
+  for (let i = 0; i < 5; i++) {
+    const t0 = Date.now();
+    await page.evaluate(() => 1);
+    assert.ok(Date.now() - t0 < 2000, 'page answers quickly');
+    await page.waitForTimeout(1000);
+  }
+  await page.locator('.board-grid [data-tile-id="core-want"]').click({ timeout: 5000 });
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('safe start: Mimzi still comes up when the tablet blocks its small settings storage', async () => {
+  const { ctx, page } = await openApp();
+  await page.addInitScript({ content: `Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } });` });
+  await page.reload();
+  await page.locator('.board-grid .tile').first().waitFor();
+  await ctx.close();
+});

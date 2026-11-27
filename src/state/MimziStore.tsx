@@ -18,6 +18,7 @@ import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
 import { pictureCopies } from '../lib/samePicture';
 import { isPreview, notifyPreview } from '../lib/preview';
+import { safeMode } from '../lib/safeStart';
 import { swapWordInto, type SwapResult } from '../lib/manageWords';
 import { canSyncQuietly, currentToken, fetchProfile, quietToken, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
 import { createDriveClient } from '../lib/google/drive';
@@ -632,10 +633,10 @@ export function MimziProvider({ children }: { children: ReactNode }) {
   // Tell an open board preview (Parent Mode) to refresh after any change.
   useEffect(() => {
     notifyPreview();
-  }, [tiles, categories, settings, myDay, data.mediaUrls]);
+  }, [tiles, categories, settings]);
 
   useEffect(() => {
-    if (isPreview || !accountEmail || !canSyncQuietly(SCOPES.drive)) return;
+    if (isPreview || !accountEmail || !currentToken()) return;
     const revision = JSON.stringify([accountEmail, stamps.current, tombstones.current]);
     if (revision === lastAutomaticRevision.current) return;
     const timer = window.setTimeout(() => {
@@ -648,14 +649,20 @@ export function MimziProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (isPreview || !accountEmail) return;
+    // Regular checks only use Google access Mimzi already has (no sign-in calls).
     const check = () => {
-      if (document.visibilityState === 'visible' && navigator.onLine && canSyncQuietly(SCOPES.drive)) void syncNow();
+      if (document.visibilityState === 'visible' && navigator.onLine && currentToken()) void syncNow();
     };
     const reconnect = () => {
-      if (navigator.onLine) void syncNow();
+      if (navigator.onLine && currentToken()) void syncNow();
     };
-    // On opening Mimzi (Android app): reconnect quietly and bring in the latest board.
-    check();
+    // On opening Mimzi (Android app): one quiet reconnect, a few seconds after the board is up, to
+    // bring in the latest board. Skipped if the last start didn't finish (safe start).
+    const opening = safeMode
+      ? undefined
+      : window.setTimeout(() => {
+          if (document.visibilityState === 'visible' && navigator.onLine && canSyncQuietly(SCOPES.drive)) void syncNow();
+        }, 4000);
     window.addEventListener('online', reconnect);
     document.addEventListener('visibilitychange', check);
     const interval = window.setInterval(check, 30_000);
@@ -663,6 +670,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('online', reconnect);
       document.removeEventListener('visibilitychange', check);
       window.clearInterval(interval);
+      if (opening) window.clearTimeout(opening);
     };
   }, [accountEmail, syncNow]);
 

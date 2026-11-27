@@ -2,13 +2,21 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { MimziProvider } from './state/MimziStore';
+import { CrashScreen } from './components/CrashScreen';
+import { beginStart, rememberError } from './lib/safeStart';
 import './styles.css';
+
+beginStart();
+window.addEventListener('error', (e) => rememberError(`error: ${e.message}`));
+window.addEventListener('unhandledrejection', (e) => rememberError(`promise: ${String((e.reason as Error)?.message ?? e.reason)}`));
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <MimziProvider>
-      <App />
-    </MimziProvider>
+    <CrashScreen>
+      <MimziProvider>
+        <App />
+      </MimziProvider>
+    </CrashScreen>
   </StrictMode>,
 );
 

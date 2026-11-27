@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { safeMode } from '../lib/safeStart';
 
 type Shape = 'sideways' | 'upright';
 const SIZES: Record<Shape, { w: number; h: number }> = {
@@ -15,7 +16,7 @@ function load(): { open: boolean; shape: Shape } {
   } catch {
     /* storage unavailable */
   }
-  return { open: true, shape: 'sideways' };
+  return { open: false, shape: 'sideways' };
 }
 
 /**
@@ -23,7 +24,7 @@ function load(): { open: boolean; shape: Shape } {
  * (the page being edited) and refreshes by itself after every change.
  */
 export function BoardPreview({ page }: { page?: string }) {
-  const [state, setState] = useState(load);
+  const [state, setState] = useState(() => (safeMode ? { ...load(), open: false } : load()));
   const save = (next: typeof state) => {
     setState(next);
     try {

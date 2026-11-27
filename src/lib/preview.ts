@@ -31,7 +31,13 @@ export function notifyPreview(): void {
 export function listenForChanges(onChange: () => void): () => void {
   const c = ch();
   if (!c) return () => undefined;
-  const handler = () => onChange();
+  // Several quick changes refresh the preview once, at most every 2 seconds.
+  let wait: number | undefined;
+  const started = Date.now();
+  const handler = () => {
+    if (wait !== undefined) return;
+    wait = window.setTimeout(onChange, Math.max(300, 2000 - (Date.now() - started)));
+  };
   c.addEventListener('message', handler);
   return () => c.removeEventListener('message', handler);
 }

@@ -177,7 +177,10 @@ export async function quietToken(scopes: string[], email?: string): Promise<stri
   if (!nativeGoogleAvailable() || quietFailed) return null;
   const wanted = [...new Set([...SCOPES.profile, ...scopes])];
   try {
-    const r = await nativeGoogleSilent(wanted);
+    const r = await Promise.race([
+      nativeGoogleSilent(wanted),
+      new Promise<never>((_, reject) => window.setTimeout(() => reject(new Error('Timed out.')), 20_000)),
+    ]);
     if (email && r.email && r.email.toLowerCase() !== email.toLowerCase()) throw new Error('Different account.');
     token = { value: r.token, expiresAt: Date.now() + 55 * 60_000, scopes: new Set(wanted) };
     return r.token;
