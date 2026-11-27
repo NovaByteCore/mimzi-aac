@@ -1,6 +1,8 @@
+import { nativeTtsAvailable } from '../lib/nativeTts';
 import { useEffect, useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { bestVoice, chooseVoice, getVoices, lastVoiceUse, onVoiceUse, onVoicesChanged, rankVoices, speakText, speechSupported, voiceQuality, type VoiceUse } from '../lib/speech';
+import { Icon } from '../components/Icon';
 
 const QUALITY_LABEL = { natural: 'Natural quality', standard: 'Standard', robotic: 'Robotic / novelty' } as const;
 
@@ -47,6 +49,13 @@ export function VoicePanel() {
     volume: settings.speechVolume,
   });
   const current = () => opts(settings.voiceURI, settings.voiceName);
+  const [voiceTest, setVoiceTest] = useState<'idle' | 'checking' | 'spoken' | 'failed'>('idle');
+  const testVoice = async () => {
+    setVoiceTest('checking');
+    const result = await speakText(SAMPLE, { ...current(), interrupt: 'interrupt' });
+    setVoiceTest(result === 'spoken' ? 'spoken' : 'failed');
+  };
+
 
   const lang2 = settings.speechLang.slice(0, 2).toLowerCase();
   const ranked = useMemo(() => {
@@ -116,8 +125,8 @@ export function VoicePanel() {
       </div>
 
       <div className="row">
-        <button type="button" className="btn btn-primary" onClick={() => void speakText(SAMPLE, current())}>
-          🔊 Hear Mimzi’s voice
+        <button type="button" className="btn btn-primary" onClick={() => void testVoice()} disabled={voiceTest === 'checking'}>
+          <Icon name="speak" /> Hear Mimzi’s voice
         </button>
         <button
           type="button"
@@ -129,8 +138,18 @@ export function VoicePanel() {
         </button>
       </div>
 
+      <p className="muted small">
+        To verify offline speech, turn on Airplane Mode, make sure Wi-Fi is off, and tap Hear Mimzi’s voice.
+        {nativeTtsAvailable() && ' The Android app uses the tablet’s text-to-speech engine.'}
+      </p>
+      <p role="status">
+        {voiceTest === 'checking' && 'Testing speech…'}
+        {voiceTest === 'spoken' && (online ? 'The speech test completed. Repeat in Airplane Mode to check offline speech.' : 'The speech test completed while offline. If you heard it, offline speech is working.')}
+        {voiceTest === 'failed' && 'Speech did not finish. Check your text-to-speech voice and media volume. For offline speech, download a voice in your device settings.'}
+      </p>
+
       <h3>Choose Mimzi’s voice</h3>
-      <p className="muted small">Most natural voices are listed first. Tap ▶ to hear one, then choose it — every word and sentence will use it.</p>
+      <p className="muted small">Most natural voices are listed first. Tap Preview to hear one, then choose it — every word and sentence will use it.</p>
       <label className="check">
         <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show voices in all languages
       </label>
@@ -147,7 +166,7 @@ export function VoicePanel() {
                   <input type="radio" name="voice" checked={on} onChange={() => pick(v)} />
                   <span>
                     <strong>{v.name}</strong>
-                    {auto?.voiceURI === v.voiceURI && <span className="voice-badge"> ★ Most natural</span>}{' '}
+                    {auto?.voiceURI === v.voiceURI && <span className="voice-badge"> · Most natural</span>}{' '}
                     <span className="muted small">
                       · {QUALITY_LABEL[q]} · {v.lang} · {v.localService ? 'on this device' : 'needs internet'}
                       {v.default && ' · device default'}
@@ -160,7 +179,7 @@ export function VoicePanel() {
                   onClick={() => void speakText(SAMPLE, { ...opts(v.voiceURI, v.name), lang: v.lang || settings.speechLang })}
                   aria-label={`Preview ${v.name}`}
                 >
-                  ▶ Preview
+                  <Icon name="play" /> Preview
                 </button>
               </li>
             );
@@ -197,7 +216,7 @@ export function VoicePanel() {
       </label>
       <label className="check">
         <input type="checkbox" checked={settings.showSentenceBar} onChange={(e) => updateSettings({ showSentenceBar: e.target.checked })} />
-        Message bar: collect words and say the whole message with 🔊
+        Message bar: collect words and say the whole message with the Speak button
       </label>
       <label className="check">
         <input type="checkbox" checked={settings.speakFolders} onChange={(e) => updateSettings({ speakFolders: e.target.checked })} />
@@ -249,7 +268,7 @@ export function VoicePanel() {
           <input value={pronText} onChange={(e) => setPronText(e.target.value)} placeholder="e.g. Ree-ah" data-testid="pron-text" />
         </label>
         <button type="button" className="btn" disabled={!pronTile} onClick={() => pronTile && void speakText(pronText || pronTile.speak, current())}>
-          🔊 Test
+          <Icon name="speak" /> Test
         </button>
         <button
           type="button"
@@ -273,7 +292,7 @@ export function VoicePanel() {
               <strong>{t.label}</strong> → “{t.pronunciation}”
               <span className="spacer" />
               <button type="button" className="btn small" onClick={() => void speakText(t.pronunciation!, current())}>
-                🔊
+                <Icon name="speak" />
               </button>
               <button type="button" className="btn btn-quiet small" onClick={() => saveTile({ ...t, pronunciation: undefined })}>
                 Remove

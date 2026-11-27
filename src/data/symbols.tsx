@@ -44,6 +44,29 @@ const Heart = ({ x = 50, y = 54, s = 1, fill = '#F4B6B6' }) => (
 const Check = ({ d = 'M28 52 L44 68 L74 34' }) => <path d={d} {...S} strokeWidth={9} />;
 const Cross = () => <path d="M33 33 L67 67 M67 33 L33 67" {...S} strokeWidth={9} />;
 
+
+/** A soap bubble with a shine. */
+const Bubble = ({ x, y, r }: { x: number; y: number; r: number }) => (
+  <g>
+    <circle cx={x} cy={y} r={r} fill="#CFE8FA" stroke={INK} strokeWidth={4} />
+    <path d={`M${x - r * 0.55} ${y - r * 0.1} A${r * 0.6} ${r * 0.6} 0 0 1 ${x - r * 0.05} ${y - r * 0.6}`} stroke="#FFFFFF" strokeWidth={Math.max(2.5, r * 0.22)} strokeLinecap="round" fill="none" />
+  </g>
+);
+
+/** An open hand, palm facing out (fingers up), centred on its palm. */
+const OpenHand = ({ x, y, tilt = 0, thumbRight = false }: { x: number; y: number; tilt?: number; thumbRight?: boolean }) => (
+  <g transform={`translate(${x} ${y}) rotate(${tilt}) scale(${thumbRight ? -1 : 1} 1)`}>
+    {/* fingers */}
+    {[-10.5, -3.5, 3.5, 10.5].map((fx, i) => (
+      <rect key={i} x={fx - 3.6} y={-30 + (i === 0 || i === 3 ? 6 : 0)} width={7.2} height={24} rx={3.6} fill="#F8E1D2" stroke={INK} strokeWidth={3.2} />
+    ))}
+    {/* thumb */}
+    <rect x={-25} y={-6} width={7.2} height={20} rx={3.6} fill="#F8E1D2" stroke={INK} strokeWidth={3.2} transform="rotate(-38 -21 4)" />
+    {/* palm */}
+    <path d="M-15 -10 H15 V8 C15 18 8 24 0 24 C-8 24 -15 18 -15 8 Z" fill="#F8E1D2" stroke={INK} strokeWidth={3.2} strokeLinejoin="round" />
+  </g>
+);
+
 export const SYMBOLS: Record<string, () => ReactElement> = {
   more: () => (
     <g>
@@ -63,6 +86,7 @@ export const SYMBOLS: Record<string, () => ReactElement> = {
       <Cross />
     </g>
   ),
+  like: () => <Heart />,
   want: () => (
     <g>
       <Heart x={40} y={50} s={1.15} />
@@ -276,6 +300,43 @@ export const SYMBOLS: Record<string, () => ReactElement> = {
       <Person x={26} y={30} />
       <path d="M42 54 Q60 20 80 30" {...S} strokeWidth={4} strokeDasharray="4 7" />
       <circle cx={84} cy={34} r={9} fill="#E57373" stroke={INK} strokeWidth={4} />
+    </g>
+  ),
+  /** "More": one bubble becomes several (concrete for toddlers; replaces the abstract plus). */
+  'more-bubbles': () => (
+    <g>
+      <Bubble x={18} y={52} r={12} />
+      <Arrow d="M34 52 H46" head="M40 45 L47 52 L40 59" />
+      <Bubble x={68} y={28} r={12} />
+      <Bubble x={89} y={48} r={9} />
+      <Bubble x={68} y={63} r={13} />
+      <Bubble x={89} y={78} r={8} />
+    </g>
+  ),
+  /** "All done": both open hands with the turning motion of the sign. */
+  'all-done-hands': () => (
+    <g>
+      {/* palms face out, so both thumbs point to the middle */}
+      <OpenHand x={27} y={60} tilt={-14} thumbRight />
+      <OpenHand x={73} y={60} tilt={14} />
+      <path d="M14 22 A20 20 0 0 1 34 12" {...S} strokeWidth={4} />
+      <path d="M86 22 A20 20 0 0 0 66 12" {...S} strokeWidth={4} />
+      <path d="M28 10 L34 12 L31 18" {...S} strokeWidth={4} />
+      <path d="M72 10 L66 12 L69 18" {...S} strokeWidth={4} />
+    </g>
+  ),
+  /** "Needs" folder: everyday care — a drink, a bed and a heart (the toilet is kept for "potty"). */
+  needs: () => (
+    <g>
+      {/* cup with straw */}
+      <path d="M12 40 H40 L36 84 H16 Z" fill="#DCECF8" stroke={INK} strokeWidth={4.5} strokeLinejoin="round" />
+      <path d="M14 56 H38" stroke="#7FB8E6" strokeWidth={6} />
+      <path d="M30 40 L34 22 H42" {...S} strokeWidth={4.5} />
+      {/* bed with pillow */}
+      <path d="M50 84 V54 M50 72 H92 V84" {...S} strokeWidth={4.5} />
+      <rect x={53} y={58} width={14} height={11} rx={4} fill="#FFFFFF" stroke={INK} strokeWidth={4} />
+      <path d="M68 72 V62 Q80 56 92 62 V72 Z" fill="#E9E4F7" stroke={INK} strokeWidth={4} strokeLinejoin="round" />
+      <Heart x={70} y={26} s={0.62} />
     </g>
   ),
   help: () => (

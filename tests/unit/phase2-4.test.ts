@@ -60,7 +60,7 @@ test('schedule pictures: own photo beats linked word picture', () => {
     ['t', { id: 't', label: 'Cars', speak: 'cars', categoryId: 'play', order: 0, symbol: '🚗', color: 'sage', favorite: false, hidden: false, builtIn: true, photoId: 'p-tile' }],
   ]);
   const urls = { 'p-tile': 'blob:tile', 'p-own': 'blob:own' };
-  assert.deepEqual(itemPicture({ ...item('x'), tileId: 't' }, tiles, urls), { photoUrl: 'blob:tile', symbol: '🚗' });
+  assert.deepEqual(itemPicture({ ...item('x'), tileId: 't' }, tiles, urls), { photoUrl: 'blob:tile', symbol: '🚗', tile: tiles.get('t') });
   assert.deepEqual(itemPicture({ ...item('x'), tileId: 't', photoId: 'p-own' }, tiles, urls), { photoUrl: 'blob:own' });
   assert.deepEqual(itemPicture(item('x'), tiles, urls), {});
 });

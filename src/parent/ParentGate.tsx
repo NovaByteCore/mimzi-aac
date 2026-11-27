@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { createPinRecord, isValidPin, verifyPin } from '../lib/pin';
+import { Icon } from '../components/Icon';
+import { useDialogFocus } from '../lib/useDialogFocus';
 
 interface Props {
   onUnlock: () => void;
@@ -17,6 +19,8 @@ export function ParentGate({ onUnlock, onCancel }: Props) {
   const [pin, setPin] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useDialogFocus(ref, onCancel);
 
   const title = creating
     ? step === 'enter'
@@ -64,7 +68,7 @@ export function ParentGate({ onUnlock, onCancel }: Props) {
 
   return (
     <div className="modal-backdrop" role="presentation">
-      <div className="modal pin-modal" role="dialog" aria-modal="true" aria-labelledby="pin-title">
+      <div ref={ref} className="modal pin-modal" role="dialog" aria-modal="true" aria-labelledby="pin-title">
         <h2 id="pin-title">{title}</h2>
         {creating && step === 'enter' && (
           <p className="muted">This keeps editing screens away from little fingers. Use 4 to 8 numbers.</p>
@@ -81,7 +85,7 @@ export function ParentGate({ onUnlock, onCancel }: Props) {
           {KEYS.map((k, i) =>
             k ? (
               <button key={i} type="button" className="pin-key" onClick={() => press(k)} aria-label={k === '⌫' ? 'Delete digit' : k} disabled={busy}>
-                {k}
+                {k === '⌫' ? <Icon name="backspace" size={26} /> : k}
               </button>
             ) : (
               <span key={i} />

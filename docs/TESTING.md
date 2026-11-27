@@ -4,16 +4,68 @@
 
 | Suite | Command | Covers |
 | --- | --- | --- |
-| Unit (55) | `npm run test:unit` | Vocabulary integrity, Food & Drink starts empty, sentence builder, grid paging and fixed positions, reordering, crop maths, settings migration, backup v2 round-trip including media, My Day and My Words, v1 backup compatibility, backup validation, PIN hashing, First/Then sentence, token rules (1–10, never removed by adding), routine current step and Now/Next/Later, schedule pictures, My Words CSV (quoting, formula-injection safety) and therapist summary, sync conflict rules, media reference tracking, recording format choice, WCAG AA contrast of every tile colour. **Google:** two-device Drive sync (new device gets photos; per-word newest-wins; deletes spread; My Day/settings; unused media cleaned up; PIN and voice stay per device), photo pass-through security (Google-only URLs, Bearer required, images only), Google Photos picker flow. |
-| End-to-end (34) | `npm run test:e2e` | **Phase 1:** opens straight to the board; one-tap speech; sentence across groups; hold + PIN, wrong PIN refused; photo tile survives reload; rename / reorder / delete / restore; 2×2 grid; backup → restore into a fresh browser; offline reload. **Phase 2:** recorded voice replaces text-to-speech (fake microphone); sign video only plays after "See sign"; quick-word picker. **Phase 3:** First/Then speak, hold to mark done, reset; tokens (3 default, quick tap ignored, hold adds, celebration, saved across reload, no remove button); routine edit + Now/Next/Later switch; templates. **Phase 4:** My Words note + CSV/summary export; Food & Drink empty state and private notes; sync status and no outside network requests. **Google (simulated):** sign in on one device, sign in on a second and get photos and notes, delete on one and see it removed on the other; pick a photo from Google Photos into a tile. **Phase 5:** iPad-landscape and Galaxy-portrait layouts (Talk and My Day) fit without sideways scrolling; every child-screen control has an accessible name and a ≥ 44 px touch target. |
+| Unit (84) | `npm run test:unit` | Vocabulary integrity, Food & Drink starts empty, sentence builder, grid paging and fixed positions, reordering, crop maths, settings migration, backup v2 round-trip including media, My Day and My Words, v1 backup compatibility, backup validation, PIN hashing, First/Then sentence, token rules (1–10, never removed by adding), routine current step and Now/Next/Later, schedule pictures, My Words CSV (quoting, formula-injection safety) and therapist summary, sync conflict rules, media reference tracking, recording format choice, WCAG AA contrast of every tile colour. **Google:** two-device Drive sync (new device gets photos; per-word newest-wins; deletes spread; My Day/settings; unused media cleaned up; PIN and voice stay per device), photo pass-through security (Google-only URLs, Bearer required, images only), Google Photos picker flow. |
+| End-to-end (64) | `npm run test:e2e` | **Phase 1:** opens straight to the board; one-tap speech; sentence across groups; hold + PIN, wrong PIN refused; photo tile survives reload; rename / reorder / delete / restore; 2×2 grid; backup → restore into a fresh browser; offline reload. **Phase 2:** recorded voice replaces text-to-speech (fake microphone); sign video only plays after "See sign"; quick-word picker. **Phase 3:** First/Then speak, hold to mark done, reset; tokens (3 default, quick tap ignored, hold adds, celebration, saved across reload, no remove button); routine edit + Now/Next/Later switch; templates. **Phase 4:** My Words note + CSV/summary export; Food & Drink empty state and private notes; sync status and no outside network requests. **Google (simulated):** sign in on one device, sign in on a second and get photos and notes, delete on one and see it removed on the other; pick a photo from Google Photos into a tile. **Phase 5:** iPad-landscape and Galaxy-portrait layouts (Talk and My Day) fit without sideways scrolling; every child-screen control has an accessible name and a ≥ 44 px touch target. |
 
 **V3 (unit):** every Mulberry symbol name resolves to a bundled file, Home has core words plus folders, every folder opens a page, colour coding by word type, voice choice and offline fallback, pronunciation override, Grow My Words scheduling (daily/weekly, overdue, pause, approve/skip), vocabulary migration that keeps caregiver edits, backup v3 round-trip.
 
-**V3 acceptance (e2e):** More speaks with the built-in voice and shows an AAC symbol (T1); a full sentence speaks (T2); a new word "Trampoline" speaks with no recording (T3); changing the voice and speed is used, and offline the on-device voice takes over with an explanation (T4/T10); Words on My Board shows 6 words in their own slots (T5); 2 words every Monday are planned, wait for approval on Monday (fake clock), then appear, while next week's word still waits (T6); hide and restore keeps the slot, picture and speech, and the history records it (T7); a photo on "drink" still says "drink" (T8); Help speaks and See sign shows the ASL drawing without speaking (T9); pronunciation override; folders, Back and Home keep the message.
+**V3 acceptance (e2e):** More speaks with the built-in voice and shows an AAC symbol (T1); a full sentence speaks (T2); a new word "Trampoline" speaks with no recording (T3); changing the voice and speed is used, and offline the on-device voice takes over with an explanation (T4/T10); Manage words hides single words, updates the visible count and nothing else moves (T5); 2 words every Monday are planned, wait for approval on Monday (fake clock), then appear, while next week's word still waits (T6); hide and restore keeps the slot, picture and speech, and the history records it (T7); a photo on "drink" still says "drink" (T8); Help speaks (T9; ASL was removed in Nov 2026); pronunciation override; folders, Back and Home keep the message.
+
+**Voice (unit + e2e):** voices are ranked by naturalness (Enhanced, Premium and Natural first; novelty and robotic voices last). The automatic voice runs at 0.9× with pitch 1.1. A chosen voice is saved through a reload and used for words, sentences and new words. A voice missing on another device is explained and can be replaced. Sync keeps the voice per device.
+
+**Visual schedules (unit + e2e):**
+- Editing FIRST and THEN: words, spoken words, an ARASAAC symbol picked without a board word, a photo upload, card colour, and the live preview. The changes survive a reload.
+- First / Then templates: save, rename, switch, delete, and quick switching from Parent Mode.
+- Reward: name, symbol, goal, 1–10 tokens, all five token styles, and the completion message. Reward templates can be saved and switched. Tokens are only ever added.
+- Routines of 1 to 5 steps: reorder, the three views (numbered, Now/Next/Later, one at a time with previews), and saving, duplicating and restoring templates. Progress is kept while editing.
+- "Edit schedule" needs the PIN (a wrong PIN doesn't open it), and Cancel warns before discarding changes.
+- Schedule symbols and photos still show offline.
+- My Day and the editor fit on phone, onn landscape, onn portrait and iPad, with no sideways scrolling, every picture visible and the preview on screen.
+- Older saved schedules load: caregiver data is kept, routines are trimmed to 5 steps, and the example templates are added only once.
+- The board's word positions and speech are unchanged after editing schedules.
+
+**Quality pass (e2e):**
+- **Saved schedules, all three kinds:** create, edit (words, spoken words, colour, photo and symbol), duplicate, rename, switch, delete. Cancel discards only unsaved edits and Save keeps everything, through a reload. The child sees and hears exactly what was saved.
+- **New photos show before saving,** in the card editor and in the live preview, including routine steps. Every temporary photo URL is released on Cancel and on Save, and a photo that was replaced isn't stored.
+- **Switching saved boards starts them fresh** (the intended reset). Editing a board keeps its progress.
+- **Layouts with completed steps:** numbered (check marks and the current step), Now / Next / Later on the last step (empty NEXT and LATER), one step at a time (no upcoming steps after the last; "All done", then start again).
+- **Editor on 8" onn sizes with the on-screen keyboard open** (simulated by shrinking the page, which is what Chrome on Android does with `interactive-widget=resizes-content`):
+  - the field being typed in stays visible
+  - Save, Cancel and the preview are reachable and not covered
+  - the picture chooser and its Cancel button fit
+- **Compact onn layouts:** the quick words (help, stop, no, more, all done) are on screen and at least 44 px. Speak, Remove and Clear are visible. All 13 folders open from Home, and Back and Home return. Home always opens the first Home page.
+
+**Professional board (e2e):** no emoji anywhere on the child screen, no ASL tags (ASL was removed), and every tile has a picture and label, at four screen sizes. Quick words stay available when hidden on their page.
+
+**Symbols (unit + e2e):**
+- ARASAAC and OpenSymbols are simulated so tests never depend on outside services.
+- Licence rules: unknown licences are rejected, and non-commercial ones are blocked when `VITE_COMMERCIAL_USE=true`.
+- Every starter word has a picture and none uses emoji. ARASAAC pictures appear automatically without moving any word, and curated search terms are used.
+- Each word's picture can be changed (ARASAAC alternative, Mulberry, OpenSymbols) while its label, speech, recording and place stay the same. Switching the default style never touches a grown-up's choice.
+- A photo replaces a symbol, and removing the photo brings the symbol back.
+- ARASAAC pictures still show offline after a reload.
+- Words with no match keep their built-in picture.
+- Older devices are upgraded without moving anything.
+- Backups keep each picture's source, author and licence.
+- The OpenSymbols function keeps its secret server-side, refreshes its token, and validates input.
 
 Text-to-speech is stubbed in e2e tests (headless browsers have no voices), so they check *what* is spoken, not how it sounds.
 
 ## Manual checklist — physical devices
+
+### onn tablet — first-tap speech, quick editor, layout (Nov 2026 round)
+Record for each: date, APK build number or web link, Android version, voice engine.
+- [ ] APK: force-close Mimzi, open it, tap one word immediately → it speaks **once** (may wait 1–2 s while the speech engine starts). Repeat after restarting the tablet.
+- [ ] APK in Airplane Mode with Google's offline voice installed → first tap speaks once.
+- [ ] Web link in Chrome: tap “All done” → speaks; if it ever fails, “Try again” speaks.
+- [ ] Rapid taps (3 words in 1 s) → only the newest word plays (“Stop and say the new word”), or all in order (“Let it finish first”).
+- [ ] My Day → Edit schedule → PIN → change Then to Bubbles in 3 taps; Cancel returns to the same tab with the message intact.
+- [ ] Switch to a saved reward: the token note appears before confirming.
+- [ ] Open the saved Bedtime routine in 2 taps.
+- [ ] Rotate the tablet on page 2 of Home: the same words stay on screen; the message stays.
+- [ ] Arrange words: drag a word with a finger onto another (they swap); Undo; Save a move; restart Mimzi → arrangement kept.
+- [ ] Change a word's picture: its recording still plays.
+- [ ] Recent pictures and the everyday pictures show in Airplane Mode after one online session.
 
 Automated tests run in desktop Chromium. They are **not** a substitute for these checks on the real iPad and Galaxy. Record date, device, OS and browser version for each run.
 
@@ -23,6 +75,18 @@ Automated tests run in desktop Chromium. They are **not** a substitute for these
 - [ ] Speech works in Airplane Mode with a voice not marked “needs internet”.
 - [ ] Speed slider changes speed; chosen voice is remembered.
 - [ ] Mimzi Voice lists the tablet's voices; ▶ Preview plays each one.
+### Not yet tested on a physical device
+I had no access to a physical device, so none of these has been checked on the onn tablet, an iPad or a Galaxy yet:
+- [ ] The real Android voices (Speech Services by Google) and offline speech in Airplane Mode.
+- [ ] The camera: **Take a photo** in the schedule and word editors.
+- [ ] Installing the PWA ("Add to Home screen" / "Install app"), then opening it offline.
+- [ ] Data surviving a tablet restart, and an app update.
+- [ ] The real on-screen keyboard in the schedule editor. Automated tests only simulate it.
+- [ ] Touch accuracy with the protective case on.
+
+- [ ] My Day → Edit schedule → Photo → **Take a photo** opens the onn tablet's camera, and the photo appears on the card.
+- [ ] A First / Then board with two real photos is easy for your child to follow at arm's length.
+- [ ] ARASAAC pictures appear on the starter words after the first online launch, and still show in Airplane Mode.
 - [ ] onn tablet: Home page and folders fit at 1280×800 in landscape and portrait; the case doesn't block the edge buttons.
 - [ ] Silent switch / volume at zero: toast or visible words still show the message.
 
@@ -47,8 +111,6 @@ Automated tests run in desktop Chromium. They are **not** a substitute for these
 ### Voice recording & signs
 - [ ] iPad: "Record your voice" asks for the microphone, records, and plays back. The recording plays when the tile is tapped, including in Airplane Mode.
 - [ ] Galaxy: same.
-- [ ] A sign video recorded on the iPad camera (MOV/HEVC) plays on the iPad. Note: an iPad MOV may not play on Android. Export as MP4 (H.264) if it will be restored on the Galaxy.
-- [ ] The See sign button is easy for a grown-up to hit but doesn't interfere with tapping the tile.
 
 ### My Day
 - [ ] Holding "Add token" for about a second adds exactly one token. Quick toddler taps never do.

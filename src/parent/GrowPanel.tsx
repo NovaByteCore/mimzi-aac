@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
 import { addDays, dayString, moveItem, parseDay, pendingItems, reschedule, scheduleWords } from '../lib/grow';
 import type { GrowItem, GrowPlan } from '../types';
+import { scheduleWeeklyWordReminder } from '../lib/wordReminder';
 import { ConfirmDialog } from './ConfirmDialog';
+import { Icon } from '../components/Icon';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const STATUS_LABEL: Record<GrowItem['status'], string> = {
@@ -22,6 +24,8 @@ export function GrowPanel() {
   const [filter, setFilter] = useState('');
   const [month, setMonth] = useState(today.slice(0, 7));
   const [confirmAuto, setConfirmAuto] = useState(false);
+  const [reminderStatus, setReminderStatus] = useState('');
+  const [settingReminder, setSettingReminder] = useState(false);
   const tileById = useMemo(() => new Map(tiles.map((t) => [t.id, t])), [tiles]);
   const catName = (id: string) => categories.find((c) => c.id === id)?.name ?? '';
   const label = (id: string) => tileById.get(id)?.label ?? '(deleted word)';
@@ -117,7 +121,30 @@ export function GrowPanel() {
         />
         Pause the schedule {grow.paused && <span className="muted small">(resuming re-plans upcoming words from today)</span>}
       </label>
-      <p className="muted small">Mimzi can’t send notifications; reminders appear here and at the top of Parent Mode when you open it.</p>
+      <label className="field inline">
+        <input type="checkbox" checked={Boolean(grow.suggestWeekly)} onChange={(event) => {
+          const suggestWeekly = event.target.checked;
+          save({ ...grow, suggestWeekly });
+          if (!suggestWeekly) void scheduleWeeklyWordReminder(false).catch(() => setReminderStatus('Could not cancel the tablet reminder.'));
+        }} />
+        Suggest up to two words each week
+      </label>
+      <p className="muted small">Mimzi looks at the words on the Home board and suggests words they can go with. You approve each suggestion before it appears.</p>
+      {grow.suggestWeekly && (
+        <button type="button" className="btn" disabled={settingReminder} onClick={async () => {
+          setSettingReminder(true);
+          try {
+            setReminderStatus(await scheduleWeeklyWordReminder(true)
+              ? 'Tablet reminder set for Mondays at 9:00 a.m.'
+              : 'Tablet notifications are unavailable here or turned off. Mimzi shows a reminder inside the app.');
+          } catch {
+            setReminderStatus('Could not set the tablet reminder. Try again.');
+          } finally {
+            setSettingReminder(false);
+          }
+        }}>Enable weekly tablet reminder</button>
+      )}
+      {reminderStatus && <p role="status">{reminderStatus}</p>}
 
       <h3>Choose words to add</h3>
       <div className="add-row">
@@ -143,7 +170,7 @@ export function GrowPanel() {
         </button>
       </div>
       {candidates.length === 0 ? (
-        <p className="muted">No hidden words to schedule. Hide words in “Words on My Board” or add new words first.</p>
+        <p className="muted">No hidden words to schedule. Hide words in “Manage words” or add new words first.</p>
       ) : (
         <div className="grow-candidates">
           {candidates.slice(0, 120).map((t) => (
@@ -166,10 +193,10 @@ export function GrowPanel() {
               <strong>{label(i.tileId)}</strong>
               <span className="spacer" />
               <button type="button" className="icon-btn small" disabled={idx === 0} onClick={() => save(moveItem(grow, i.id, -1, today))} aria-label={`Move ${label(i.tileId)} earlier`}>
-                ▲
+                <Icon name="up" />
               </button>
               <button type="button" className="icon-btn small" disabled={idx === planned.length - 1} onClick={() => save(moveItem(grow, i.id, 1, today))} aria-label={`Move ${label(i.tileId)} later`}>
-                ▼
+                <Icon name="down" />
               </button>
               <button type="button" className="btn small" onClick={() => resolveGrow([i.id], 'approve')}>
                 Add now
@@ -259,11 +286,11 @@ function Calendar({ month, setMonth, items, label }: { month: string; setMonth: 
     <div className="grow-cal" data-testid="grow-calendar">
       <div className="row">
         <button type="button" className="btn small" onClick={() => shift(-1)} aria-label="Previous month">
-          ◀
+          <Icon name="prev" />
         </button>
         <strong>{first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
         <button type="button" className="btn small" onClick={() => shift(1)} aria-label="Next month">
-          ▶
+          <Icon name="next" />
         </button>
       </div>
       <div className="cal-grid">

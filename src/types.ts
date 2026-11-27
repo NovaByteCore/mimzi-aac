@@ -65,15 +65,29 @@ export interface Tile {
   categoryId: string;
   /** Position inside its category. Only a caregiver changes this — never automatic. */
   order: number;
-  /** "svg:<key>" for a built-in Mimzi symbol, otherwise an emoji / short text. */
+  /**
+   * The picture: "arasaac:<id>", "mul:<file>", "svg:<key>", "os:<repo>:<id>" (see lib/symbols.ts),
+   * otherwise short text a caregiver typed.
+   */
   symbol?: string;
-  /** Key of a Mimzi ASL sign drawing (src/data/aslSigns.tsx), shown when ASL drawings are on. */
+  /** Source, author and licence of the chosen symbol (library symbols). */
+  symbolInfo?: SymbolInfo;
+  /**
+   * true = Mimzi chooses the picture (starter words): it follows the default symbol style.
+   * A grown-up choosing a picture sets this to false, and Mimzi never changes it again.
+   */
+  symbolAuto?: boolean;
+  /** The ARASAAC pictogram Mimzi found for this word (used when the style is ARASAAC). */
+  autoArasaac?: { id: number; name: string };
+  /** Bundled picture (Mulberry / Mimzi) shown until a downloaded symbol is available offline. */
+  fallbackSymbol?: string;
+  /** Legacy (ASL was removed): kept so older boards and backups load unchanged. Never shown. */
   aslSign?: string;
   /** IndexedDB media id of a caregiver photo. Shown instead of the symbol when present. */
   photoId?: string;
   /** IndexedDB media id of a caregiver recording. Played instead of text-to-speech. */
   audioId?: string;
-  /** IndexedDB media id of a caregiver-provided ASL video/GIF (Phase 2 UI). */
+  /** Legacy (ASL was removed): a sign video from an older version, kept but never shown. */
   signId?: string;
   color: TileColor;
   favorite: boolean;
@@ -86,6 +100,22 @@ export interface Tile {
   privateNote?: string;
   /** Last change time (ms) — used by Google Drive sync to pick the newest copy. */
   updatedAt?: number;
+}
+
+export interface SymbolInfo {
+  library: 'arasaac' | 'mulberry' | 'mimzi' | 'opensymbols';
+  /** OpenSymbols repository key (e.g. "sclera", "tawasol"). */
+  repo?: string;
+  id: string;
+  name: string;
+  url?: string;
+  /** Durable image copy saved with the picture metadata. */
+  localImage?: string;
+  author: string;
+  authorUrl?: string;
+  license: string;
+  licenseUrl?: string;
+  sourceUrl?: string;
 }
 
 export interface Category {
@@ -117,7 +147,12 @@ export interface GridSize {
 }
 
 export interface Settings {
+  /** Fixed grid, used when `layoutMode` is 'fixed' (and as the first guess for auto). */
   grid: GridSize;
+  /** 'auto' (default) = fit tile size and spacing to the screen; 'fixed' = always `grid`. */
+  layoutMode?: 'auto' | 'fixed';
+  /** Pages whose visible words are packed after applying a custom count. */
+  compactWordPages?: string[];
   showSentenceBar: boolean;
   /** 0.5 – 1.5, 1 = normal. */
   speechRate: number;
@@ -130,9 +165,17 @@ export interface Settings {
   sharedVoiceName?: string;
   /** Version of the voice defaults applied (2 = gentle 1.1 pitch, 0.9× speed). */
   voiceDefaults?: number;
+  /** Default picture style for Mimzi-chosen pictures: ARASAAC (default) or the bundled Mulberry set. */
+  symbolStyle?: 'arasaac' | 'mulberry';
   speechLang: string;
   /** Multiplier for label text size. */
   textScale: number;
+  /** Board picture size: 1 = normal; bigger = fewer, larger pictures per page (auto layout). */
+  tileScale?: number;
+  /** Board on one page: pictures shrink so every word on a page fits on one screen (default on). */
+  onePage?: boolean;
+  /** Quick Words bar size relative to normal (1). */
+  quickScale?: number;
   /** Space between tiles in px. */
   tileGap: number;
   highContrast: boolean;
@@ -140,13 +183,8 @@ export interface Settings {
   haptics: boolean;
   /** Tile ids shown in the always-visible quick bar. */
   quickTileIds: string[];
-  /** Show the small "See sign" button on tiles that have a sign video. */
-  showSignButtons: boolean;
-  signLoop: boolean;
-  /** Sign video playback speed (0.5 – 1). */
-  signSpeed: number;
-  /** Offer ASL sign drawings under "See sign" for words that have one. */
-  showAslDrawings: boolean;
+  /** Page list next to the board: automatic (hidden on phones and small tablets, where folders + Home/Back do the job) or hidden. */
+  pageList?: 'auto' | 'hide';
   /** 'wordType' = AAC colour coding; 'custom' = each tile's own colour. */
   colorMode: 'wordType' | 'custom';
   /** Voice pitch 0.5–1.5 and volume 0–1 (where the device supports them). */
@@ -174,10 +212,16 @@ export interface ScheduleItem {
   label: string;
   /** What Mimzi says; defaults to the label. */
   speak?: string;
-  /** Use the picture of an existing word tile. */
+  /** Use the picture of an existing word tile (follows that word's picture). */
   tileId?: string;
-  /** Or a photo added just for this schedule. */
+  /** Or a photo (a schedule photo, or one reused from a word or another routine). */
   photoId?: string;
+  /** Or an AAC symbol picked directly — no board word needed ("arasaac:<id>", "mul:<file>"…). */
+  symbol?: string;
+  /** Source, author and licence of `symbol`. */
+  symbolInfo?: SymbolInfo;
+  /** Card colour. */
+  color?: TileColor;
   done: boolean;
 }
 
@@ -188,30 +232,62 @@ export interface FirstThenTemplate {
   then: ScheduleItem;
 }
 
-export interface RewardTemplate {
+export type TokenStyle = 'star' | 'check' | 'circle' | 'heart' | 'dot';
+
+export interface RewardBoard {
+  item: ScheduleItem;
+  /** 1–10 tokens (3 by default). */
+  tokens: number;
+  /** Earned tokens — only ever added, or cleared by a deliberate reset (never as punishment). */
+  earned: number;
+  /** e.g. "Sit for the story". */
+  goal?: string;
+  tokenStyle?: TokenStyle;
+  /** Token colour (CSS colour). */
+  tokenColor?: string;
+  /** Said and shown when the board is complete. */
+  completeMessage?: string;
+  /** Show the gentle celebration (defaults to the global setting). */
+  celebrate?: boolean;
+  /** Say the completion message out loud (defaults to the global setting). */
+  sound?: boolean;
+  /** Board background colour. */
+  boardColor?: TileColor;
+}
+
+export interface RewardTemplate extends Omit<RewardBoard, 'earned'> {
   id: string;
   name: string;
-  item: ScheduleItem;
-  tokens: number;
 }
+
+export type RoutineLayout = 'steps' | 'nowNextLater' | 'oneAtATime';
 
 export interface RoutineTemplate {
   id: string;
   name: string;
+  /** 1–5 steps. */
   steps: ScheduleItem[];
+  layout?: RoutineLayout;
+  /** One-at-a-time view: show the next steps small. Older templates: use the current setting. */
+  showUpcoming?: boolean;
 }
 
 export type MyDayTool = 'firstThen' | 'reward' | 'routine';
 
 export interface MyDay {
-  firstThen: { first: ScheduleItem; then: ScheduleItem };
+  firstThen: { first: ScheduleItem; then: ScheduleItem; name?: string };
   firstThenTemplates: FirstThenTemplate[];
-  reward: { item: ScheduleItem; tokens: number; earned: number };
+  reward: RewardBoard & { name?: string };
   rewardTemplates: RewardTemplate[];
-  routine: { steps: ScheduleItem[] };
+  /** The routine on screen now (1–5 steps). */
+  routine: { steps: ScheduleItem[]; name?: string };
   routineTemplates: RoutineTemplate[];
-  /** How the routine is shown: numbered steps, or Now / Next / Later. */
-  routineLayout: 'steps' | 'nowNextLater';
+  /** How the routine is shown: numbered steps, Now / Next / Later, or one step at a time. */
+  routineLayout: RoutineLayout;
+  /** One-at-a-time view: show small previews of the next steps. */
+  showUpcoming?: boolean;
+  /** Data version (2 = unified schedule editor). */
+  version?: number;
 }
 
 /* ---------- My Words (caregiver observations) ---------- */
@@ -256,6 +332,7 @@ export interface GrowItem {
 }
 
 export interface GrowPlan {
+  suggestWeekly?: boolean;
   cadence: 'daily' | 'weekly';
   /** Words per day / per week. */
   perPeriod: number;
@@ -279,4 +356,23 @@ export interface VocabEvent {
   date: string;
   type: 'added' | 'shown' | 'hidden' | 'scheduled' | 'skipped' | 'canceled' | 'created';
   source: 'manual' | 'scheduled';
+}
+
+/** Something Mimzi said, kept exactly so it can be replayed or retried the same way. */
+export interface Utterance {
+  /** The words shown to people. */
+  text: string;
+  /** What the voice says (pronunciation override applied). */
+  speak: string;
+  /** Per-word voice language. */
+  lang?: string;
+  /** A caregiver recording, played first (built-in voice if it can't play). */
+  audioUrl?: string;
+}
+
+export interface SpeechState {
+  utterance: Utterance;
+  status: 'speaking' | 'done' | 'failed' | 'unsupported';
+  /** Whether the phrase is shown in the bar at the top of the screen. */
+  atTop: boolean;
 }

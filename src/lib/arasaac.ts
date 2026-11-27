@@ -1,0 +1,254 @@
+/*
+ * ARASAAC pictograms (https://arasaac.org) — the default AAC symbol style.
+ *
+ * Pictograms’ author: Sergio Palao. Origin: ARASAAC. License: CC BY-NC-SA 4.0.
+ * Owner: Government of Aragón (Spain). Used here for personal, noncommercial AAC.
+ *
+ * The public API needs no key. Mimzi only searches it from the device (no tracking data is
+ * sent — just the search word), downloads the chosen PNGs, and the service worker keeps
+ * them for offline use.
+ */
+import { ARASAAC_API, arasaacInfo, arasaacUrl } from './symbols';
+import type { SymbolInfo, Tile } from '../types';
+
+export interface SymbolResult {
+  /** Reference stored on the tile, e.g. "arasaac:2340". */
+  symbol: string;
+  url: string;
+  name: string;
+  info: SymbolInfo;
+}
+
+interface RawPictogram {
+  _id?: unknown;
+  keywords?: { keyword?: unknown }[];
+  sex?: unknown;
+  violence?: unknown;
+}
+
+type Fetch = typeof fetch;
+
+/**
+ * Pictograms never used automatically for starter words (checked against the live service):
+ * 9080 = "WHO" (World Health Organization logo), 16851 = firecracker (matches "cracker").
+ */
+export const ARASAAC_SKIP = new Set([9080, 16851]);
+
+/** A keyword in capitals (an acronym like "WHO") is not the toddler word. */
+const isAcronym = (k: string) => k.length > 1 && k === k.toUpperCase() && /[A-Z]/.test(k);
+
+function normalize(raw: unknown, query: string): SymbolResult[] {
+  if (!Array.isArray(raw)) return [];
+  const out: SymbolResult[] = [];
+  for (const p of raw as RawPictogram[]) {
+    const id = typeof p?._id === 'number' ? p._id : Number(p?._id);
+    if (!Number.isInteger(id) || id <= 0) continue;
+    // Toddler AAC: never offer pictograms ARASAAC flags as sexual or violent.
+    if (p.sex === true || p.violence === true) continue;
+    const kw = (p.keywords ?? []).map((k) => (typeof k?.keyword === 'string' ? k.keyword : '')).filter(Boolean);
+    const name = kw.find((k) => k.toLowerCase() === query.toLowerCase()) ?? kw[0] ?? query;
+    out.push({ symbol: `arasaac:${id}`, url: arasaacUrl(id), name, info: arasaacInfo(id, name) });
+  }
+  return out;
+}
+
+async function getJson(url: string, fetchImpl: Fetch): Promise<unknown> {
+  const res = await fetchImpl(url, { headers: { Accept: 'application/json' }, credentials: 'omit', referrerPolicy: 'no-referrer' });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error(`ARASAAC ${res.status}`);
+  return res.json();
+}
+
+/** Search ARASAAC for a word or concept (all matches, best first). */
+export async function searchArasaac(query: string, locale = 'en', fetchImpl: Fetch = fetch, limit = 40): Promise<SymbolResult[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const raw = await getJson(`${ARASAAC_API}/pictograms/${locale}/search/${encodeURIComponent(q)}`, fetchImpl);
+  return normalize(raw, q).slice(0, limit);
+}
+
+/** ARASAAC's own "best match" for a word (exact keyword matches), skipping known bad matches. */
+export async function bestArasaac(query: string, locale = 'en', fetchImpl: Fetch = fetch): Promise<SymbolResult | undefined> {
+  const q = query.trim();
+  if (!q) return undefined;
+  const raw = await getJson(`${ARASAAC_API}/pictograms/${locale}/bestsearch/${encodeURIComponent(q)}`, fetchImpl);
+  return normalize(raw, q).find((r) => !ARASAAC_SKIP.has(Number(r.info.id)) && !isAcronym(r.name));
+}
+
+/**
+ * Search words for starter vocabulary where the label alone isn't the clearest ARASAAC
+ * concept. Everything else searches its own label, then the concept of its bundled symbol.
+ */
+export const STARTER_QUERIES: Record<string, string[]> = {
+  // Checked against the live ARASAAC service (Nov 2026).
+  'family-mama': ['mom'],
+  'family-dada': ['dad'],
+  'food-crackers': ['cracker'],
+  'questions-who': ['who'],
+  'needs-potty': ['toilet'],
+  'places-potty': ['toilet'],
+  'describe-yummy': ['delicious'],
+  'food-yummy': ['delicious'],
+  'describe-yucky': ['disgusting'],
+  'food-yucky': ['disgusting'],
+  'describe-loud': ['noise'],
+  'safety-too-loud': ['noise'],
+  'feelings-silly': ['funny'],
+  'play-playdough': ['plasticine'],
+  'core-off': ['switch off', 'turn off'],
+  'safety-not-safe': ['danger'],
+  'social-love-you': ['love'],
+  'phrases-go-outside': ['go out'],
+  "phrases-i-don-t-want-it": ["I don't want"],
+  'phrases-i-want-that': ['I want'],
+  'core-all-done': ['finished', 'end'],
+  'needs-all-done': ['finished', 'end'],
+  'core-folder-food': ['food'],
+  'core-folder-family': ['family'],
+  'core-folder-play': ['toys', 'play'],
+  'core-folder-feelings': ['emotions', 'feelings'],
+  'core-folder-questions': ['question'],
+  'core-folder-actions': ['actions', 'run'],
+  'core-folder-body': ['body'],
+  'core-folder-places': ['places', 'house'],
+  'core-folder-social': ['hello'],
+  'core-folder-safety': ['safety', 'help'],
+  'core-folder-describe': ['adjectives', 'big'],
+  'core-folder-phrases': ['communication book', 'sentence'],
+};
+
+/**
+ * Starter words pinned to a specific pictogram where ARASAAC's best match isn't the toddler
+ * meaning (checked against the live service: 37883 "cracker" food, 9853 "who" question,
+ * 32338 "disgusting", 7157 "noisy").
+ */
+export const STARTER_PICTOS: Record<string, { id: number; name: string }> = {
+  // Reviewed picture by picture on the live service (Nov 2026): ARASAAC's best match had the
+  // wrong meaning for these toddler words (bus stop, coal mine, police arrest, rock-breaking…).
+  'core-stop': { id: 7195, name: 'stop' },
+  'safety-stop': { id: 7195, name: 'stop' },
+  'actions-catch': { id: 39647, name: 'catch' },
+  'core-mine': { id: 12264, name: 'mine' },
+  'actions-draw': { id: 8088, name: 'draw' },
+  'actions-brush': { id: 2326, name: 'brush teeth' },
+  'actions-wash': { id: 8977, name: 'wash' },
+  'core-out': { id: 2806, name: 'go out' },
+  'core-on': { id: 7814, name: 'on' },
+  'core-break': { id: 16643, name: 'rest' },
+  'needs-break': { id: 16643, name: 'rest' },
+  'feelings-break': { id: 16643, name: 'rest' },
+  'safety-break': { id: 16643, name: 'rest' },
+  'core-folder-places': { id: 32598, name: 'places' },
+  'places-park': { id: 2859, name: 'playground' },
+  'places-outside': { id: 2806, name: 'go out' },
+  'play-outside': { id: 2806, name: 'go out' },
+  'food-crackers': { id: 37883, name: 'cracker' },
+  'questions-who': { id: 9853, name: 'who' },
+  'describe-yucky': { id: 32338, name: 'disgusting' },
+  'food-yucky': { id: 32338, name: 'disgusting' },
+  'describe-loud': { id: 7157, name: 'noisy' },
+  'safety-too-loud': { id: 7157, name: 'noisy' },
+};
+
+/**
+ * Starter words that keep their bundled Mulberry picture because ARASAAC has no picture with
+ * the right meaning (checked Nov 2026): "cereal" (only grain plants) and "safe" (a strongbox).
+ */
+export const KEEP_BUNDLED = new Set(['food-cereal', 'safety-safe', 'core-folder-needs']);
+
+/**
+ * Pictures chosen for the word itself (Nov 2026 toddler review), so every tile with that word —
+ * Home, Quick Words, folders and phrases — shows the same picture:
+ *  - "all done": 28429, two open hands with the turning motion (was 5358, an arrow to a line)
+ *  - "no": 5526, a red X; "no thank you": 31859, a child shaking their head; "I don't want it":
+ *    6156, a hand pushing away — three different pictures for three different messages
+ *  - "hurt" / "it hurts": 30620, a face in pain (was 5484, an arm with a cut)
+ */
+export const PICTOS_BY_LABEL: Record<string, { id: number; name: string }> = {
+  'all done': { id: 28429, name: 'finished' },
+  no: { id: 5526, name: 'no' },
+  'no thank you': { id: 31859, name: 'no (shaking head)' },
+  "i don't want it": { id: 6156, name: "I don't want" },
+  hurt: { id: 30620, name: 'hurt' },
+  'it hurts': { id: 30620, name: 'hurt' },
+};
+
+/** Words that use a Mimzi drawing instead of ARASAAC (ARASAAC's "more" is abstract squares). */
+export const BUNDLED_BY_LABEL: Record<string, string> = {
+  more: 'svg:more-bubbles',
+};
+
+const labelKey = (label: string) => label.replace(/[!?.]/g, '').trim().toLowerCase().replace(/[’']/g, "'");
+
+/** The pinned ARASAAC picture for a starter word, if any. */
+export function pinnedPicto(t: Pick<Tile, 'id' | 'label'>): { id: number; name: string } | undefined {
+  return STARTER_PICTOS[t.id] ?? PICTOS_BY_LABEL[labelKey(t.label)];
+}
+
+/** Starter words that keep their bundled (offline) picture rather than an ARASAAC one. */
+export function keepBundled(t: Pick<Tile, 'id' | 'label'>): boolean {
+  return KEEP_BUNDLED.has(t.id) || labelKey(t.label) in BUNDLED_BY_LABEL;
+}
+
+/** Ordered search terms to try for a starter word. */
+export function starterQueries(tile: Pick<Tile, 'id' | 'label' | 'fallbackSymbol' | 'symbol'>): string[] {
+  const out: string[] = [...(STARTER_QUERIES[tile.id] ?? [])];
+  const label = tile.label.replace(/[!?.,]/g, '').trim();
+  if (label) out.push(label.toLowerCase());
+  const bundled = tile.fallbackSymbol ?? tile.symbol;
+  if (bundled?.startsWith('mul:')) {
+    const concept = bundled.slice(4).replace(/_,_to$/, '').replace(/_(female|male|lady|man)$/, '').replace(/_/g, ' ').toLowerCase();
+    if (concept) out.push(concept);
+  }
+  return [...new Set(out)];
+}
+
+/** Starter words whose ARASAAC picture hasn't been found yet. */
+export function needsArasaac(tiles: Tile[], missing: Record<string, string> = {}): Tile[] {
+  return tiles.filter((t) => t.symbolAuto && !t.autoArasaac && !t.deletedAt && !keepBundled(t) && missing[t.id] !== t.label);
+}
+
+/**
+ * Find an ARASAAC pictogram for each starter word (in the background, a few at a time).
+ * Calls `onFound` per word so the board can update the picture in place — positions,
+ * labels, speech and ASL never change. Words with no match keep their bundled picture.
+ */
+export async function findStarterPictures(
+  tiles: Tile[],
+  onFound: (tileId: string, found: { id: number; name: string }) => void | Promise<void>,
+  opts: { fetchImpl?: Fetch; locale?: string; concurrency?: number; onMissing?: (tileId: string) => void; signal?: { cancelled: boolean } } = {},
+): Promise<{ found: number; missing: number; failed: number }> {
+  const queue = [...tiles];
+  let found = 0;
+  let missing = 0;
+  let failed = 0;
+  const worker = async () => {
+    while (queue.length && !opts.signal?.cancelled) {
+      const t = queue.shift()!;
+      try {
+        const pinned = pinnedPicto(t);
+        if (pinned) {
+          found++;
+          await onFound(t.id, pinned);
+          continue;
+        }
+        let hit: SymbolResult | undefined;
+        for (const q of starterQueries(t)) {
+          hit = await bestArasaac(q, opts.locale ?? 'en', opts.fetchImpl ?? fetch);
+          if (hit) break;
+        }
+        if (hit) {
+          found++;
+          await onFound(t.id, { id: Number(hit.info.id), name: hit.name });
+        } else {
+          missing++;
+          opts.onMissing?.(t.id);
+        }
+      } catch {
+        failed++; // offline or ARASAAC unreachable — try again next time
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, opts.concurrency ?? 4) }, worker));
+  return { found, missing, failed };
+}

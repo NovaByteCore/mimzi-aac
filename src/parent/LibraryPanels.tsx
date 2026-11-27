@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useMimzi } from '../state/MimziStore';
-import { SymbolSearch } from './SymbolSearch';
+import { PicturePicker } from './PicturePicker';
 import { TileFace } from '../components/TileFace';
 import { TileEditor } from './TileEditor';
-import { AslSignSvg, ASL_KEYS, ASL_SIGNS } from '../data/aslSigns';
-import type { Tile } from '../types';
+import type { SymbolInfo, Tile } from '../types';
+import { effectiveStyle, libraryAllowed, librariesInUse, LIBRARIES } from '../lib/symbols';
 
 function useEditor() {
   const { categories } = useMimzi();
@@ -14,25 +14,50 @@ function useEditor() {
   return { setEditing, editor };
 }
 
-/** Symbol Library — search all Mulberry symbols and put one on a word. */
+/** Symbol Library — default picture style, every library, and full credits. */
 export function SymbolLibraryPanel() {
-  const { tiles, saveTile } = useMimzi();
-  const [symbol, setSymbol] = useState('');
+  const { tiles, settings, updateSettings, setTileSymbol } = useMimzi();
+  const [picked, setPicked] = useState<{ symbol: string; info: SymbolInfo } | null>(null);
   const [target, setTarget] = useState('');
   const [status, setStatus] = useState('');
   const words = tiles.filter((t) => !t.deletedAt).sort((a, b) => a.label.localeCompare(b.label));
+  const style = effectiveStyle(settings);
+  const arasaacOn = libraryAllowed('arasaac');
+  const credits = librariesInUse(tiles, settings);
   return (
     <section className="panel">
       <h2>Symbol Library</h2>
       <p className="muted">
-        About 3,400 AAC symbols from the Mulberry Symbols set, saved with Mimzi for offline use. Search, pick one, then choose which word gets it.
-        Choosing a symbol never moves the word or changes what it says.
+        Mimzi shows a real AAC symbol on every starter word. Choose the default style below, or give any single word a different symbol (or a photo).
+        Changing a picture never moves the word, changes what it says, or removes its recording.
       </p>
-      <SymbolSearch selected={symbol} onPick={setSymbol} />
-      {symbol && (
+
+      <h3>Default picture style</h3>
+      <div className="row" role="radiogroup" aria-label="Default picture style">
+        <label className="check">
+          <input
+            type="radio"
+            name="symbol-style"
+            checked={style === 'arasaac'}
+            disabled={!arasaacOn}
+            onChange={() => updateSettings({ symbolStyle: 'arasaac' })}
+            data-testid="style-arasaac"
+          />
+          ARASAAC (recommended) — clear, colourful pictograms used by AAC apps worldwide
+        </label>
+        <label className="check">
+          <input type="radio" name="symbol-style" checked={style === 'mulberry'} onChange={() => updateSettings({ symbolStyle: 'mulberry' })} data-testid="style-mulberry" />
+          Mulberry — simple line-and-colour symbols, built into Mimzi
+        </label>
+      </div>
+      {!arasaacOn && <p className="muted small">ARASAAC is off because this copy of Mimzi is set up for commercial use; its licence is non-commercial only.</p>}
+      {style === 'arasaac' && <p className="muted small" data-testid="symbol-status">Starter pictures are included for offline use.</p>}
+      <h3>Find a symbol</h3>
+      <PicturePicker inline showBack={false} allowPhoto={false} onCancel={() => setPicked(null)} onUse={(p) => p.kind === 'symbol' && setPicked({ symbol: p.symbol, info: p.info })} />
+      {picked && (
         <div className="add-row">
           <span className="mini-tile big tile-white">
-            <TileFace symbol={symbol} label="" />
+            <TileFace symbol={picked.symbol} symbolInfo={picked.info} label="" />
           </span>
           <label className="field inline">
             <span>Put this symbol on</span>
@@ -52,7 +77,7 @@ export function SymbolLibraryPanel() {
             onClick={async () => {
               const t = tiles.find((x) => x.id === target);
               if (!t) return;
-              await saveTile({ ...t, symbol });
+              await setTileSymbol(t.id, picked);
               setStatus(`“${t.label}” now uses this symbol${t.photoId ? ' (its photo still shows first — remove the photo to see the symbol)' : ''}.`);
             }}
           >
@@ -61,10 +86,27 @@ export function SymbolLibraryPanel() {
         </div>
       )}
       {status && <p role="status">{status}</p>}
-      <h3>Credits</h3>
+
+      <h3>Credits &amp; licences</h3>
+      <ul className="credits" data-testid="symbol-credits">
+        {credits.map(({ info, count }) => (
+          <li key={`${info.library}:${info.repo ?? ''}:${info.author}:${info.license}`}>
+            <strong>{info.library === 'opensymbols' ? `${info.repo} (via OpenSymbols)` : LIBRARIES[info.library].name}</strong> — {count} word{count === 1 ? '' : 's'}
+            <br />
+            <span className="muted small">
+              {info.library === 'opensymbols' ? `${info.author ? `By ${info.author}. ` : ''}Licence: ${info.license}.` : LIBRARIES[info.library].credit}{' '}
+              {(info.licenseUrl || (info.library !== 'opensymbols' && LIBRARIES[info.library].licenseUrl)) && (
+                <a href={info.licenseUrl || (info.library !== 'opensymbols' ? LIBRARIES[info.library].licenseUrl : '')} target="_blank" rel="noreferrer">
+                  Licence
+                </a>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
       <p className="muted small">
-        Mulberry Symbols © 2018–2026 Steve Lee, licensed CC BY-SA 4.0 — mulberrysymbols.org. Some core-word symbols (stop, yes, no, me, you, please,
-        thank you, and others) are original Mimzi drawings because Mulberry doesn’t include them.
+        ARASAAC pictograms are by Sergio Palao for ARASAAC (Government of Aragón, Spain), CC BY-NC-SA 4.0: free for personal, non-commercial use like this
+        one. If Mimzi is ever used commercially, set VITE_COMMERCIAL_USE=true and ARASAAC and other non-commercial symbols switch off automatically.
       </p>
     </section>
   );
@@ -93,70 +135,6 @@ export function PhotoLibraryPanel() {
           ))}
         </div>
       )}
-      {editor}
-    </section>
-  );
-}
-
-/** ASL Library — the ASL drawings and the family's own sign videos. */
-export function AslLibraryPanel() {
-  const { tiles, settings, updateSettings } = useMimzi();
-  const { setEditing, editor } = useEditor();
-  const withVideo = tiles.filter((t) => t.signId && !t.deletedAt);
-  return (
-    <section className="panel">
-      <h2>ASL Library</h2>
-      <p className="muted">
-        Signs appear only when someone taps the small 🤟 “See sign” button. The main button always keeps its AAC picture, and signs never interrupt
-        the voice. The drawings were checked against the linked ASL references; a video of a real signer (yours, or one you have permission to
-        use) is the best way to learn a sign — add one to any word.
-      </p>
-      <label className="check">
-        <input type="checkbox" checked={settings.showSignButtons} onChange={(e) => updateSettings({ showSignButtons: e.target.checked })} />
-        Show “See sign” buttons on the board
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={settings.showAslDrawings} onChange={(e) => updateSettings({ showAslDrawings: e.target.checked })} />
-        Offer Mimzi’s ASL drawings for words without a video
-      </label>
-      <h3>Your sign videos ({withVideo.length})</h3>
-      {withVideo.length === 0 ? (
-        <p className="muted">None yet. Edit a word → “Add sign video”.</p>
-      ) : (
-        <ul className="grow-list">
-          {withVideo.map((t) => (
-            <li key={t.id}>
-              <strong>{t.label}</strong>
-              <span className="spacer" />
-              <button type="button" className="btn small" onClick={() => setEditing(t)}>
-                Edit
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <h3>ASL drawings ({ASL_KEYS.length})</h3>
-      <div className="asl-library">
-        {ASL_KEYS.map((k) => {
-          const s = ASL_SIGNS[k];
-          const used = tiles.filter((t) => t.aslSign === k && !t.deletedAt).map((t) => t.label);
-          return (
-            <div key={k} className="asl-card">
-              <AslSignSvg name={k} />
-              <div>
-                <strong>{s.gloss}</strong>
-                <p className="small">{s.how}</p>
-                <p className="muted small">
-                  On: {used.length ? [...new Set(used)].join(', ') : '—'} ·{' '}
-                  <a href={s.source} target="_blank" rel="noopener noreferrer">
-                    Reference
-                  </a>
-                </p>
-              </div>
-            </div>
-          );
-        })}
-      </div>
       {editor}
     </section>
   );

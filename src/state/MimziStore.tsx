@@ -1,19 +1,26 @@
+import { downloadPicture, remotePicture } from '../lib/localPictures';
+import { allScheduleItems } from '../lib/myday';
 /*
  * App data store: loads everything from IndexedDB once, keeps it in memory for instant
  * taps, and writes every change straight back to IndexedDB.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, Tile, VocabEvent } from '../types';
-import { dayString, mergeGrowPlan, processDue, setStatus, vocabEvent } from '../lib/grow';
+import type { Category, GrowPlan, MediaRecord, MyDay, Observation, Settings, SymbolInfo, Tile, VocabEvent } from '../types';
+import { dayString, mergeGrowPlan, processDue, setStatus, suggestWeeklyWords, vocabEvent } from '../lib/grow';
 import * as db from '../lib/db';
 import { buildSeedCategories, buildSeedTiles, CATEGORY_SEED } from '../data/vocabulary';
-import { migrateVocabularyV3 } from './migrations';
+import { applyNewDefaultsV5, fixArasaacPicksV2, migrateLikeWord, migrateSymbolsV4, migrateVocabularyV3, upgradeSymbolFields } from './migrations';
+import defaultPictures from '../../public/symbols/defaultPictures.json';
 import { mergeMyDay, mergeSettings } from '../lib/defaults';
 import { moveTile as computeMove, nextOrder, slotMap } from '../lib/grid';
 import { createBackup, type BackupFile, type RestoredData } from '../lib/backup';
 import { referencedMediaIds } from '../lib/media';
 import { newId } from '../lib/id';
-import { currentToken, fetchProfile, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
+import { pictureCopies } from '../lib/samePicture';
+import { isPreview, notifyPreview } from '../lib/preview';
+import { safeMode } from '../lib/safeStart';
+import { swapWordInto, type SwapResult } from '../lib/manageWords';
+import { canSyncQuietly, currentToken, fetchProfile, quietToken, requestToken, SCOPES, signOut as googleRevoke } from '../lib/google/auth';
 import { createDriveClient } from '../lib/google/drive';
 import { runSync, sharedSettings, type Stamps, type Tombstone, type TombstoneStore } from '../lib/google/driveSync';
 
@@ -33,6 +40,16 @@ export interface MimziData {
   /** MIME type per media id (e.g. to tell a GIF sign from a video sign). */
   mediaMime: Record<string, string>;
   sync: SyncStatus;
+  /** Automatic ARASAAC pictures for starter words. */
+  symbols: SymbolStatus;
+}
+
+export interface SymbolStatus {
+  phase: 'idle' | 'finding' | 'offline' | 'off';
+  /** Starter words still waiting for their ARASAAC picture. */
+  pending: number;
+  /** Starter words ARASAAC has no match for (they keep their bundled picture). */
+  missing: string[];
 }
 
 export interface SyncStatus {
@@ -48,6 +65,8 @@ export interface MimziActions {
   restoreTile(id: string): Promise<void>;
   purgeTile(id: string): Promise<void>;
   moveTile(id: string, dir: -1 | 1): Promise<void>;
+  /** Arrange words: save new slots for several words at once (positions only). */
+  saveTileOrders(changes: { id: string; order: number }[]): Promise<void>;
   saveCategory(cat: Category): Promise<void>;
   saveCategories(cats: Category[]): Promise<void>;
   deleteCategory(id: string): Promise<void>;
@@ -57,6 +76,8 @@ export interface MimziActions {
   deleteObservation(id: string): Promise<void>;
   /** Show or hide words (keeps their slots) and record it in the vocabulary history. */
   setTilesHidden(ids: string[], hidden: boolean, source?: VocabEvent['source']): Promise<void>;
+  /** Manage words: put a word into the selected slot (the word there is hidden, not deleted). */
+  swapWord(categoryId: string, slot: number, incomingId: string): Promise<SwapResult | null>;
   updateGrow(plan: GrowPlan): Promise<void>;
   /** Approve (show now) or skip/cancel scheduled words. */
   resolveGrow(itemIds: string[], action: 'approve' | 'skip' | 'cancel'): Promise<void>;
@@ -67,6 +88,17 @@ export interface MimziActions {
   googleSignOut(): Promise<void>;
   /** Sync with Google Drive. `interactive` may open the Google window (only from a tap). */
   syncNow(interactive?: boolean, justSignedIn?: SyncStatus['account']): Promise<void>;
+  /**
+   * Change only a word's picture: a symbol a grown-up chose, or 'auto' to let Mimzi pick
+   * (default style). Label, speech, sign, photo and board position never change.
+   */
+  setTileSymbol(id: string, choice: { symbol: string; symbolInfo?: SymbolInfo } | 'auto'): Promise<void>;
+  /**
+   * Change only a word's picture from the picture picker: a symbol or a photo. The word,
+   * spoken text, recording, sign and board position stay exactly as they were.
+   */
+  setTilePicture(id: string, picked: { kind: 'symbol'; symbol: string; info: SymbolInfo } | { kind: 'photo'; photoId: string; media?: MediaRecord }): Promise<void>;
+  /** Look for ARASAAC pictures for starter words now (e.g. after coming online). */
 }
 
 /** A first-run grid that suits the screen: 4 × 6 on tablets, 4 × 4 on phones. */
@@ -106,6 +138,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     mediaUrls: {},
     mediaMime: {},
     sync: { phase: 'off' },
+    symbols: { phase: 'idle', pending: 0, missing: [] },
   });
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -133,6 +166,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
           await db.setKv('seeded', true);
           for (const c of CATEGORY_SEED) await db.setKv(`migrated:cat:${c.id}`, true);
           await db.setKv('migrated:vocab3', true);
+          await db.setKv('migrated:symbols4', true);
+          await db.setKv('symbols:picks', 3);
         }
         const [tiles, rawCategories, media, saved, savedDay, observations] = await Promise.all([
           db.getAll('tiles'),
@@ -144,6 +179,10 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         ]);
         const categories = await migrate(rawCategories);
         await migrateVocabularyV3(tiles, categories);
+        await migrateSymbolsV4(tiles);
+        await applyNewDefaultsV5(tiles, categories);
+        await migrateLikeWord(tiles);
+        await fixArasaacPicksV2(tiles);
         stamps.current = { settings: 0, myday: 0, grow: 0, history: 0, ...((await db.getKv<Partial<Stamps>>('sync:stamps')) ?? {}) };
         // Grow My Words: apply anything that became due while Mimzi was closed.
         let grow = mergeGrowPlan(await db.getKv<Partial<GrowPlan>>('grow'));
@@ -197,6 +236,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
             mediaUrls,
             mediaMime,
             sync: account ? { phase: 'idle', account, lastSyncedAt } : { phase: 'off' },
+            symbols: { phase: 'idle', pending: 0, missing: defaultPictures.missing },
           });
         }
       } catch (e) {
@@ -234,13 +274,26 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  /** Save a tile; when its picture changed, give every other copy of the same word that picture too. */
+  const putWithPictureCopies = async (prev: Tile | undefined, next: Tile) => {
+    const copies = next.deletedAt ? [] : pictureCopies(prev, next, dataRef.current.tiles);
+    await db.put('tiles', next);
+    for (const c of copies) await db.put('tiles', c);
+    const changed = new Map([next, ...copies].map((t) => [t.id, t]));
+    setData((d) => ({ ...d, tiles: d.tiles.map((x) => changed.get(x.id) ?? x) }));
+  };
+
   const saveTile = useCallback(
     async (input: Tile, newMedia: MediaRecord[] = []) => {
       const tile = { ...input, updatedAt: Date.now() };
+      const copies = pictureCopies(dataRef.current.tiles.find((t) => t.id === tile.id), tile, dataRef.current.tiles);
       await db.put('tiles', tile);
-      const tiles = [...dataRef.current.tiles.filter((t) => t.id !== tile.id), tile];
+      for (const c of copies) await db.put('tiles', c);
+      const changed = new Map([tile, ...copies].map((t) => [t.id, t]));
+      const merge = (list: Tile[]) => [...list.filter((t) => !changed.has(t.id)), ...changed.values()];
+      const tiles = merge(dataRef.current.tiles);
       const applyUrls = await commitMedia(newMedia, { ...dataRef.current, tiles });
-      setData((d) => ({ ...d, tiles: [...d.tiles.filter((t) => t.id !== tile.id), tile], ...applyUrls(d) }));
+      setData((d) => ({ ...d, tiles: merge(d.tiles), ...applyUrls(d) }));
     },
     [commitMedia],
   );
@@ -249,9 +302,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     const t = dataRef.current.tiles.find((x) => x.id === id);
     if (!t) return;
     const next = { ...t, ...patch, updatedAt: Date.now() };
-    await db.put('tiles', next);
-    setData((d) => ({ ...d, tiles: d.tiles.map((x) => (x.id === id ? next : x)) }));
-  }, []);
+    await putWithPictureCopies(t, next);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const softDeleteTile = useCallback((id: string) => patchTile(id, { deletedAt: Date.now() }), [patchTile]);
 
@@ -370,11 +422,60 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     await recordHistory(changed.map((t) => vocabEvent(t, hidden ? 'hidden' : source === 'scheduled' ? 'added' : 'shown', source, today)));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const saveTileOrders = useCallback(async (changes: { id: string; order: number }[]) => {
+    if (!changes.length) return;
+    const now = Date.now();
+    const byId = new Map(changes.map((c) => [c.id, c.order]));
+    const changed = dataRef.current.tiles.filter((t) => byId.has(t.id)).map((t) => ({ ...t, order: byId.get(t.id)!, updatedAt: now }));
+    await db.putMany('tiles', changed);
+    const next = new Map(changed.map((t) => [t.id, t]));
+    setData((d) => ({ ...d, tiles: d.tiles.map((t) => next.get(t.id) ?? t) }));
+  }, []);
+
+  const swapWord = useCallback(async (categoryId: string, slot: number, incomingId: string) => {
+    const r = swapWordInto(dataRef.current.tiles, categoryId, slot, incomingId, () => newId('tile'));
+    if (!r || !r.changed.length) return r;
+    await db.putMany('tiles', r.changed);
+    const byId = new Map(r.changed.map((t) => [t.id, t]));
+    setData((d) => {
+      const known = new Set(d.tiles.map((t) => t.id));
+      return { ...d, tiles: [...d.tiles.map((t) => byId.get(t.id) ?? t), ...r.changed.filter((t) => !known.has(t.id))] };
+    });
+    const today = dayString();
+    await recordHistory([vocabEvent(r.placed, 'shown', 'manual', today), ...(r.displaced ? [vocabEvent(r.displaced, 'hidden', 'manual', today)] : [])]);
+    return r;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const updateGrow = useCallback(async (plan: GrowPlan) => {
     await db.setKv('grow', plan);
     setStamp('grow');
     setData((d) => ({ ...d, grow: plan }));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+
+  const checkingSuggestions = useRef(false);
+  useEffect(() => {
+    if (data.status !== 'ready' || !data.grow.suggestWeekly || data.grow.paused) return;
+    const check = async () => {
+      if (checkingSuggestions.current) return;
+      const { grow, tiles } = dataRef.current;
+      const next = suggestWeeklyWords(grow, tiles, dayString());
+      if (next === grow) return;
+      checkingSuggestions.current = true;
+      try {
+        await updateGrow(next);
+      } finally {
+        checkingSuggestions.current = false;
+      }
+    };
+    const run = () => void check().catch((error) => console.error('Could not queue weekly words', error));
+    run();
+    const timer = window.setInterval(run, 60_000);
+    window.addEventListener('focus', run);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('focus', run);
+    };
+  }, [data.status, data.grow.suggestWeekly, data.grow.paused, data.tiles, updateGrow]);
 
   const resolveGrow = useCallback(
     async (itemIds: string[], action: 'approve' | 'skip' | 'cancel') => {
@@ -405,7 +506,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     const now = Date.now();
     const incoming: RestoredData = {
       ...raw,
-      tiles: raw.tiles.map((t) => ({ ...t, updatedAt: now })),
+      tiles: upgradeSymbolFields(raw.tiles).tiles.map((t) => ({ ...t, updatedAt: now })),
       categories: raw.categories.map((c) => ({ ...c, updatedAt: now })),
       observations: raw.observations.map((o) => ({ ...o, updatedAt: now })),
     };
@@ -431,6 +532,7 @@ export function MimziProvider({ children }: { children: ReactNode }) {
         history: incoming.history,
         mediaUrls,
         mediaMime,
+        symbols: d.symbols,
         sync: d.sync,
       };
     });
@@ -443,13 +545,17 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     if (syncing.current) return;
     const account = justSignedIn ?? dataRef.current.sync.account;
     if (!account) return;
+    if (!navigator.onLine) {
+      setSync({ phase: 'idle', message: 'Offline. Changes are saved here and will sync when you reconnect.' });
+      return;
+    }
     syncing.current = true;
     setSync({ phase: 'syncing', message: 'Connecting to Google…' });
     try {
       const getToken = async () => {
         // Non-interactive syncs only run while a token from an earlier tap is still valid.
         if (!interactive) {
-          const t = currentToken();
+          const t = currentToken() ?? (await quietToken(SCOPES.drive, account.email));
           if (!t) throw Object.assign(new Error('Tap “Sync now” to reconnect to Google.'), { needsTap: true });
           return t;
         }
@@ -519,6 +625,55 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Push local edits after a short pause, and pull changes while Mimzi is open.
+  // Offline edits are already persisted in the local database, including after a restart.
+  const accountEmail = data.sync.account?.email;
+  const lastAutomaticRevision = useRef('');
+  const { tiles, categories, settings, myDay, observations, grow, history } = data;
+  // Tell an open board preview (Parent Mode) to refresh after any change.
+  useEffect(() => {
+    notifyPreview();
+  }, [tiles, categories, settings]);
+
+  useEffect(() => {
+    if (isPreview || !accountEmail || !currentToken()) return;
+    const revision = JSON.stringify([accountEmail, stamps.current, tombstones.current]);
+    if (revision === lastAutomaticRevision.current) return;
+    const timer = window.setTimeout(() => {
+      if (!navigator.onLine || syncing.current) return;
+      lastAutomaticRevision.current = revision;
+      void syncNow();
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [accountEmail, tiles, categories, settings, myDay, observations, grow, history, syncNow]);
+
+  useEffect(() => {
+    if (isPreview || !accountEmail) return;
+    // Regular checks only use Google access Mimzi already has (no sign-in calls).
+    const check = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && currentToken()) void syncNow();
+    };
+    const reconnect = () => {
+      if (navigator.onLine && currentToken()) void syncNow();
+    };
+    // On opening Mimzi (Android app): one quiet reconnect, a few seconds after the board is up, to
+    // bring in the latest board. Skipped if the last start didn't finish (safe start).
+    const opening = safeMode
+      ? undefined
+      : window.setTimeout(() => {
+          if (document.visibilityState === 'visible' && navigator.onLine && canSyncQuietly(SCOPES.drive)) void syncNow();
+        }, 4000);
+    window.addEventListener('online', reconnect);
+    document.addEventListener('visibilitychange', check);
+    const interval = window.setInterval(check, 30_000);
+    return () => {
+      window.removeEventListener('online', reconnect);
+      document.removeEventListener('visibilitychange', check);
+      window.clearInterval(interval);
+      if (opening) window.clearTimeout(opening);
+    };
+  }, [accountEmail, syncNow]);
+
   const googleSignIn = useCallback(async () => {
     setSync({ phase: 'syncing', message: 'Opening Google…' });
     try {
@@ -543,9 +698,108 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     setData((d) => ({ ...d, sync: { phase: 'off' } }));
   }, []);
 
+  const setTileSymbol = useCallback(
+    async (id: string, choice: { symbol: string; symbolInfo?: SymbolInfo } | 'auto') => {
+      const t = dataRef.current.tiles.find((x) => x.id === id);
+      if (!t) return;
+      const next: Tile =
+        choice === 'auto'
+          ? { ...t, symbol: t.fallbackSymbol ?? t.symbol, symbolInfo: undefined, symbolAuto: true, updatedAt: Date.now() }
+          : { ...t, symbol: choice.symbol, symbolInfo: choice.symbolInfo, symbolAuto: false, fallbackSymbol: t.fallbackSymbol ?? (t.symbol && /^(mul|svg):/.test(t.symbol) ? t.symbol : undefined), updatedAt: Date.now() };
+      await putWithPictureCopies(undefined, next); // a chosen picture always lines up every copy of the word
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const setTilePicture = useCallback(
+    async (id: string, picked: { kind: 'symbol'; symbol: string; info: SymbolInfo } | { kind: 'photo'; photoId: string; media?: MediaRecord }) => {
+      const t = dataRef.current.tiles.find((x) => x.id === id);
+      if (!t) return;
+      if (picked.kind === 'photo') {
+        await saveTile({ ...t, photoId: picked.photoId, updatedAt: Date.now() }, picked.media ? [picked.media] : undefined);
+        return;
+      }
+      const next: Tile = {
+        ...t,
+        photoId: undefined, // the chosen symbol shows instead of the photo (the photo stays in the Photo Library)
+        symbol: picked.symbol,
+        symbolInfo: picked.info,
+        symbolAuto: false,
+        fallbackSymbol: t.fallbackSymbol ?? (t.symbol && /^(mul|svg):/.test(t.symbol) ? t.symbol : undefined),
+        updatedAt: Date.now(),
+      };
+      await putWithPictureCopies(undefined, next); // a chosen picture always lines up every copy of the word
+    },
+    [], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  const ready = data.status === 'ready';
+  useEffect(() => {
+    if (!ready) return;
+    const controller = new AbortController();
+    let running = false;
+    const keepOlderPictures = async () => {
+      if (running || !navigator.onLine) return;
+      running = true;
+      try {
+        const { tiles, myDay } = dataRef.current;
+        const urls = new Set<string>();
+        for (const entry of [...tiles.filter((tile) => !tile.symbolAuto), ...allScheduleItems(myDay)]) {
+          const source = remotePicture(entry.symbol, entry.symbolInfo);
+          if (source) urls.add(source.url);
+        }
+        const saved = new Map<string, string>();
+        for (const url of urls) {
+          if (controller.signal.aborted) return;
+          const request = new AbortController();
+          const abort = () => request.abort();
+          controller.signal.addEventListener('abort', abort, { once: true });
+          const timer = setTimeout(abort, 8000);
+          try {
+            saved.set(url, await downloadPicture(url, request.signal));
+          } catch {
+            // An unavailable picture stays selected and can be retried at the next online launch.
+          } finally {
+            clearTimeout(timer);
+            controller.signal.removeEventListener('abort', abort);
+          }
+        }
+        if (controller.signal.aborted || !saved.size) return;
+        const upgrade = (entry: { symbol?: string; symbolInfo?: SymbolInfo }) => {
+          const source = remotePicture(entry.symbol, entry.symbolInfo);
+          const localImage = source && saved.get(source.url);
+          if (!source || !localImage) return false;
+          entry.symbolInfo = { ...source.info, localImage };
+          return true;
+        };
+        for (const tile of dataRef.current.tiles) {
+          const next = { ...tile };
+          if (!tile.symbolAuto && upgrade(next)) await patchTile(tile.id, { symbolInfo: next.symbolInfo });
+        }
+        const nextDay = structuredClone(dataRef.current.myDay);
+        let changed = false;
+        for (const item of allScheduleItems(nextDay)) {
+          if (upgrade(item)) changed = true;
+        }
+        if (changed) await updateMyDay(nextDay);
+      } finally {
+        running = false;
+      }
+    };
+    const retry = () => void keepOlderPictures().catch(() => undefined);
+    retry();
+    window.addEventListener('online', retry);
+    return () => {
+      controller.abort();
+      window.removeEventListener('online', retry);
+    };
+  }, [ready, patchTile, updateMyDay]);
+
   const value = useMemo(
     () => ({
       ...data,
+      setTileSymbol,
+      setTilePicture,
       saveTile,
       softDeleteTile,
       restoreTile,
@@ -559,6 +813,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       saveObservation,
       deleteObservation,
       setTilesHidden,
+      swapWord,
+      saveTileOrders,
       updateGrow,
       resolveGrow,
       exportBackup,
@@ -569,6 +825,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
     }),
     [
       data,
+      setTileSymbol,
+      setTilePicture,
       saveTile,
       softDeleteTile,
       restoreTile,
@@ -582,6 +840,8 @@ export function MimziProvider({ children }: { children: ReactNode }) {
       saveObservation,
       deleteObservation,
       setTilesHidden,
+      swapWord,
+      saveTileOrders,
       updateGrow,
       resolveGrow,
       exportBackup,

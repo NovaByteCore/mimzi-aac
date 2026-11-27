@@ -10,6 +10,7 @@
  * Mimzi only ever sees the photos that were picked.
  */
 import { config } from '../../config';
+import { closeBrowserTab, inAndroidApp, nativeDownload, openInBrowserTab } from './native';
 
 const API = 'https://photospicker.googleapis.com/v1';
 
@@ -66,7 +67,10 @@ export async function pickFromGooglePhotos(opts: PickOptions): Promise<PickedPho
   const uri = `${session.pickerUri}/autoclose`;
 
   try {
-    if (opts.popup && !opts.popup.closed) opts.popup.location.href = uri;
+    if (inAndroidApp()) {
+      // Android app: Google Photos opens in a browser tab on top of Mimzi.
+      if (!(await openInBrowserTab(uri))) opts.onPickerUri?.(uri);
+    } else if (opts.popup && !opts.popup.closed) opts.popup.location.href = uri;
     else opts.onPickerUri?.(uri);
     opts.onStatus?.('Choose a photo in Google Photos, then come back here.');
 
@@ -100,6 +104,15 @@ export async function pickFromGooglePhotos(opts: PickOptions): Promise<PickedPho
       if (!item.mediaFile?.baseUrl || (item.type && item.type !== 'PHOTO')) continue;
       // =w1600-h1600 keeps the whole picture but caps its size; Mimzi crops to 640 px later.
       const source = `${item.mediaFile.baseUrl}=w1600-h1600`;
+      if (inAndroidApp()) {
+        // Android downloads it directly (no browser CORS rules), so no pass-through is needed.
+        try {
+          photos.push({ blob: await nativeDownload(source, auth), filename: item.mediaFile.filename ?? 'photo.jpg' });
+        } catch (e) {
+          throw new PhotosPickerError(`Couldn’t download the photo (${(e as Error).message}).`);
+        }
+        continue;
+      }
       const r = await f(`${config.photosProxyUrl}?url=${encodeURIComponent(source)}`, { headers: auth });
       if (!r.ok) {
         throw new PhotosPickerError(
@@ -112,6 +125,7 @@ export async function pickFromGooglePhotos(opts: PickOptions): Promise<PickedPho
     return photos;
   } finally {
     void f(`${API}/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE', headers: auth }).catch(() => undefined);
+    void closeBrowserTab();
     if (opts.popup && !opts.popup.closed) {
       try {
         opts.popup.close();

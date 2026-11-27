@@ -1,30 +1,72 @@
+import { useEffect, useState } from 'react';
 import { SymbolSvg } from '../data/symbols';
-import { AslSignSvg, ASL_SIGNS } from '../data/aslSigns';
-import { mulberryUrl } from '../lib/colors';
+import { everydayFallback } from '../lib/pictureSets';
+import { shownSymbol, type Shown } from '../lib/symbols';
+import { useOptionalMimzi } from '../state/MimziStore';
+import type { SymbolInfo, Tile } from '../types';
+
+type TilePicture = Pick<Tile, 'symbol' | 'symbolAuto' | 'autoArasaac' | 'symbolInfo' | 'fallbackSymbol'> & Partial<Pick<Tile, 'id'>>;
 
 interface Props {
+  /** A raw symbol reference (used when there's no tile, e.g. picker previews and page icons). */
   symbol?: string;
+  symbolInfo?: SymbolInfo;
+  /** The word's tile: its picture follows the default symbol style and licence rules. */
+  tile?: TilePicture;
   photoUrl?: string;
-  /** ASL sign drawing key — only drawn on the tile itself when `forceAsl` (e.g. picker previews). */
-  asl?: string;
   label: string;
-  /** Force the ASL drawing even when the setting is off (e.g. in the editor picker). */
-  forceAsl?: boolean;
 }
 
-/**
- * The picture part of a tile: caregiver photo > AAC symbol (Mulberry or Mimzi original) >
- * custom text/emoji the caregiver typed > first letter. ASL drawings live under "See sign".
- */
-export function TileFace({ symbol, photoUrl, asl, label, forceAsl }: Props) {
-  if (photoUrl) return <img className="tile-photo" src={photoUrl} alt="" draggable={false} />;
-  if (forceAsl && asl && ASL_SIGNS[asl]) return <AslSignSvg name={asl} />;
-  if (symbol?.startsWith('mul:')) return <img className="tile-symbol" src={mulberryUrl(symbol.slice(4))} alt="" draggable={false} loading="lazy" />;
+/** A bundled picture (Mulberry / Mimzi original). With none, the word's first letter — never emoji. */
+function Bundled({ symbol, label }: { symbol?: string; label: string }) {
   if (symbol?.startsWith('svg:')) return <SymbolSvg name={symbol.slice(4)} />;
-  if (symbol) return <span className="tile-emoji" aria-hidden="true">{symbol}</span>;
+  if (symbol?.startsWith('mul:')) {
+    const shown = shownSymbol({ symbol }, {});
+    return <img className="tile-symbol" src={shown.url} alt="" draggable={false} loading="lazy" />;
+  }
   return (
     <span className="tile-initial" aria-hidden="true">
       {label.trim().charAt(0).toUpperCase() || '?'}
     </span>
   );
+}
+
+/** A downloaded library symbol; falls back to the bundled picture if it can't load (e.g. offline before it was saved). */
+function Remote({ shown, label }: { shown: Shown; label: string }) {
+  // 0 = loading, 1 = one retry (a busy or slow device can drop a request), 2 = use the backup.
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => setAttempt(0), [shown.url]);
+  if (attempt >= 2 || !shown.url) return <Bundled symbol={shown.fallback} label={label} />;
+  return (
+    <img
+      key={`${shown.url}#${attempt}`}
+      className="tile-symbol"
+      src={shown.url}
+      alt=""
+      draggable={false}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      data-library={shown.info?.library}
+      onError={() => {
+        if (attempt === 0) setTimeout(() => setAttempt((a) => (a === 0 ? 1 : a)), 700);
+        else setAttempt(2);
+      }}
+    />
+  );
+}
+
+/**
+ * The picture part of a tile: caregiver photo > AAC symbol (ARASAAC by default; Mulberry or
+ * Mimzi originals when ARASAAC isn't available; or one a grown-up chose from OpenSymbols)
+ * > the word's first letter. Emoji are never used as vocabulary pictures.
+ * Changing the picture never changes the word, its speech, its recording or its place.
+ */
+export function TileFace({ symbol, symbolInfo, tile, photoUrl, label }: Props) {
+  const store = useOptionalMimzi();
+  const settings = store?.settings ?? {};
+  if (photoUrl) return <img className="tile-photo" src={photoUrl} alt="" draggable={false} />;
+  // Everyday schedule pictures carry a bundled backup, so they show even before ARASAAC is saved offline.
+  const shown = shownSymbol(tile ?? { symbol, symbolInfo, fallbackSymbol: everydayFallback(symbol) }, settings);
+  if (shown.url) return <Remote shown={shown} label={label} />;
+  return <Bundled symbol={shown.symbol} label={label} />;
 }

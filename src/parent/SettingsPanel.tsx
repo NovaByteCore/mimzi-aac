@@ -4,21 +4,8 @@ import { GRID_PRESETS } from '../lib/defaults';
 import { createPinRecord, isValidPin } from '../lib/pin';
 import { WORD_TYPE_COLOR, WORD_TYPE_LABEL, type WordType } from '../types';
 
-const MAX_QUICK = 6;
-
 export function SettingsPanel() {
-  const { settings, updateSettings, tiles, categories } = useMimzi();
-  const [addQuick, setAddQuick] = useState('');
-  const liveTiles = tiles.filter((t) => !t.deletedAt);
-  const tileById = new Map(liveTiles.map((t) => [t.id, t]));
-  const quick = settings.quickTileIds.filter((id) => tileById.has(id));
-  const moveQuick = (i: number, dir: -1 | 1) => {
-    const next = [...quick];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return;
-    [next[i], next[j]] = [next[j], next[i]];
-    void updateSettings({ quickTileIds: next });
-  };
+  const { settings, updateSettings } = useMimzi();
   const [pinA, setPinA] = useState('');
   const [pinB, setPinB] = useState('');
   const [pinMsg, setPinMsg] = useState('');
@@ -28,23 +15,40 @@ export function SettingsPanel() {
   return (
     <section className="panel settings">
       <h2>Board</h2>
-      <label className="field">
-        <span>Pictures per page</span>
-        <select
-          value={gridValue}
-          onChange={(e) => {
-            const [rows, cols] = e.target.value.split('x').map(Number);
-            void updateSettings({ grid: { rows, cols } });
-          }}
-          data-testid="grid-select"
-        >
-          {GRID_PRESETS.map((p) => (
-            <option key={p.label} value={`${p.grid.rows}x${p.grid.cols}`}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <fieldset className="field layout-choice" data-testid="layout-choice">
+        <legend>Board layout</legend>
+        <label className="check">
+          <input type="radio" name="layout" checked={settings.layoutMode !== 'fixed'} onChange={() => void updateSettings({ layoutMode: 'auto' })} data-testid="layout-auto" />
+          <span>
+            <strong>Auto (recommended)</strong> — Mimzi sizes the pictures and spacing to fit the tablet, in portrait and landscape. If the words don’t all fit with
+            large, easy-to-tap pictures, the page continues on the next page. Words keep their order.
+          </span>
+        </label>
+        <label className="check">
+          <input type="radio" name="layout" checked={settings.layoutMode === 'fixed'} onChange={() => void updateSettings({ layoutMode: 'fixed' })} data-testid="layout-fixed" />
+          <span>Fixed size — the same rows and columns on every screen</span>
+        </label>
+        {settings.layoutMode === 'fixed' && (
+          <label className="field">
+            <span>Pictures per page</span>
+            <select
+              value={gridValue}
+              onChange={(e) => {
+                const [rows, cols] = e.target.value.split('x').map(Number);
+                void updateSettings({ grid: { rows, cols } });
+              }}
+              data-testid="grid-select"
+            >
+              {GRID_PRESETS.map((p) => (
+                <option key={p.label} value={`${p.grid.rows}x${p.grid.cols}`}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <p className="muted small">Which words your child sees is chosen in Manage words. Layout only changes how the board fits the screen.</p>
+      </fieldset>
       <label className="check">
         <input type="checkbox" checked={settings.showSentenceBar} onChange={(e) => updateSettings({ showSentenceBar: e.target.checked })} />
         Show the sentence bar (build messages from several pictures)
@@ -52,6 +56,19 @@ export function SettingsPanel() {
       <label className="field">
         <span>Text size ({Math.round(settings.textScale * 100)}%)</span>
         <input type="range" min={0.8} max={1.6} step={0.1} value={settings.textScale} onChange={(e) => updateSettings({ textScale: Number(e.target.value) })} />
+      </label>
+      <label className="check">
+        <input type="checkbox" checked={settings.onePage ?? true} onChange={(e) => updateSettings({ onePage: e.target.checked })} data-testid="one-page" />
+        Everything on one page — pictures shrink so all of a page’s words fit on one screen (no page arrows)
+      </label>
+      <label className="field">
+        <span>Board picture size ({sizeName(settings.tileScale ?? 1)})</span>
+        <input type="range" min={0.75} max={1.75} step={0.25} value={settings.tileScale ?? 1} onChange={(e) => updateSettings({ tileScale: Number(e.target.value) })} data-testid="tile-scale" aria-label="Board picture size" />
+        <small className="muted">Bigger shows fewer, larger pictures on each page (the rest move to the next page). Used with Auto layout when “Everything on one page” is off.</small>
+      </label>
+      <label className="field">
+        <span>Quick Words size ({sizeName(settings.quickScale ?? 1)})</span>
+        <input type="range" min={0.75} max={2} step={0.25} value={settings.quickScale ?? 1} onChange={(e) => updateSettings({ quickScale: Number(e.target.value) })} data-testid="quick-scale" aria-label="Quick Words size" />
       </label>
       <label className="field">
         <span>Space between pictures ({settings.tileGap}px)</span>
@@ -70,65 +87,15 @@ export function SettingsPanel() {
         Vibrate on tap (Android phones only — iPad has no vibration)
       </label>
 
-      <h2>Quick words</h2>
-      <p className="muted small">Always on screen on every child page. Keep the most important ones here (up to {MAX_QUICK}).</p>
-      <ol className="quick-list" data-testid="quick-list">
-        {quick.map((id, i) => (
-          <li key={id} className="cat-row">
-            <strong>{tileById.get(id)?.label}</strong>
-            <span className="spacer" />
-            <button type="button" className="icon-btn small" onClick={() => moveQuick(i, -1)} disabled={i === 0} aria-label={`Move ${tileById.get(id)?.label} up`}>
-              ▲
-            </button>
-            <button type="button" className="icon-btn small" onClick={() => moveQuick(i, 1)} disabled={i === quick.length - 1} aria-label={`Move ${tileById.get(id)?.label} down`}>
-              ▼
-            </button>
-            <button
-              type="button"
-              className="btn btn-quiet small"
-              disabled={quick.length <= 1}
-              onClick={() => updateSettings({ quickTileIds: quick.filter((q) => q !== id) })}
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-      </ol>
-      {quick.length < MAX_QUICK && (
-        <div className="add-row">
-          <label className="field inline">
-            <span>Add a quick word</span>
-            <select value={addQuick} onChange={(e) => setAddQuick(e.target.value)} data-testid="quick-add-select">
-              <option value="">Choose…</option>
-              {[...categories]
-                .sort((a, b) => a.order - b.order)
-                .map((c) => (
-                  <optgroup key={c.id} label={c.name}>
-                    {liveTiles
-                      .filter((t) => t.categoryId === c.id && !quick.includes(t.id))
-                      .sort((a, b) => a.order - b.order)
-                      .map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn"
-            disabled={!addQuick}
-            onClick={() => {
-              void updateSettings({ quickTileIds: [...quick, addQuick] });
-              setAddQuick('');
-            }}
-          >
-            Add
-          </button>
-        </div>
-      )}
+      <h2>Navigation</h2>
+      <label className="field">
+        <span>Word groups list</span>
+        <select value={settings.pageList ?? 'auto'} onChange={(e) => void updateSettings({ pageList: e.target.value as 'auto' | 'hide' })} data-testid="page-list-setting">
+          <option value="auto">Show — beside the board on larger tablets; a “Groups” button on phones and small tablets</option>
+          <option value="hide">Hide — use folder buttons and Home / Back only</option>
+        </select>
+      </label>
+      <p className="muted small">Quick words are set in their own section: Parent Mode → Quick words.</p>
 
       <h2>Colour coding</h2>
       <label className="field">
@@ -146,20 +113,6 @@ export function SettingsPanel() {
         ))}
       </ul>
       <p className="muted small">Based on the Modified Fitzgerald Key. Words always have labels and pictures too, so colour is never the only clue.</p>
-
-      <h2>Signs</h2>
-      <label className="check">
-        <input type="checkbox" checked={settings.showSignButtons} onChange={(e) => updateSettings({ showSignButtons: e.target.checked })} />
-        Show “See sign” buttons on tiles that have a sign video
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={settings.signLoop} onChange={(e) => updateSettings({ signLoop: e.target.checked })} />
-        Repeat sign videos
-      </label>
-      <label className="field">
-        <span>Sign video speed ({Math.round(settings.signSpeed * 100)}%)</span>
-        <input type="range" min={0.5} max={1} step={0.25} value={settings.signSpeed} onChange={(e) => updateSettings({ signSpeed: Number(e.target.value) })} />
-      </label>
 
       <h2>Celebrations (My Day)</h2>
       <label className="check">
@@ -202,4 +155,13 @@ export function SettingsPanel() {
       )}
     </section>
   );
+}
+
+function sizeName(v: number): string {
+  if (v <= 0.75) return 'smaller';
+  if (v < 1) return 'a bit smaller';
+  if (v === 1) return 'normal';
+  if (v <= 1.25) return 'bigger';
+  if (v <= 1.5) return 'much bigger';
+  return 'biggest';
 }
